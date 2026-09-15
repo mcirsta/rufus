@@ -48,9 +48,6 @@ unsigned long syslinux_mboot_len;
 /* Workaround for 4K support */
 uint32_t SECTOR_SHIFT = 9;
 uint32_t SECTOR_SIZE = 512;
-uint32_t LIBFAT_SECTOR_SHIFT = 9;
-uint32_t LIBFAT_SECTOR_SIZE = 512;
-uint32_t LIBFAT_SECTOR_MASK = 511;
 
 /*
  * Wrapper for ReadFile suitable for libfat
@@ -395,72 +392,4 @@ out:
 	safe_unlockclose(d_handle);
 	safe_closehandle(f_handle);
 	return r;
-}
-
-uint16_t GetSyslinuxVersion(char* buf, size_t buf_size, char** ext)
-{
-	size_t i, j, k;
-	char *p = NULL;
-	unsigned long version_ul[2];
-	uint16_t version = 0;
-	const char LINUX[] = { 'L', 'I', 'N', 'U', 'X', ' ' };
-	static char* nullstr = "";
-	char unauthorized[] = {'<', '>', ':', '|', '*', '?', '\\', '/'};
-
-	*ext = nullstr;
-	if (buf_size < 256)
-		return 0;
-
-	// Start at 64 to avoid the short incomplete version at the beginning of ldlinux.sys
-	for (i = 64; i < buf_size - 64; i++) {
-		if (memcmp(&buf[i], LINUX, sizeof(LINUX)) == 0) {
-			// Check for ISO or SYS prefix
-			if (!( ((buf[i - 3] == 'I') && (buf[i - 2] == 'S') && (buf[i - 1] == 'O'))
-			    || ((buf[i - 3] == 'S') && (buf[i - 2] == 'Y') && (buf[i - 1] == 'S')) ))
-			  continue;
-			i += sizeof(LINUX);
-			version_ul[0] = strtoul(&buf[i], &p, 10);
-			// Our buffer is either from our internal legit syslinux (i.e. with a NUL terminated
-			// version string) or from a buffer that has been NUL-terminated through read_file(),
-			// so the string we work with in p is always NUL terminated at this stage.
-			assert(version_ul[0] < 256);
-			if (version_ul[0] < 256) {
-				version_ul[1] = strtoul(&p[1], &p, 10);
-				assert(version_ul[1] < 256);
-				if (version_ul[1] < 256)
-					version = (uint16_t)((version_ul[0] << 8) + version_ul[1]);
-			}
-			if (version == 0)
-				continue;
-			// Ensure that our extra version string starts with a slash
-			*p = '/';
-			// Remove the x.yz- duplicate if present
-			for (j = 0; (buf[i + j] == p[1 + j]) && (buf[i + j] != ' '); j++);
-			if (p[j + 1] == '-')
-				j++;
-			if (j >= 4) {
-				p[j] = '/';
-				p = &p[j];
-			}
-			for (j = safe_strlen(p) - 1; j > 0; j--) {
-				// Arch Linux affixes a star for their version - who knows what else is out there...
-				if ((p[j] == ' ') || (p[j] == '*'))
-					p[j] = 0;
-				else
-					break;
-			}
-			// Sanitize the string
-			for (j = 1; j < safe_strlen(p); j++) {
-				// Some people are bound to have invalid chars in their date strings
-				for (k = 0; k < sizeof(unauthorized); k++) {
-					if (p[j] == unauthorized[k])
-						p[j] = '_';
-				}
-			}
-			// If all we have is a slash, return the empty string for the extra version
-			*ext = (p[1] == 0) ? nullstr : p;
-			return version;
-		}
-	}
-	return 0;
 }

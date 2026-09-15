@@ -21,6 +21,11 @@
 #include "libfatint.h"
 #include "ulint.h"
 
+/* Existing sector-size settings, shared by image inspection and installation. */
+uint32_t LIBFAT_SECTOR_SHIFT = 9;
+uint32_t LIBFAT_SECTOR_SIZE = 512;
+uint32_t LIBFAT_SECTOR_MASK = 511;
+
 struct libfat_filesystem *
 libfat_open(int (*readfunc) (intptr_t, void *, size_t, libfat_sector_t),
 	    intptr_t readptr)
@@ -105,8 +110,10 @@ libfat_open(int (*readfunc) (intptr_t, void *, size_t, libfat_sector_t),
     return fs;			/* All good */
 
 barf:
-    if (fs)
+    if (fs) {
+	libfat_flush(fs);
 	free(fs);
+    }
     return NULL;
 }
 

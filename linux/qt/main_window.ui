@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Layout follows IDD_DIALOG in src/rufus.rc and runtime controls in src/ui.c. -->
+<ui version="4.0">
+ <class>RufusWindow</class>
+ <widget class="QMainWindow" name="RufusWindow">
+  <property name="windowTitle"><string>Rufus (Linux preview)</string></property>
+  <property name="font"><font><pointsize>9</pointsize></font></property>
+  <property name="windowIcon"><iconset resource="rufus_icons.qrc"><normaloff>:/rufus/rufus.ico</normaloff>:/rufus/rufus.ico</iconset></property>
+  <widget class="QWidget" name="centralWidget">
+   <layout class="QVBoxLayout" name="mainLayout">
+    <property name="spacing"><number>6</number></property>
+    <property name="leftMargin"><number>12</number></property>
+    <property name="topMargin"><number>8</number></property>
+    <property name="rightMargin"><number>12</number></property>
+    <property name="bottomMargin"><number>16</number></property>
+    <item><layout class="QHBoxLayout" name="driveHeaderLayout">
+     <item><widget class="QLabel" name="driveHeader">
+      <property name="font"><font><pointsize>14</pointsize><bold>true</bold></font></property>
+      <property name="text"><string>Drive Properties</string></property>
+     </widget></item>
+     <item><widget class="QFrame" name="driveLine"><property name="frameShape"><enum>QFrame::HLine</enum></property></widget></item>
+    </layout></item>
+    <item><widget class="QLabel" name="deviceLabel">
+     <property name="text"><string>Device</string></property>
+     <property name="buddy"><cstring>deviceCombo</cstring></property>
+    </widget></item>
+    <item><layout class="QHBoxLayout" name="deviceLayout">
+     <item><widget class="QComboBox" name="deviceCombo">
+      <property name="sizeAdjustPolicy"><enum>QComboBox::AdjustToMinimumContentsLengthWithIcon</enum></property>
+      <property name="minimumContentsLength"><number>24</number></property>
+     </widget></item>
+     <item><widget class="QToolButton" name="saveDeviceButton">
+      <property name="enabled"><bool>false</bool></property>
+      <property name="toolTip"><string>Save the selected device to an image — not available</string></property>
+      <property name="accessibleName"><string>Save device to image</string></property>
+      <property name="icon"><iconset resource="rufus_icons.qrc"><normaloff>:/rufus/save-16.png</normaloff>:/rufus/save-16.png</iconset></property>
+      <property name="autoRaise"><bool>true</bool></property>
+     </widget></item>
+    </layout></item>
+    <item><widget class="QLabel" name="bootLabel">
+     <property name="text"><string>Boot selection</string></property>
+     <property name="buddy"><cstring>bootCombo</cstring></property>
+    </widget></item>
+    <item><layout class="QHBoxLayout" name="bootLayout">
+     <item><widget class="QComboBox" name="bootCombo">
+      <property name="sizeAdjustPolicy"><enum>QComboBox::AdjustToMinimumContentsLengthWithIcon</enum></property>
+      <property name="minimumContentsLength"><number>24</number></property>
+      <item><property name="text"><string>Disk or ISO image (Please select)</string></property></item>
+     </widget></item>
+     <item><widget class="QToolButton" name="hashButton">
+      <property name="enabled"><bool>false</bool></property>
+      <property name="toolTip"><string>Compute image checksums — not available</string></property>
+      <property name="accessibleName"><string>Compute image checksums</string></property>
+      <property name="icon"><iconset resource="rufus_icons.qrc"><normaloff>:/rufus/hash-16.png</normaloff>:/rufus/hash-16.png</iconset></property>
+      <property name="autoRaise"><bool>true</bool></property>
+     </widget></item>
+     <item><widget class="QPushButton" name="selectImageButton">
+      <property name="autoDefault"><bool>true</bool></property>
+      <property name="text"><string>SELECT</string></property>
+      <property name="minimumSize"><size><width>80</width><height>0</height></size></property>
+     </widget></item>
+    </layout></item>
+    <item><widget class="QWidget" name="imageOptions">
+     <property name="enabled"><bool>false</bool></property>
+     <layout class="QVBoxLayout" name="imageOptionsLayout">
+      <property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property>
+      <item><widget class="QLabel" name="imageOptionLabel"><property name="text"><string>Image option</string></property></widget></item>
+      <item><layout class="QHBoxLayout" name="imageOptionRow">
+       <item><widget class="QComboBox" name="imageOptionCombo"/></item>
+       <item><widget class="QSlider" name="persistenceSlider"><property name="orientation"><enum>Qt::Horizontal</enum></property></widget></item>
+       <item><widget class="QLineEdit" name="persistenceSize"/></item>
+       <item><widget class="QComboBox" name="persistenceUnits"/></item>
+      </layout></item>
+     </layout>
+    </widget></item>
+    <item><layout class="QGridLayout" name="partitionLayout" columnstretch="1,1">
+     <property name="horizontalSpacing"><number>36</number></property>
+     <item row="0" column="0"><widget class="QLabel" name="partitionLabel"><property name="text"><string>Partition scheme</string></property></widget></item>
+     <item row="0" column="1"><widget class="QLabel" name="targetLabel"><property name="text"><string>Target system</string></property></widget></item>
+     <item row="1" column="0"><widget class="QComboBox" name="partitionCombo"><property name="enabled"><bool>false</bool></property></widget></item>
+     <item row="1" column="1"><widget class="QComboBox" name="targetCombo"><property name="enabled"><bool>false</bool></property></widget></item>
+    </layout></item>
+    <item alignment="Qt::AlignLeft"><widget class="QToolButton" name="advancedDriveButton">
+     <property name="text"><string>Show advanced drive properties</string></property>
+     <property name="toolButtonStyle"><enum>Qt::ToolButtonTextBesideIcon</enum></property>
+     <property name="arrowType"><enum>Qt::DownArrow</enum></property>
+     <property name="autoRaise"><bool>true</bool></property>
+    </widget></item>
+    <item><widget class="QWidget" name="advancedDriveOptions">
+     <property name="enabled"><bool>false</bool></property>
+     <layout class="QVBoxLayout" name="advancedDriveLayout">
+      <property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property>
+      <item><widget class="QCheckBox" name="listUsbHardDrives"><property name="text"><string>List USB Hard Drives</string></property></widget></item>
+      <item><widget class="QCheckBox" name="oldBiosFixes"><property name="text"><string>Add fixes for old BIOSes (extra partition, align, etc.)</string></property></widget></item>
+      <item><widget class="QCheckBox" name="uefiValidation"><property name="text"><string>Enable runtime UEFI media validation</string></property></widget></item>
+     </layout>
+    </widget></item>
+    <item><layout class="QHBoxLayout" name="formatHeaderLayout">
+     <item><widget class="QLabel" name="formatHeader">
+      <property name="font"><font><pointsize>14</pointsize><bold>true</bold></font></property>
+      <property name="text"><string>Format Options</string></property>
+     </widget></item>
+     <item><widget class="QFrame" name="formatLine"><property name="frameShape"><enum>QFrame::HLine</enum></property></widget></item>
+    </layout></item>
+    <item><widget class="QLabel" name="volumeLabel"><property name="text"><string>Volume label</string></property></widget></item>
+    <item><widget class="QLineEdit" name="volumeEdit"><property name="enabled"><bool>false</bool></property></widget></item>
+    <item><layout class="QGridLayout" name="formatLayout" columnstretch="1,1">
+     <property name="horizontalSpacing"><number>36</number></property>
+     <item row="0" column="0"><widget class="QLabel" name="fileSystemLabel"><property name="text"><string>File system</string></property></widget></item>
+     <item row="0" column="1"><widget class="QLabel" name="clusterLabel"><property name="text"><string>Cluster size</string></property></widget></item>
+     <item row="1" column="0"><widget class="QComboBox" name="fileSystemCombo"><property name="enabled"><bool>false</bool></property></widget></item>
+     <item row="1" column="1"><widget class="QComboBox" name="clusterCombo"><property name="enabled"><bool>false</bool></property></widget></item>
+    </layout></item>
+    <item alignment="Qt::AlignLeft"><widget class="QToolButton" name="advancedFormatButton">
+     <property name="text"><string>Show advanced format options</string></property>
+     <property name="toolButtonStyle"><enum>Qt::ToolButtonTextBesideIcon</enum></property>
+     <property name="arrowType"><enum>Qt::DownArrow</enum></property>
+     <property name="autoRaise"><bool>true</bool></property>
+    </widget></item>
+    <item><widget class="QWidget" name="advancedFormatOptions">
+     <property name="enabled"><bool>false</bool></property>
+     <layout class="QVBoxLayout" name="advancedFormatLayout">
+      <property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property>
+      <item><widget class="QCheckBox" name="quickFormat">
+       <property name="text"><string>Quick format</string></property><property name="checked"><bool>true</bool></property>
+      </widget></item>
+      <item><widget class="QCheckBox" name="extendedLabel">
+       <property name="text"><string>Create extended label and icon files</string></property><property name="checked"><bool>true</bool></property>
+      </widget></item>
+      <item><layout class="QHBoxLayout" name="badBlocksLayout">
+       <item><widget class="QCheckBox" name="badBlocks"><property name="text"><string>Check device for bad blocks</string></property></widget></item>
+       <item><widget class="QComboBox" name="passesCombo"><item><property name="text"><string>1 pass</string></property></item></widget></item>
+      </layout></item>
+     </layout>
+    </widget></item>
+    <item><layout class="QHBoxLayout" name="statusHeaderLayout">
+     <item><widget class="QLabel" name="statusHeader">
+      <property name="font"><font><pointsize>14</pointsize><bold>true</bold></font></property>
+      <property name="text"><string>Status</string></property>
+     </widget></item>
+     <item><widget class="QFrame" name="statusLine"><property name="frameShape"><enum>QFrame::HLine</enum></property></widget></item>
+    </layout></item>
+    <item><widget class="QProgressBar" name="progressBar">
+     <property name="value"><number>0</number></property>
+     <property name="alignment"><set>Qt::AlignCenter</set></property>
+     <property name="format"><string>READY</string></property>
+    </widget></item>
+    <item><spacer name="buttonSpace"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeType"><enum>QSizePolicy::Fixed</enum></property><property name="sizeHint"><size><width>0</width><height>12</height></size></property></spacer></item>
+    <item><layout class="QHBoxLayout" name="buttonLayout">
+     <item><widget class="QToolButton" name="languageButton">
+      <property name="enabled"><bool>false</bool></property><property name="accessibleName"><string>Change application language</string></property>
+      <property name="toolTip"><string>Change application language — not available</string></property>
+      <property name="icon"><iconset resource="rufus_icons.qrc"><normaloff>:/rufus/lang-16.png</normaloff>:/rufus/lang-16.png</iconset></property>
+      <property name="autoRaise"><bool>true</bool></property>
+     </widget></item>
+     <item><widget class="QToolButton" name="aboutButton">
+      <property name="enabled"><bool>false</bool></property><property name="accessibleName"><string>About Rufus</string></property>
+      <property name="toolTip"><string>About Rufus — not available</string></property>
+      <property name="icon"><iconset resource="rufus_icons.qrc"><normaloff>:/rufus/info-16.png</normaloff>:/rufus/info-16.png</iconset></property>
+      <property name="autoRaise"><bool>true</bool></property>
+     </widget></item>
+     <item><widget class="QToolButton" name="settingsButton">
+      <property name="enabled"><bool>false</bool></property><property name="accessibleName"><string>Show application settings</string></property>
+      <property name="toolTip"><string>Show application settings — not available</string></property>
+      <property name="icon"><iconset resource="rufus_icons.qrc"><normaloff>:/rufus/settings-16.png</normaloff>:/rufus/settings-16.png</iconset></property>
+      <property name="autoRaise"><bool>true</bool></property>
+     </widget></item>
+     <item><widget class="QToolButton" name="logButton">
+      <property name="accessibleName"><string>Show the log</string></property><property name="toolTip"><string>Show the log</string></property>
+      <property name="icon"><iconset resource="rufus_icons.qrc"><normaloff>:/rufus/log-16.png</normaloff>:/rufus/log-16.png</iconset></property>
+      <property name="autoRaise"><bool>true</bool></property>
+     </widget></item>
+     <item><spacer name="buttonStretch"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint"><size><width>24</width><height>0</height></size></property></spacer></item>
+     <item><widget class="QPushButton" name="startButton">
+      <property name="text"><string>START</string></property><property name="enabled"><bool>false</bool></property>
+      <property name="minimumSize"><size><width>80</width><height>0</height></size></property>
+      <property name="toolTip"><string>Media writing is not available in this build.</string></property>
+     </widget></item>
+     <item><widget class="QPushButton" name="closeButton">
+      <property name="autoDefault"><bool>true</bool></property>
+      <property name="text"><string>CLOSE</string></property>
+      <property name="minimumSize"><size><width>80</width><height>0</height></size></property>
+     </widget></item>
+    </layout></item>
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusBar"><property name="sizeGripEnabled"><bool>false</bool></property></widget>
+ </widget>
+ <tabstops>
+  <tabstop>deviceCombo</tabstop><tabstop>saveDeviceButton</tabstop><tabstop>bootCombo</tabstop><tabstop>hashButton</tabstop><tabstop>selectImageButton</tabstop>
+  <tabstop>partitionCombo</tabstop><tabstop>targetCombo</tabstop><tabstop>advancedDriveButton</tabstop>
+  <tabstop>listUsbHardDrives</tabstop><tabstop>oldBiosFixes</tabstop><tabstop>uefiValidation</tabstop>
+  <tabstop>volumeEdit</tabstop><tabstop>fileSystemCombo</tabstop><tabstop>clusterCombo</tabstop><tabstop>advancedFormatButton</tabstop>
+  <tabstop>quickFormat</tabstop><tabstop>extendedLabel</tabstop><tabstop>badBlocks</tabstop><tabstop>passesCombo</tabstop>
+  <tabstop>languageButton</tabstop><tabstop>aboutButton</tabstop><tabstop>settingsButton</tabstop><tabstop>logButton</tabstop><tabstop>startButton</tabstop><tabstop>closeButton</tabstop>
+ </tabstops>
+ <resources><include location="rufus_icons.qrc"/></resources>
+ <connections/>
+</ui>

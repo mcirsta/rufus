@@ -1,0 +1,71 @@
+name: Shared image rules
+
+on:
+  push:
+    paths:
+      - 'src/image_policy.*'
+      - 'src/image_file.*'
+      - 'src/image_report.h'
+      - 'src/syslinux_version.*'
+      - 'src/syslinux_scan.*'
+      - 'src/grub_inspect.*'
+      - 'src/efi_boot_info.*'
+      - 'src/pe_arch.*'
+      - 'src/strarray.*'
+      - 'linux/platform/crt_strings.h'
+      - 'res/syslinux/**'
+      - 'src/cregex*'
+      - 'tests/image_policy/**'
+      - 'tests/image_file/**'
+      - 'tests/syslinux_version/**'
+      - 'tests/syslinux_scan/**'
+      - 'tests/grub_inspect/**'
+      - 'tests/efi_boot_info/**'
+      - 'tests/pe_arch/**'
+      - '.github/workflows/image-policy.yml'
+  pull_request:
+    paths:
+      - 'src/image_policy.*'
+      - 'src/image_file.*'
+      - 'src/image_report.h'
+      - 'src/syslinux_version.*'
+      - 'src/syslinux_scan.*'
+      - 'src/grub_inspect.*'
+      - 'src/efi_boot_info.*'
+      - 'src/pe_arch.*'
+      - 'src/strarray.*'
+      - 'linux/platform/crt_strings.h'
+      - 'res/syslinux/**'
+      - 'src/cregex*'
+      - 'tests/image_policy/**'
+      - 'tests/image_file/**'
+      - 'tests/syslinux_version/**'
+      - 'tests/syslinux_scan/**'
+      - 'tests/grub_inspect/**'
+      - 'tests/efi_boot_info/**'
+      - 'tests/pe_arch/**'
+      - '.github/workflows/image-policy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-component:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [Win32, x64]
+        component: [image_policy, image_file, syslinux_version, syslinux_scan, grub_inspect, efi_boot_info, pe_arch]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Configure native C tests
+        run: cmake -S tests/${{ matrix.component }} -B build/${{ matrix.component }} -A ${{ matrix.arch }}
+      - name: Build
+        run: cmake --build build/${{ matrix.component }} --config Debug
+      - name: Test
+        run: ctest --test-dir build/${{ matrix.component }} -C Debug --output-on-failure --no-tests=error

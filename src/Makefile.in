@@ -92,14 +92,14 @@ am_rufus_OBJECTS = rufus-badblocks.$(OBJEXT) rufus-darkmode.$(OBJEXT) \
 	rufus-dos_locale.$(OBJEXT) rufus-drive.$(OBJEXT) \
 	rufus-format.$(OBJEXT) rufus-format_ext.$(OBJEXT) \
 	rufus-format_fat32.$(OBJEXT) rufus-hash.$(OBJEXT) \
-	rufus-icon.$(OBJEXT) rufus-iso.$(OBJEXT) \
+	rufus-icon.$(OBJEXT) rufus-image_file.$(OBJEXT) rufus-image_policy.$(OBJEXT) rufus-partition_layout.$(OBJEXT) rufus-iso.$(OBJEXT) rufus-iso_analyze.$(OBJEXT) rufus-iso_bootloaders.$(OBJEXT) rufus-embedded_efi.$(OBJEXT) rufus-iso_file.$(OBJEXT) rufus-winpe_scan.$(OBJEXT) rufus-wim_metadata.$(OBJEXT) rufus-pe_arch.$(OBJEXT) rufus-iso_read.$(OBJEXT) rufus-iso_scan.$(OBJEXT) \
 	rufus-localization.$(OBJEXT) rufus-net.$(OBJEXT) \
 	rufus-parser.$(OBJEXT) rufus-pki.$(OBJEXT) \
 	rufus-process.$(OBJEXT) rufus-cregex_compile.$(OBJEXT) \
 	rufus-cregex_parse.$(OBJEXT) rufus-cregex_vm.$(OBJEXT) \
 	rufus-rufus.$(OBJEXT) rufus-smart.$(OBJEXT) \
-	rufus-stdfn.$(OBJEXT) rufus-stdio.$(OBJEXT) \
-	rufus-stdlg.$(OBJEXT) rufus-syslinux.$(OBJEXT) \
+	rufus-stdfn.$(OBJEXT) rufus-strarray.$(OBJEXT) rufus-stdio.$(OBJEXT) \
+	rufus-stdlg.$(OBJEXT) rufus-syslinux.$(OBJEXT) rufus-syslinux_version.$(OBJEXT) rufus-grub_inspect.$(OBJEXT) rufus-efi_boot_info.$(OBJEXT) rufus-syslinux_scan.$(OBJEXT) \
 	rufus-ui.$(OBJEXT) rufus-vhd.$(OBJEXT) rufus-wue.$(OBJEXT) \
 	rufus-xml.$(OBJEXT)
 rufus_OBJECTS = $(am_rufus_OBJECTS)
@@ -285,8 +285,8 @@ AM_V_WINDRES_0 = @echo "  RC     $@";$(WINDRES)
 AM_V_WINDRES_1 = $(WINDRES)
 AM_V_WINDRES_ = $(AM_V_WINDRES_$(AM_DEFAULT_VERBOSITY))
 AM_V_WINDRES = $(AM_V_WINDRES_$(V))
-rufus_SOURCES = badblocks.c darkmode.c dev.c dos.c dos_locale.c drive.c format.c format_ext.c format_fat32.c hash.c icon.c iso.c localization.c \
-	 net.c parser.c pki.c process.c cregex_compile.c cregex_parse.c cregex_vm.c rufus.c smart.c stdfn.c stdio.c stdlg.c syslinux.c ui.c vhd.c wue.c xml.c
+rufus_SOURCES = badblocks.c darkmode.c dev.c dos.c dos_locale.c drive.c format.c format_ext.c format_fat32.c hash.c icon.c image_file.c image_file.h image_policy.c image_policy.h partition_layout.c partition_layout.h image_report.h iso.c iso_analyze.c iso_analyze.h iso_bootloaders.c iso_bootloaders.h embedded_efi.c embedded_efi.h iso_file.c iso_file.h winpe_scan.c winpe_scan.h wim_metadata.c wim_metadata.h pe_arch.c pe_arch.h iso_read.c iso_read.h iso_scan.c iso_scan.h localization.c \
+	 net.c parser.c pki.c process.c cregex_compile.c cregex_parse.c cregex_vm.c rufus.c smart.c stdfn.c strarray.c strarray.h stdio.c stdlg.c syslinux.c syslinux_version.c syslinux_version.h grub_inspect.c grub_inspect.h efi_boot_info.c efi_boot_info.h syslinux_scan.c syslinux_scan.h ui.c vhd.c wue.c xml.c
 
 rufus_CFLAGS = -I$(srcdir)/ms-sys/inc -I$(srcdir)/syslinux/libfat -I$(srcdir)/syslinux/libinstaller -I$(srcdir)/syslinux/win -I$(srcdir)/libcdio -I$(srcdir)/wimlib -I$(srcdir)/../res $(AM_CFLAGS) \
 	-DEXT2_FLAT_INCLUDES=0 -D_RUFUS -DSOLUTION=rufus
@@ -415,6 +415,84 @@ rufus-icon.o: icon.c
 rufus-icon.obj: icon.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-icon.obj `if test -f 'icon.c'; then $(CYGPATH_W) 'icon.c'; else $(CYGPATH_W) '$(srcdir)/icon.c'; fi`
 
+rufus-iso_analyze.o: iso_analyze.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-iso_analyze.o `test -f 'iso_analyze.c' || echo '$(srcdir)/'`iso_analyze.c
+
+rufus-iso_analyze.obj: iso_analyze.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-iso_analyze.obj `if test -f 'iso_analyze.c'; then $(CYGPATH_W) 'iso_analyze.c'; else $(CYGPATH_W) '$(srcdir)/iso_analyze.c'; fi`
+
+rufus-iso_bootloaders.o: iso_bootloaders.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-iso_bootloaders.o `test -f 'iso_bootloaders.c' || echo '$(srcdir)/'`iso_bootloaders.c
+
+rufus-iso_bootloaders.obj: iso_bootloaders.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-iso_bootloaders.obj `if test -f 'iso_bootloaders.c'; then $(CYGPATH_W) 'iso_bootloaders.c'; else $(CYGPATH_W) '$(srcdir)/iso_bootloaders.c'; fi`
+
+rufus-embedded_efi.o: embedded_efi.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-embedded_efi.o `test -f 'embedded_efi.c' || echo '$(srcdir)/'`embedded_efi.c
+
+rufus-embedded_efi.obj: embedded_efi.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-embedded_efi.obj `if test -f 'embedded_efi.c'; then $(CYGPATH_W) 'embedded_efi.c'; else $(CYGPATH_W) '$(srcdir)/embedded_efi.c'; fi`
+
+rufus-iso_file.o: iso_file.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-iso_file.o `test -f 'iso_file.c' || echo '$(srcdir)/'`iso_file.c
+
+rufus-iso_file.obj: iso_file.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-iso_file.obj `if test -f 'iso_file.c'; then $(CYGPATH_W) 'iso_file.c'; else $(CYGPATH_W) '$(srcdir)/iso_file.c'; fi`
+
+rufus-winpe_scan.o: winpe_scan.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-winpe_scan.o `test -f 'winpe_scan.c' || echo '$(srcdir)/'`winpe_scan.c
+
+rufus-winpe_scan.obj: winpe_scan.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-winpe_scan.obj `if test -f 'winpe_scan.c'; then $(CYGPATH_W) 'winpe_scan.c'; else $(CYGPATH_W) '$(srcdir)/winpe_scan.c'; fi`
+
+rufus-wim_metadata.o: wim_metadata.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-wim_metadata.o `test -f 'wim_metadata.c' || echo '$(srcdir)/'`wim_metadata.c
+
+rufus-wim_metadata.obj: wim_metadata.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-wim_metadata.obj `if test -f 'wim_metadata.c'; then $(CYGPATH_W) 'wim_metadata.c'; else $(CYGPATH_W) '$(srcdir)/wim_metadata.c'; fi`
+
+rufus-pe_arch.o: pe_arch.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-pe_arch.o `test -f 'pe_arch.c' || echo '$(srcdir)/'`pe_arch.c
+
+rufus-pe_arch.obj: pe_arch.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-pe_arch.obj `if test -f 'pe_arch.c'; then $(CYGPATH_W) 'pe_arch.c'; else $(CYGPATH_W) '$(srcdir)/pe_arch.c'; fi`
+
+rufus-iso_read.o: iso_read.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-iso_read.o `test -f 'iso_read.c' || echo '$(srcdir)/'`iso_read.c
+
+rufus-iso_read.obj: iso_read.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-iso_read.obj `if test -f 'iso_read.c'; then $(CYGPATH_W) 'iso_read.c'; else $(CYGPATH_W) '$(srcdir)/iso_read.c'; fi`
+
+rufus-iso_scan.o: iso_scan.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-iso_scan.o `test -f 'iso_scan.c' || echo '$(srcdir)/'`iso_scan.c
+
+rufus-iso_scan.obj: iso_scan.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-iso_scan.obj `if test -f 'iso_scan.c'; then $(CYGPATH_W) 'iso_scan.c'; else $(CYGPATH_W) '$(srcdir)/iso_scan.c'; fi`
+
+rufus-strarray.o: strarray.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-strarray.o `test -f 'strarray.c' || echo '$(srcdir)/'`strarray.c
+
+rufus-strarray.obj: strarray.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-strarray.obj `if test -f 'strarray.c'; then $(CYGPATH_W) 'strarray.c'; else $(CYGPATH_W) '$(srcdir)/strarray.c'; fi`
+
+rufus-image_file.o: image_file.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-image_file.o `test -f 'image_file.c' || echo '$(srcdir)/'`image_file.c
+
+rufus-image_file.obj: image_file.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-image_file.obj `if test -f 'image_file.c'; then $(CYGPATH_W) 'image_file.c'; else $(CYGPATH_W) '$(srcdir)/image_file.c'; fi`
+
+rufus-image_policy.o: image_policy.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-image_policy.o `test -f 'image_policy.c' || echo '$(srcdir)/'`image_policy.c
+
+rufus-image_policy.obj: image_policy.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-image_policy.obj `if test -f 'image_policy.c'; then $(CYGPATH_W) 'image_policy.c'; else $(CYGPATH_W) '$(srcdir)/image_policy.c'; fi`
+
+rufus-partition_layout.o: partition_layout.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-partition_layout.o `test -f 'partition_layout.c' || echo '$(srcdir)/'`partition_layout.c
+
+rufus-partition_layout.obj: partition_layout.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-partition_layout.obj `if test -f 'partition_layout.c'; then $(CYGPATH_W) 'partition_layout.c'; else $(CYGPATH_W) '$(srcdir)/partition_layout.c'; fi`
+
 rufus-iso.o: iso.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-iso.o `test -f 'iso.c' || echo '$(srcdir)/'`iso.c
 
@@ -504,6 +582,30 @@ rufus-syslinux.o: syslinux.c
 
 rufus-syslinux.obj: syslinux.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-syslinux.obj `if test -f 'syslinux.c'; then $(CYGPATH_W) 'syslinux.c'; else $(CYGPATH_W) '$(srcdir)/syslinux.c'; fi`
+
+rufus-syslinux_version.o: syslinux_version.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-syslinux_version.o `test -f 'syslinux_version.c' || echo '$(srcdir)/'`syslinux_version.c
+
+rufus-syslinux_version.obj: syslinux_version.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-syslinux_version.obj `if test -f 'syslinux_version.c'; then $(CYGPATH_W) 'syslinux_version.c'; else $(CYGPATH_W) '$(srcdir)/syslinux_version.c'; fi`
+
+rufus-grub_inspect.o: grub_inspect.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-grub_inspect.o `test -f 'grub_inspect.c' || echo '$(srcdir)/'`grub_inspect.c
+
+rufus-grub_inspect.obj: grub_inspect.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-grub_inspect.obj `if test -f 'grub_inspect.c'; then $(CYGPATH_W) 'grub_inspect.c'; else $(CYGPATH_W) '$(srcdir)/grub_inspect.c'; fi`
+
+rufus-efi_boot_info.o: efi_boot_info.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-efi_boot_info.o `test -f 'efi_boot_info.c' || echo '$(srcdir)/'`efi_boot_info.c
+
+rufus-efi_boot_info.obj: efi_boot_info.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-efi_boot_info.obj `if test -f 'efi_boot_info.c'; then $(CYGPATH_W) 'efi_boot_info.c'; else $(CYGPATH_W) '$(srcdir)/efi_boot_info.c'; fi`
+
+rufus-syslinux_scan.o: syslinux_scan.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-syslinux_scan.o `test -f 'syslinux_scan.c' || echo '$(srcdir)/'`syslinux_scan.c
+
+rufus-syslinux_scan.obj: syslinux_scan.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-syslinux_scan.obj `if test -f 'syslinux_scan.c'; then $(CYGPATH_W) 'syslinux_scan.c'; else $(CYGPATH_W) '$(srcdir)/syslinux_scan.c'; fi`
 
 rufus-ui.o: ui.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-ui.o `test -f 'ui.c' || echo '$(srcdir)/'`ui.c

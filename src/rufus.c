@@ -50,7 +50,7 @@
 #include "vhd.h"
 #include "wue.h"
 #include "drive.h"
-#include "cregex.h"
+#include "image_policy.h"
 #include "settings.h"
 #include "darkmode.h"
 #include "bled/bled.h"
@@ -1174,30 +1174,6 @@ static void UpdateImage(BOOL update_image_option_only)
 	IGNORE_RETVAL(ComboBox_SetCurSel(hImageOption, imop_win_sel));
 }
 
-enum ArchType MachineToArch(WORD machine)
-{
-	switch (machine) {
-	case IMAGE_FILE_MACHINE_I386:
-		return ARCH_X86_32;
-	case IMAGE_FILE_MACHINE_AMD64:
-		return ARCH_X86_64;
-	case IMAGE_FILE_MACHINE_ARM:
-		return ARCH_ARM_32;
-	case IMAGE_FILE_MACHINE_ARM64:
-		return ARCH_ARM_64;
-	case IMAGE_FILE_MACHINE_IA64:
-		return ARCH_IA_64;
-	case IMAGE_FILE_MACHINE_RISCV64:
-		return ARCH_RISCV_64;
-	case IMAGE_FILE_MACHINE_LOONGARCH64:
-		return ARCH_LOONGARCH_64;
-	case IMAGE_FILE_MACHINE_EBC:
-		return ARCH_EBC;
-	default:
-		return ARCH_UNKNOWN;
-	}
-}
-
 /// <summary>
 /// Parse a PE executable file and return its CPU architecture.
 /// </summary>
@@ -1206,47 +1182,37 @@ enum ArchType MachineToArch(WORD machine)
 static uint8_t FindArch(const char* path)
 {
 	uint8_t ret = ARCH_UNKNOWN;
-	HANDLE hFile = NULL, hFileMapping = NULL;
-	PIMAGE_DOS_HEADER pImageDOSHeader = NULL;
-	// NB: The field we are after is at the same location for 32 and 64-bit
-	// PE headers, so we don't need to care about using PIMAGE_NT_HEADERS[32|64]
-	PIMAGE_NT_HEADERS pImageNTHeader = NULL;
+	HANDLE hFile = INVALID_HANDLE_VALUE, hFileMapping = NULL;
+	const void* bytes = NULL;
+	LARGE_INTEGER size;
 
 	hFile = CreateFileU(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-	if (hFile == NULL) {
+	if (hFile == INVALID_HANDLE_VALUE) {
 		uprintf("FindArch: Could not open file '%s': %s", path, WindowsErrorString());
-		return 0;
+		return ARCH_UNKNOWN;
 	}
-
+	if (!GetFileSizeEx(hFile, &size) || size.QuadPart <= 0 || (uint64_t)size.QuadPart > SIZE_MAX) {
+		uprintf("FindArch: Could not determine a valid file size");
+		goto out;
+	}
 	hFileMapping = CreateFileMapping(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
 	if (hFileMapping == NULL) {
 		uprintf("FindArch: Could not create file mapping: %s", WindowsErrorString());
 		goto out;
 	}
-
-	pImageDOSHeader = (PIMAGE_DOS_HEADER)MapViewOfFile(hFileMapping, FILE_MAP_READ, 0, 0, 0);
-	if (pImageDOSHeader == NULL) {
+	bytes = MapViewOfFile(hFileMapping, FILE_MAP_READ, 0, 0, 0);
+	if (bytes == NULL) {
 		uprintf("FindArch: Could not get mapped view address: %s", WindowsErrorString());
 		goto out;
 	}
-	if (pImageDOSHeader->e_magic != IMAGE_DOS_SIGNATURE) {
-		uprintf("FindArch: DOS header not found");
-		goto out;
-	}
-	pImageNTHeader = (PIMAGE_NT_HEADERS)((uintptr_t)pImageDOSHeader + pImageDOSHeader->e_lfanew);
-	if (pImageNTHeader->Signature != IMAGE_NT_SIGNATURE) {
-		uprintf("FindArch: NT header not found");
-		goto out;
-	}
-
-	ret = MachineToArch(pImageNTHeader->FileHeader.Machine);
-
+	ret = FindPeArch(bytes, (size_t)size.QuadPart);
+	if (ret == ARCH_UNKNOWN)
+		uprintf("FindArch: Missing, truncated or unknown PE architecture");
 out:
-	if (pImageDOSHeader != NULL)
-		UnmapViewOfFile(pImageDOSHeader);
+	if (bytes != NULL)
+		UnmapViewOfFile(bytes);
 	safe_closehandle(hFileMapping);
 	safe_closehandle(hFile);
-	assert(ret != 0 && ret < ARCH_MAX);
 	return ret;
 }
 
@@ -1289,34 +1255,9 @@ void GetBootladerInfo(void)
 // The scanning process can be blocking for message processing => use a thread
 DWORD WINAPI ImageScanThread(LPVOID param)
 {
-	// Regexp patterns used to match ISO labels for the Red Hat 8 derivatives
-	// where we should apply an inst.stage2 ➔ inst.repo workaround for ISO
-	// mode (per: https://github.com/rhinstaller/anaconda/pull/3529).
-	const char* redhat8_derivative[] = {
-		"^AlmaLinux-[8-9].*",		// AlmaLinux 8.x and 9.x
-		"^Fedora.*-3[3-9].*",		// Fedora 33-39
-		"^CentOS.*-[8-9].*",		// CentOS and CentOS Stream 8.x and 9.x
-		"^Circle.*-[8-9].*",		// Circle Linux 8.x.and 9.x
-		"^OL-[8-9].*",				// Oracle Linux 8.x and 9.x
-		"^RHEL-[8-9].*",			// Red Hat 8.x and 9.x
-		"^Rocky-[8-9].*",			// Rocky Linux 8.x and 9.x
-		"^MIRACLE-LINUX-[8-9].*",	// MIRACLE LINUX 8.x and 9.x
-	};
-	// As expected, SUSE maintainers DO NOT care about making the lives of SUSE users easier
-	// by applying simple changes. On the other hand, boy are they caring about making their
-	// *own* lives easier, and angrily dismissing anything that dares challenges that...
-	// See: https://bugzilla.suse.com/show_bug.cgi?id=1243236.
-	const char* suse_derivative[] = {
-		"Install-SUSE",
-		"Install-LEAP",
-		"openSUSE-Tumbleweed"
-	};
 	int i;
 	uint8_t arch;
 	char tmp_path[MAX_PATH], tmp_str[64];
-	const char* matches[REGEX_VM_MAX_MATCHES];
-	cregex_node_t* node = NULL;
-	cregex_program_t* program = NULL;
 
 	// We may mount an ISO during the lookup of the Windows version, which
 	// produces DBT_DEVNODES_CHANGED messages that lead to unwanted device
@@ -1399,39 +1340,7 @@ DWORD WINAPI ImageScanThread(LPVOID param)
 		GetBootladerInfo();
 		DisplayISOProps();
 
-		for (i = 0; i < ARRAYSIZE(redhat8_derivative) && !img_report.rh8_derivative; i++) {
-			node = cregex_parse(redhat8_derivative[i]);
-			if (node != NULL) {
-				program = cregex_compile_node(node);
-				cregex_parse_free(node);
-			}
-			if (node == NULL || program == NULL) {
-				uprintf("Internal error: Failed to parse '%s'", redhat8_derivative[i]);
-				break;
-			}
-			if (cregex_program_run(program, img_report.label, matches, ARRAYSIZE(matches)) > 0)
-				img_report.rh8_derivative = TRUE;
-			cregex_compile_free(program);
-			program = NULL;
-		}
-
-		for (i = 0; i < ARRAYSIZE(suse_derivative); i++) {
-			if (strncmp(img_report.label, suse_derivative[i], strlen(suse_derivative[i])) == 0) {
-				img_report.disable_iso = TRUE;
-				break;
-			}
-		}
-
-		// If we have EFI GRUB, detect whether we have FAT, exFAT or NTFS support (with exFAT
-		// or NTFS support being mandatory if we have a file that is larger than 4 GB)
-		if (img_report.has_grub2 & 0x80) {
-			if (!(img_report.has_grub2_fs & 0x7) || (img_report.has_4GB_file && !(img_report.has_grub2_fs & 0x6)))
-				img_report.disable_iso = TRUE;
-		}
-
-		// If we have an ISOHybrid, but without an ISO method we support, disable ISO support altogether
-		if (IS_DD_BOOTABLE(img_report) && (img_report.disable_iso ||
-				(!IS_BIOS_BOOTABLE(img_report) && !IS_EFI_BOOTABLE(img_report)))) {
+		if (ApplyIsoPolicy(&img_report)) {
 			Notification(MB_OK | MB_ICONINFORMATION, lmprintf(MSG_274, "ISOHybrid"), lmprintf(MSG_321));
 			uprintf("Note: DD image mode enforced since this ISOHybrid is not ISO mode compatible.");
 			img_report.is_iso = FALSE;
@@ -1550,36 +1459,34 @@ static DWORD WINAPI BootCheckThread(LPVOID param)
 		}
 
 		if (IS_DD_BOOTABLE(img_report)) {
-			if (!img_report.is_iso) {
+			IMAGE_WRITE_CHOICES modes = GetImageWriteChoices(&img_report, persistence_size,
+				partition_type == PARTITION_STYLE_GPT, IS_FAT(fs_type));
+			if (modes.count == 1 && modes.mode[0] == IMAGE_WRITE_DD) {
 				// Pure DD images are fine at this stage
 				write_as_image = TRUE;
-			} else if (persistence_size == 0) {
+			} else if (modes.count > 1) {
 				// Ask users how they want to write ISOHybrid images,
 				// but only do so if persistence has not been selected.
 				char* iso_image = lmprintf(MSG_036);
 				char* dd_image = lmprintf(MSG_095);
+				enum IMAGE_WRITE_MODE mode;
 				StrArrayCreate(&selection.choices, 4);
-				// If the ISO is small enough to be written as an ESP and we are using GPT add the ISO → ESP option
-				if ((img_report.projected_size < MAX_ISO_TO_ESP_SIZE) && HAS_REGULAR_EFI(img_report) &&
-					(partition_type == PARTITION_STYLE_GPT) && IS_FAT(fs_type)) {
-					StrArrayAdd(&selection.choices, lmprintf(MSG_276, iso_image), TRUE);
-					StrArrayAdd(&selection.choices, lmprintf(MSG_277, "ISO → ESP"), TRUE);
-					StrArrayAdd(&selection.choices, lmprintf(MSG_277, dd_image), TRUE);
-					i = SelectionDialog(lmprintf(MSG_274, "ISOHybrid"), lmprintf(MSG_275, iso_image, dd_image, iso_image, dd_image), &selection);
-					StrArrayDestroy(&selection.choices);
-					if (i < 0)	// Cancel
-						goto out;
-					write_as_esp = (i & 2);
-					write_as_image = (i & 4);
+				for (int j = 0; j < modes.count; j++) {
+					if (modes.mode[j] == IMAGE_WRITE_ISO)
+						StrArrayAdd(&selection.choices, lmprintf(MSG_276, iso_image), TRUE);
+					else
+						StrArrayAdd(&selection.choices, lmprintf(MSG_277,
+							modes.mode[j] == IMAGE_WRITE_ESP ? "ISO → ESP" : dd_image), TRUE);
+				}
+				i = SelectionDialog(lmprintf(MSG_274, "ISOHybrid"), lmprintf(MSG_275, iso_image, dd_image, iso_image, dd_image), &selection);
+				StrArrayDestroy(&selection.choices);
+				mode = GetImageWriteMode(&modes, i);
+				if (mode == IMAGE_WRITE_NONE)	// Cancel
+					goto out;
+				write_as_image = (mode == IMAGE_WRITE_DD);
+				if (modes.count == 3) {
+					write_as_esp = (mode == IMAGE_WRITE_ESP);
 					esp_already_asked = TRUE;
-				} else {
-					StrArrayAdd(&selection.choices, lmprintf(MSG_276, iso_image), TRUE);
-					StrArrayAdd(&selection.choices, lmprintf(MSG_277, dd_image), TRUE);
-					i = SelectionDialog(lmprintf(MSG_274, "ISOHybrid"), lmprintf(MSG_275, iso_image, dd_image, iso_image, dd_image), &selection);
-					StrArrayDestroy(&selection.choices);
-					if (i < 0)	// Cancel
-						goto out;
-					write_as_image = (i & 2);
 				}
 			}
 		}

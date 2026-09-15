@@ -213,7 +213,7 @@ from_733 (uint64_t p)
 {
   uint8_t *u = (uint8_t *) &p;
   /* Return the little-endian part always, to handle non-specs-compliant images */
-  return (u[0] | (u[1] << 8) | (u[2] << 16) | (u[3] << 24));
+  return (u[0] | (u[1] << 8) | (u[2] << 16) | ((uint32_t)u[3] << 24));
 }
 
 static CDIO_INLINE uint32_t

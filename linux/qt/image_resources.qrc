@@ -1,0 +1,6 @@
+<RCC>
+ <qresource prefix="/rufus/syslinux">
+  <file alias="ldlinux_v4.sys">../../res/syslinux/ldlinux_v4.sys</file>
+  <file alias="ldlinux_v6.sys">../../res/syslinux/ldlinux_v6.sys</file>
+ </qresource>
+</RCC>

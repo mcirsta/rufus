@@ -19,6 +19,10 @@
 #include <windows.h>
 #include <malloc.h>
 #include <inttypes.h>
+#include "image_report.h"
+#include "pe_arch.h"
+#include "strarray.h"
+#include "syslinux_version.h"
 
 #if defined(_MSC_VER)
 // Disable some VS Code Analysis warnings
@@ -85,11 +89,9 @@
 #define MAX_PARTITIONS              16			// Maximum number of partitions we handle
 #define MAX_ESP_TOGGLE              8			// Maximum number of entries we record to toggle GPT ESP back and forth
 #define MAX_IGNORE_USB              8			// Maximum number of USB drives we want to ignore
-#define MAX_ISO_TO_ESP_SIZE         (1 * GB)	// Maximum size we allow for the ISO → ESP option
 #define MAX_DEFAULT_LIST_CARD_SIZE  (500 * GB)	// Size above which we don't list a card without enable HDD or Alt-F
 #define MAX_SECTORS_TO_CLEAR        (8 * MB / 512)	// Sectors to zap when clearing the MBR/GPT (must be >34)
 #define MAX_USERNAME_LENGTH         128			// Maximum size we'll accept for a WUE specified username
-#define MAX_WININST                 4			// Max number of install[.wim|.esd] we can handle on an image
 #define MAX_MARKER                  80.0f		// Max number of '+' signs we display for progress
 #define MBR_UEFI_MARKER             0x49464555	// 'U', 'E', 'F', 'I', as a 32 bit little endian longword
 #define MORE_INFO_URL               0xFFFF
@@ -350,139 +352,9 @@ enum file_io_type {
 	FILE_IO_APPEND
 };
 
-enum EFI_BOOT_TYPE {
-	EBT_MAIN = 0,
-	EBT_GRUB,
-	EBT_MOKMANAGER,
-	EBT_BOOTMGR
-};
-
-/* Special handling for old .c32 files we need to replace */
-#define NB_OLD_C32          2
-#define OLD_C32_NAMES       { "menu.c32", "vesamenu.c32" }
-#define OLD_C32_THRESHOLD   { 53500, 148000 }
-
-/* ISO details that the application may want */
-#define WINPE_I386          0x0007
-#define WINPE_AMD64         0x0023
-#define WINPE_MININT        0x01C0
-#define SPECIAL_WIM_VERSION 0x000E0000
-#define HAS_KOLIBRIOS(r)    (r.has_kolibrios)
-#define HAS_REACTOS(r)      (r.reactos_path[0] != 0)
-#define HAS_GRUB(r)         ((r.has_grub2) || (r.has_grub4dos))
-#define HAS_SYSLINUX(r)     (r.sl_version != 0)
-#define HAS_BOOTMGR_BIOS(r) (r.has_bootmgr)
-#define HAS_BOOTMGR_EFI(r)  (r.has_bootmgr_efi)
-#define HAS_BOOTMGR(r)      (HAS_BOOTMGR_BIOS(r) || HAS_BOOTMGR_EFI(r))
-#define HAS_REGULAR_EFI(r)  (r.has_efi & 0x7FFE)
-#define HAS_WININST(r)      (r.wininst_index != 0)
-#define HAS_WINPE(r)        (((r.winpe & WINPE_I386) == WINPE_I386)||((r.winpe & WINPE_AMD64) == WINPE_AMD64)||((r.winpe & WINPE_MININT) == WINPE_MININT))
-#define HAS_WINDOWS(r)      (HAS_BOOTMGR(r) || (r.uses_minint) || HAS_WINPE(r))
-#define HAS_WIN7_EFI(r)     ((r.has_efi == 1) && HAS_WININST(r))
-#define HAS_FATLESS_GRUB(r) ((r.has_grub2 & 0x80) && !(r.has_grub2_fs & 0x1))
-#define HAS_NTFSLESS_GRUB(r)((r.has_grub2 & 0x80) && !(r.has_grub2_fs & 0x4))
-#define IS_WINDOWS_1X(r)    (r.has_bootmgr_efi && (r.win_version.major >= 10))
-#define IS_WINDOWS_11(r)    (r.has_bootmgr_efi && (r.win_version.major >= 11))
 #define IS_FAT32_COMPAT(r)  (((r.has_4GB_file == 0 && !HAS_FATLESS_GRUB(r)) || (r.has_4GB_file == 0x11 && allow_dual_uefi_bios)) && !r.needs_ntfs)
-#define HAS_EFI_IMG(r)      (r.efi_img_path[0] != 0)
-#define IS_DD_BOOTABLE(r)   (r.is_bootable_img > 0)
-#define IS_DD_ONLY(r)       ((r.is_bootable_img > 0) && (!r.is_iso || r.disable_iso))
-#define IS_EFI_BOOTABLE(r)  (r.has_efi != 0)
-#define IS_BIOS_BOOTABLE(r) (HAS_BOOTMGR(r) || HAS_SYSLINUX(r) || HAS_WINPE(r) || HAS_GRUB(r) || HAS_REACTOS(r) || HAS_KOLIBRIOS(r))
-#define HAS_WINTOGO(r)      (HAS_BOOTMGR(r) && IS_EFI_BOOTABLE(r) && HAS_WININST(r))
-#define HAS_PERSISTENCE(r)  ((HAS_SYSLINUX(r) || HAS_GRUB(r)) && !(HAS_WINDOWS(r) || HAS_REACTOS(r) || HAS_KOLIBRIOS(r)))
 #define IS_FAT(fs)          ((fs == FS_FAT16) || (fs == FS_FAT32))
 #define IS_EXT(fs)          ((fs >= FS_EXT2) && (fs <= FS_EXT4))
-#define SYMLINKS_RR         0x01
-#define SYMLINKS_UDF        0x02
-
-typedef struct {
-	uint16_t major;
-	uint16_t minor;
-	uint16_t build;
-	uint16_t revision;
-} winver_t;
-
-/*
- * We can't use the Microsoft enums as we want to have RISC-V and LoongArch
- * and we also translate these to IDR_BASE + Value for resource items, which,
- * if we were to use the Microsoft IMAGE_FILE_MACHINE constants, would force
- * us to leave a 65536 sized gap between bases in order to properly map
- * 0x8664 (x86_64), 0xaa64 (ARM64) and so on...
- * NB: When editing this, make sure to also update the values in resource.h!
- */
-enum ArchType {
-	ARCH_UNKNOWN = 0,
-	ARCH_X86_32,
-	ARCH_X86_64,
-	ARCH_ARM_32,
-	ARCH_ARM_64,
-	ARCH_IA_64,
-	ARCH_RISCV_64,
-	ARCH_LOONGARCH_64,
-	ARCH_EBC,
-	ARCH_MAX
-};
-
-typedef struct {
-	uint8_t type;
-	char path[64];
-} efi_boot_entry_t; 
-
-typedef struct {
-	char label[192];					// 3*64 to account for UTF-8
-	char usb_label[192];				// converted USB label for workaround
-	char cfg_path[128];					// path to the ISO's isolinux.cfg
-	char reactos_path[128];				// path to the ISO's freeldr.sys or setupldr.sys
-	char wininst_path[MAX_WININST][64];	// path to the Windows install image(s)
-	efi_boot_entry_t efi_boot_entry[64];// types and paths of detected UEFI bootloaders
-	char efi_img_path[128];				// path to an efi.img file
-	uint64_t image_size;
-	uint64_t projected_size;
-	int64_t mismatch_size;
-	uint32_t wininst_version;
-	BOOLEAN is_iso;
-	int8_t is_bootable_img;
-	BOOLEAN is_vhd;
-	BOOLEAN is_windows_img;
-	BOOLEAN disable_iso;
-	BOOLEAN rh8_derivative;
-	uint16_t winpe;
-	uint16_t has_efi;
-	uint8_t has_secureboot_bootloader;
-	uint8_t has_md5sum;
-	uint8_t wininst_index;
-	uint8_t has_symlinks;
-	uint8_t has_4GB_file;
-	BOOLEAN has_long_filename;
-	BOOLEAN has_deep_directories;
-	BOOLEAN has_bootmgr;
-	BOOLEAN has_bootmgr_efi;
-	BOOLEAN has_autorun;
-	BOOLEAN has_old_c32[NB_OLD_C32];
-	BOOLEAN has_old_vesamenu;
-	BOOLEAN has_efi_syslinux;
-	BOOLEAN has_grub4dos;
-	uint8_t has_grub2;
-	uint8_t has_grub2_fs;
-	BOOLEAN has_compatresources_dll;
-	BOOLEAN has_panther_unattend;
-	BOOLEAN has_kolibrios;
-	BOOLEAN needs_syslinux_overwrite;
-	BOOLEAN needs_ntfs;
-	BOOLEAN uses_casper;
-	BOOLEAN uses_minint;
-	uint8_t compression_type;
-	winver_t win_version;	// Windows ISO version
-	uint16_t sl_version;	// Syslinux/Isolinux version
-	char sl_version_str[12];
-	char sl_version_ext[32];
-	char grub2_version[192];
-} RUFUS_IMG_REPORT;
-
-/* Isolate the Syslinux version numbers */
-#define SL_MAJOR(x) ((uint8_t)((x)>>8))
-#define SL_MINOR(x) ((uint8_t)(x))
 
 typedef struct {
 	char* id;
@@ -730,20 +602,6 @@ extern BOOL htab_create(uint32_t nel, htab_table* htab);
 extern void htab_destroy(htab_table* htab);
 extern uint32_t htab_hash(char* str, htab_table* htab);
 
-/* Basic String Array */
-typedef struct {
-	char** String;
-	uint32_t Index;		// Current array size
-	uint32_t Max;		// Maximum array size
-} StrArray;
-extern void StrArrayCreate(StrArray* arr, uint32_t initial_size);
-extern int32_t StrArrayAdd(StrArray* arr, const char* str, BOOL);
-extern int32_t StrArrayAddUnique(StrArray* arr, const char* str, BOOL);
-extern int32_t StrArrayFind(StrArray* arr, const char* str);
-extern void StrArrayClear(StrArray* arr);
-extern void StrArrayDestroy(StrArray* arr);
-#define IsStrArrayEmpty(arr) (arr.Index == 0)
-
 // Options for the custom selection dialog
 #define SELECTION_NEEDS_ALL_TO_PROCEED 1
 #define SELECTION_USE_WARNING_ICON     2
@@ -844,10 +702,9 @@ extern BOOL ExtractISO(const char* src_iso, const char* dest_dir, BOOL scan);
 extern BOOL ExtractZip(const char* src_zip, const char* dest_dir);
 extern int64_t ExtractISOFile(const char* iso, const char* iso_file, const char* dest_file, DWORD attributes);
 extern uint32_t ReadISOFileToBuffer(const char* iso, const char* iso_file, uint8_t** buf);
-extern BOOL HasEfiImgBootLoaders(void* iso);
+extern BOOL HasEfiImgBootLoaders(void* iso, void* udf);
 extern BOOL DumpFatDir(void* iso, const char* path, int32_t cluster);
 extern BOOL InstallSyslinux(DWORD drive_index, char drive_letter, int fs);
-extern uint16_t GetSyslinuxVersion(char* buf, size_t buf_size, char** ext);
 extern BOOL SetAutorun(const char* path);
 extern char* FileDialog(BOOL save, char* path, const ext_t* ext, UINT* selected_ext);
 extern BOOL FileIO(enum file_io_type io_type, char* path, char** buffer, DWORD* size);
@@ -888,7 +745,6 @@ extern void trim(char* str);
 extern char* remove_substr(const char* src, const char* sub);
 extern void parse_update(char* buf, size_t len);
 extern void* get_data_from_asn1(const uint8_t* buf, size_t buf_len, const char* oid_str, uint8_t asn1_type, size_t* data_len);
-extern int sanitize_label(char* label);
 extern int IsHDD(DWORD DriveIndex, uint16_t vid, uint16_t pid, const char* strid);
 extern char* GetSignatureName(const char* path, const char* country_code, uint8_t* thumbprint, BOOL bSilent);
 extern int GetIssuerCertificateInfo(uint8_t* cert, cert_info_t* info);
@@ -944,7 +800,6 @@ extern uint8_t* RvaToPhysical(uint8_t* buf, uint32_t rva);
 extern uint32_t FindResourceRva(const wchar_t* name, uint8_t* root, uint8_t* dir, uint32_t* len);
 extern DWORD ListDirectoryContent(StrArray* arr, char* dir, uint8_t type);
 extern BOOL TakeOwnership(LPCSTR lpszOwnFile);
-extern enum ArchType MachineToArch(WORD machine);
 #define GetTextWidth(hDlg, id) GetTextSize(GetDlgItem(hDlg, id), NULL).cx
 
 DWORD WINAPI HashThread(void* param);

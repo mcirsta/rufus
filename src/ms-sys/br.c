@@ -20,6 +20,7 @@
 #include "file.h"
 #include "nls.h"
 #include "br.h"
+#include "../image_file.h"
 
 unsigned long ulBytesPerSector = 512;
 
@@ -69,9 +70,10 @@ int is_br(FILE *fp)
 {
    /* A "file" is probably some kind of boot record if it contains the magic
       chars 0x55, 0xAA at position 0x1FE */
-   unsigned char aucRef[] = {0x55, 0xAA};
+   unsigned char sector[512];
 
-   return contains_data(fp, 0x1FE, aucRef, sizeof(aucRef));
+   return read_data(fp, 0, sector, sizeof(sector)) &&
+      IsBootImageSignature(sector, sizeof(sector));
 } /* is_br */
 
 int is_lilo_br(FILE *fp)

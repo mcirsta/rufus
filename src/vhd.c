@@ -42,6 +42,8 @@
 
 #include "drive.h"
 #include "wimlib.h"
+#include "wim_metadata.h"
+#include "image_file.h"
 #include "registry.h"
 #include "bled/bled.h"
 
@@ -167,7 +169,7 @@ int8_t IsBootableImage(const char* path)
 	HANDLE handle = INVALID_HANDLE_VALUE;
 	LARGE_INTEGER liImageSize;
 	DWORD size;
-	uint64_t wim_magic = 0;
+	uint8_t wim_signature[8] = { 0 };
 	LARGE_INTEGER ptr = { 0 };
 	int8_t is_bootable_img;
 
@@ -191,9 +193,10 @@ int8_t IsBootableImage(const char* path)
 	img_report.image_size = (uint64_t)liImageSize.QuadPart;
 	if (img_report.projected_size == 0)
 		img_report.projected_size = img_report.image_size;
-	size = sizeof(wim_magic);
+	size = sizeof(wim_signature);
 	IGNORE_RETVAL(SetFilePointerEx(handle, ptr, NULL, FILE_BEGIN));
-	img_report.is_windows_img = ReadFile(handle, &wim_magic, size, &size, NULL) && (wim_magic == WIM_MAGIC);
+	img_report.is_windows_img = ReadFile(handle, wim_signature, sizeof(wim_signature), &size, NULL) &&
+		IsWimImageSignature(wim_signature, size);
 	if (img_report.is_windows_img)
 		goto out;
 
@@ -282,17 +285,17 @@ uint32_t GetWimVersion(const char* image)
 {
 	int r;
 	WIMStruct* wim;
-	struct wimlib_wim_info info;
+	RUFUS_WIM_INFO info;
 
 	if (image == NULL)
 		return 0;
 
 	r = wimlib_open_wimU(image, 0, &wim);
 	if (r == 0) {
-		r = wimlib_get_wim_info(wim, &info);
+		r = ReadWimArchiveInfo(wim, &info);
 		wimlib_free(wim);
 		if (r == 0)
-			return info.wim_version;
+			return info.version;
 	}
 	uprintf("WARNING: Could not get WIM version: Error %d", r);
 	return 0;

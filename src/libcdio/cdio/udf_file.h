@@ -67,23 +67,12 @@ extern "C" {
   udf_dirent_t *udf_opendir(const udf_dirent_t *p_udf_dirent);
   
   /**
-     Attempts to read up to count bytes from UDF directory entry
-     p_udf_dirent into the buffer starting at buf. buf should be a
-     multiple of UDF_BLOCKSIZE bytes. Reading continues after the
-     point at which we last read or from the beginning the first time.
-     
-     If count is zero, read() returns zero and has no other results. If
-     count is greater than SSIZE_MAX, the result is unspecified.
-     
-     If there is an error, cast the result to driver_return_code_t for 
-     the specific error code.
-  */
-  /**
-    Attempts to read up to count bytes from file descriptor fd into
-    the buffer starting at buf.
-    
-    If count is zero, read() returns zero and has no other results. If
-    count is greater than SSIZE_MAX, the result is unspecified.
+    Read up to count blocks at the current file position. The caller supplies
+    count * UDF_BLOCKSIZE bytes of storage. Return bytes read, zero at EOF or
+    a negative driver error. A read stops at the current recorded extent or
+    file boundary; callers may continue after a short read. Non-final extents
+    and the starting position must be block-aligned. The file position belongs
+    to the UDF handle, so file access must be serialized.
   */
   ssize_t udf_read_block(const udf_dirent_t *p_udf_dirent, 
 			 void * buf, size_t count);

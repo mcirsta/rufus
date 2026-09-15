@@ -130,5 +130,9 @@ libfat_sector_t libfat_nextsector(struct libfat_filesystem * fs,
 	return -1;		/* WTF? */
     }
 
+    /* Cluster zero is a root-directory shorthand only at the public entry
+     * point, not a valid successor in a data chain. */
+    if (nextcluster < 2)
+	return -1;
     return libfat_clustertosector(fs, nextcluster);
 }

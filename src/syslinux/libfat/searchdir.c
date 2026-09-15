@@ -27,6 +27,7 @@ int32_t libfat_searchdir(struct libfat_filesystem *fs, int32_t dirclust,
     struct fat_dirent *dep;
     int nent;
     libfat_sector_t s = libfat_clustertosector(fs, dirclust);
+    libfat_sector_t checkpoint = s, span = 1, traversed = 0;
 
     while (1) {
 	if (s == 0)
@@ -51,7 +52,7 @@ int32_t libfat_searchdir(struct libfat_filesystem *fs, int32_t dirclust,
 		    return 0;	/* An empty file has no clusters */
 		else
 		    return read16(&dep->clustlo) +
-			(read16(&dep->clusthi) << 16);
+			((uint32_t)read16(&dep->clusthi) << 16);
 	    }
 
 	    if (dep->name[0] == 0)
@@ -61,5 +62,16 @@ int32_t libfat_searchdir(struct libfat_filesystem *fs, int32_t dirclust,
 	}
 
 	s = libfat_nextsector(fs, s);
+	/* Searches retain only the current directory/FAT sectors. This also
+	 * lets the backing reader observe cancellation during a long search. */
+	libfat_flush(fs);
+	/* Detect a repeated FAT chain with constant storage (Brent's method). */
+	if (s != 0 && s == checkpoint)
+	    return -1;
+	if (++traversed == span) {
+	    checkpoint = s;
+	    span *= 2;
+	    traversed = 0;
+	}
     }
 }

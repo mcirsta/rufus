@@ -29,6 +29,7 @@
 #include "drive.h"
 #include "format.h"
 #include "wimlib.h"
+#include "wim_metadata.h"
 #include "missing.h"
 #include "resource.h"
 #include "registry.h"
@@ -687,33 +688,7 @@ static void PopulateWindowsVersionFromXml(const wchar_t* xml, size_t xml_len, in
 	img_report.win_version.build = (uint16_t)safe_atoi(val);
 	val = ezxml_get_val(pxml, "IMAGE", index, "WINDOWS", 0, "VERSION", 0, "SPBUILD", -1);
 	img_report.win_version.revision = (uint16_t)safe_atoi(val);
-	// Adjust versions so that we produce a more accurate report in the log
-	// (and yeah, I know we won't properly report Server, but I don't care)
-	if (img_report.win_version.major <= 5) {
-		// Don't want to support XP or earlier
-		img_report.win_version.major = 0;
-		img_report.win_version.minor = 0;
-	} else if (img_report.win_version.major == 6) {
-		// Don't want to support Vista
-		if (img_report.win_version.minor == 0) {
-			img_report.win_version.major = 0;
-		} else if (img_report.win_version.minor == 1) {
-			img_report.win_version.major = 7;
-			img_report.win_version.minor = 0;
-		} else if (img_report.win_version.minor == 2) {
-			img_report.win_version.major = 8;
-			img_report.win_version.minor = 0;
-		} else if (img_report.win_version.minor == 3) {
-			img_report.win_version.major = 8;
-			img_report.win_version.minor = 1;
-		} else if (img_report.win_version.minor == 4) {
-			img_report.win_version.major = 10;
-			img_report.win_version.minor = 0;
-		}
-	} else if (img_report.win_version.major == 10) {
-		if (img_report.win_version.build > 20000)
-			img_report.win_version.major = 11;
-	}
+	NormalizeWindowsVersion(&img_report.win_version);
 	ezxml_free(pxml);
 }
 

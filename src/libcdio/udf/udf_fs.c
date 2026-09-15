@@ -48,6 +48,7 @@
 #endif
 
 #include <cdio/util.h>
+#include <limits.h>
 
 #ifdef HAVE_STDIO_H
 #include <stdio.h>
@@ -285,17 +286,14 @@ udf_fopen(udf_dirent_t *p_udf_root, const char *psz_name)
 static char*
 unicode16_decode(const uint8_t *data, unsigned int u_len)
 {
-  int i;
   char* r = NULL;
 
+  if (u_len == 0)
+    return (char*)calloc(1, 1);
   switch (data[0])
   {
   case 8:
-    r = (char*)calloc(u_len, 1);
-    if (r == NULL)
-      return r;
-    for (i=0; i<u_len-1; i++)
-      r[i] = data[i+1];
+    cdio_charset_to_utf8((char*)&data[1], u_len-1, &r, "ISO-8859-1");
     return r;
   case 16:
     cdio_charset_to_utf8((char*)&data[1], u_len-1, &r, "UCS-2BE");
@@ -317,6 +315,10 @@ udf_new_dirent(udf_file_entry_t *p_udf_fe, udf_t *p_udf,
   if (!p_udf_dirent) return NULL;
 
   p_udf_dirent->psz_name     = strdup(psz_name);
+  if (!p_udf_dirent->psz_name) {
+    free(p_udf_dirent);
+    return NULL;
+  }
   p_udf_dirent->b_dir        = b_dir;
   p_udf_dirent->b_parent     = b_parent;
   p_udf_dirent->p_udf        = p_udf;
@@ -342,7 +344,8 @@ udf_read_sectors (const udf_t *p_udf, void *ptr, lsn_t i_start,
   long i_read;
   off_t i_byte_offset;
 
-  if (!p_udf) return 0;
+  if (!p_udf || !ptr || i_blocks <= 0 || i_blocks > LONG_MAX / UDF_BLOCKSIZE)
+    return DRIVER_OP_BAD_PARAMETER;
   /* Without the cast, i_start * UDF_BLOCKSIZE may be evaluated as 32 bit */
   i_byte_offset = ((off_t)i_start) * UDF_BLOCKSIZE;
   /* Since we're using SEEK_SET, the value must be positive */
@@ -356,7 +359,7 @@ udf_read_sectors (const udf_t *p_udf, void *ptr, lsn_t i_start,
     ret = cdio_stream_seek (p_udf->stream, i_byte_offset, SEEK_SET);
     if (DRIVER_OP_SUCCESS != ret) return ret;
     i_read = cdio_stream_read (p_udf->stream, ptr, UDF_BLOCKSIZE, i_blocks);
-    if (i_read) return DRIVER_OP_SUCCESS;
+    if (i_read == i_blocks * UDF_BLOCKSIZE) return DRIVER_OP_SUCCESS;
     return DRIVER_OP_ERROR;
   } else {
     return cdio_read_data_sectors(p_udf->cdio, ptr, i_start, UDF_BLOCKSIZE,
@@ -671,7 +674,7 @@ udf_opendir(const udf_dirent_t *p_udf_dirent)
 
     driver_return_code_t i_ret =
       udf_read_sectors(p_udf, &udf_fe, p_udf->i_part_start
-		       + p_udf_dirent->fid->icb.loc.lba, 1);
+		       + uint32_from_le(p_udf_dirent->fid->icb.loc.lba), 1);
 
     if (DRIVER_OP_SUCCESS == i_ret
 	&& !udf_checktag(&udf_fe.tag, TAGID_FILE_ENTRY)) {
@@ -705,7 +708,7 @@ udf_readdir(udf_dirent_t *p_udf_dirent)
     /* advance to next File Identifier Descriptor */
     /* FIXME: need to advance file entry (fe) as well.  */
     uint32_t ofs = 4 *
-      ((sizeof(*(p_udf_dirent->fid)) + p_udf_dirent->fid->u.i_imp_use
+      ((sizeof(*(p_udf_dirent->fid)) + uint16_from_le(p_udf_dirent->fid->u.i_imp_use)
 	+ p_udf_dirent->fid->i_file_id + 3) / 4);
 
     p_udf_dirent->fid =
@@ -713,28 +716,38 @@ udf_readdir(udf_dirent_t *p_udf_dirent)
   }
 
   if (!p_udf_dirent->fid) {
-    uint32_t i_sectors =
-      (p_udf_dirent->i_loc_end - p_udf_dirent->i_loc + 1);
-    uint32_t size = UDF_BLOCKSIZE * i_sectors;
+    uint64_t i_sectors, size;
     driver_return_code_t i_ret;
 
+    if (p_udf_dirent->i_loc_end < p_udf_dirent->i_loc)
+      goto error;
+    i_sectors = (uint64_t)p_udf_dirent->i_loc_end - p_udf_dirent->i_loc + 1;
+    size = UDF_BLOCKSIZE * i_sectors;
+    if (size > SIZE_MAX || size > LONG_MAX || p_udf_dirent->dir_left > size)
+      goto error;
     if (!p_udf_dirent->sector)
-      p_udf_dirent->sector = (uint8_t*) malloc(size);
+      p_udf_dirent->sector = (uint8_t*) malloc((size_t)size);
+    if (!p_udf_dirent->sector)
+      goto error;
     i_ret = udf_read_sectors(p_udf, p_udf_dirent->sector,
 			     p_udf_dirent->i_part_start+p_udf_dirent->i_loc,
-			     i_sectors);
+			     (long)i_sectors);
     if (DRIVER_OP_SUCCESS == i_ret)
       p_udf_dirent->fid = (udf_fileid_desc_t *) p_udf_dirent->sector;
     else
       p_udf_dirent->fid = NULL;
   }
 
+  if (p_udf_dirent->dir_left < sizeof(*p_udf_dirent->fid))
+    goto error;
   if (p_udf_dirent->fid && !udf_checktag(&(p_udf_dirent->fid->tag), TAGID_FID))
     {
       uint32_t ofs =
-	4 * ((sizeof(*p_udf_dirent->fid) + p_udf_dirent->fid->u.i_imp_use
+	4 * ((sizeof(*p_udf_dirent->fid) + uint16_from_le(p_udf_dirent->fid->u.i_imp_use)
 	      + p_udf_dirent->fid->i_file_id + 3) / 4);
 
+      if (ofs > p_udf_dirent->dir_left)
+        goto error;
       p_udf_dirent->dir_left -= ofs;
       p_udf_dirent->b_dir =
 	(p_udf_dirent->fid->file_characteristics & UDF_FILE_DIRECTORY) != 0;
@@ -751,12 +764,15 @@ udf_readdir(udf_dirent_t *p_udf_dirent)
 	}
 
        free_and_null(p_udf_dirent->psz_name);
-       p = (uint8_t*)p_udf_dirent->fid->u.imp_use.data + p_udf_dirent->fid->u.i_imp_use;
+       p = (uint8_t*)p_udf_dirent->fid->u.imp_use.data + uint16_from_le(p_udf_dirent->fid->u.i_imp_use);
        // coverity[tainted_data]
        p_udf_dirent->psz_name = unicode16_decode(p, u_len);
+       if (!p_udf_dirent->psz_name)
+         goto error;
       }
       return p_udf_dirent;
     }
+error:
   udf_dirent_free(p_udf_dirent);
   return NULL;
 }
@@ -788,7 +804,7 @@ udf_setpos(udf_dirent_t* p_udf_dirent, off_t offset)
 {
     if (!p_udf_dirent)
 	return false;
-    if (offset % UDF_BLOCKSIZE || offset < 0 || offset > uint64_from_le(p_udf_dirent->fe.info_len))
+    if (offset % UDF_BLOCKSIZE || offset < 0 || (uint64_t)offset > uint64_from_le(p_udf_dirent->fe.info_len))
 	return false;
     p_udf_dirent->p_udf->i_position = offset;
     return true;

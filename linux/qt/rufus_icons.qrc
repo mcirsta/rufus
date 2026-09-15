@@ -1,0 +1,24 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<RCC>
+ <qresource prefix="/rufus">
+  <file alias="rufus.ico">../../res/rufus.ico</file>
+  <file alias="lang-16.png">../../res/icons/lang-16.png</file>
+  <file alias="lang-24.png">../../res/icons/lang-24.png</file>
+  <file alias="lang-32.png">../../res/icons/lang-32.png</file>
+  <file alias="info-16.png">../../res/icons/info-16.png</file>
+  <file alias="info-24.png">../../res/icons/info-24.png</file>
+  <file alias="info-32.png">../../res/icons/info-32.png</file>
+  <file alias="settings-16.png">../../res/icons/settings-16.png</file>
+  <file alias="settings-24.png">../../res/icons/settings-24.png</file>
+  <file alias="settings-32.png">../../res/icons/settings-32.png</file>
+  <file alias="log-16.png">../../res/icons/log-16.png</file>
+  <file alias="log-24.png">../../res/icons/log-24.png</file>
+  <file alias="log-32.png">../../res/icons/log-32.png</file>
+  <file alias="save-16.png">../../res/icons/save-16.png</file>
+  <file alias="save-24.png">../../res/icons/save-24.png</file>
+  <file alias="save-32.png">../../res/icons/save-32.png</file>
+  <file alias="hash-16.png">../../res/icons/hash-16.png</file>
+  <file alias="hash-24.png">../../res/icons/hash-24.png</file>
+  <file alias="hash-32.png">../../res/icons/hash-32.png</file>
+ </qresource>
+</RCC>

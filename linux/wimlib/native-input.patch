@@ -1,0 +1,164 @@
+--- a/wim.c
++++ b/wim.c
+@@ -29,6 +29,7 @@
+ #include <sys/stat.h>
+ #include <unistd.h>
+ 
++#include "native_input.h"
+ #include "wimlib.h"
+ #include "wimlib/assert.h"
+ #include "wimlib/blob_table.h"
+@@ -640,7 +641,11 @@
+ 	int ret;
+ 	const tchar *wimfile;
+ 
+-	if (open_flags & WIMLIB_OPEN_FLAG_FROM_PIPE) {
++	if (open_flags & RUFUS_WIM_OPEN_FROM_READER) {
++		wimfile = T("ISO/UDF reader");
++		wim->in_fd.iso_reader = (struct iso_file_reader*)wim_filename_or_fd;
++		wim->file_size = WimReaderSize(wim->in_fd.iso_reader);
++	} else if (open_flags & WIMLIB_OPEN_FLAG_FROM_PIPE) {
+ 		wimfile = NULL;
+ 		filedes_init(&wim->in_fd, *(const int*)wim_filename_or_fd);
+ 		wim->in_fd.is_pipe = 1;
+@@ -873,6 +878,8 @@
+ int
+ can_modify_wim(WIMStruct *wim)
+ {
++	if (wim->in_fd.iso_reader)
++		return WIMLIB_ERR_WIM_IS_READONLY;
+ 	if (wim->filename) {
+ 		if (taccess(wim->filename, W_OK)) {
+ 			ERROR_WITH_ERRNO("Can't modify \"%"TS"\"", wim->filename);
+--- a/file_io.c
++++ b/file_io.c
+@@ -26,6 +26,7 @@
+ #include <errno.h>
+ #include <unistd.h>
+ 
++#include "native_input.h"
+ #include "wimlib/error.h"
+ #include "wimlib/file_io.h"
+ #include "wimlib/util.h"
+@@ -50,6 +51,12 @@
+ int
+ full_read(struct filedes *fd, void *buf, size_t count)
+ {
++	if (fd->iso_reader) {
++		int ret = WimReaderRead(fd, buf, count, fd->offset);
++		if (ret == 0)
++			fd->offset += count;
++		return ret;
++	}
+ 	while (count) {
+ 		ssize_t ret = read(fd->fd, buf, count);
+ 		if (unlikely(ret <= 0)) {
+@@ -113,6 +120,8 @@
+ int
+ full_pread(struct filedes *fd, void *buf, size_t count, off_t offset)
+ {
++	if (fd->iso_reader)
++		return WimReaderRead(fd, buf, count, offset);
+ 	if (fd->is_pipe)
+ 		goto is_pipe;
+ 
+@@ -152,6 +161,10 @@
+ int
+ full_write(struct filedes *fd, const void *buf, size_t count)
+ {
++	if (fd->iso_reader) {
++		errno = EROFS;
++		return WIMLIB_ERR_WIM_IS_READONLY;
++	}
+ 	while (count) {
+ 		ssize_t ret = write(fd->fd, buf, count);
+ 		if (unlikely(ret < 0)) {
+@@ -178,6 +191,10 @@
+ int
+ full_pwrite(struct filedes *fd, const void *buf, size_t count, off_t offset)
+ {
++	if (fd->iso_reader) {
++		errno = EROFS;
++		return WIMLIB_ERR_WIM_IS_READONLY;
++	}
+ 	while (count) {
+ 		ssize_t ret = pwrite(fd->fd, buf, count, offset);
+ 		if (unlikely(ret < 0)) {
+@@ -194,6 +211,8 @@
+ 
+ off_t filedes_seek(struct filedes *fd, off_t offset)
+ {
++	if (fd->iso_reader)
++		return WimReaderSeek(fd, offset);
+ 	if (fd->is_pipe) {
+ 		errno = ESPIPE;
+ 		return -1;
+@@ -208,5 +227,7 @@
+ 
+ bool filedes_is_seekable(struct filedes *fd)
+ {
++	if (fd->iso_reader)
++		return true;
+ 	return !fd->is_pipe && lseek(fd->fd, 0, SEEK_CUR) != -1;
+ }
+--- a/header.c
++++ b/header.c
+@@ -30,6 +30,7 @@
+ #include <string.h>
+ #include <unistd.h>
+ 
++#include "native_input.h"
+ #include "wimlib.h"
+ #include "wimlib/alloca.h"
+ #include "wimlib/assert.h"
+@@ -90,9 +91,14 @@
+ 			 * actually reading from a pipe.  */
+ 			if (!in_fd->is_pipe) {
+ 				ret = WIMLIB_ERR_READ;
+-				if (-1 == lseek(in_fd->fd, -WIM_HEADER_DISK_SIZE, SEEK_END))
+-					goto read_error;
+-				ret = full_read(in_fd, &disk_hdr, sizeof(disk_hdr));
++				if (in_fd->iso_reader) {
++					ret = full_pread(in_fd, &disk_hdr, sizeof(disk_hdr),
++						wim->file_size - WIM_HEADER_DISK_SIZE);
++				} else {
++					if (-1 == lseek(in_fd->fd, -WIM_HEADER_DISK_SIZE, SEEK_END))
++						goto read_error;
++					ret = full_read(in_fd, &disk_hdr, sizeof(disk_hdr));
++				}
+ 				if (ret)
+ 					goto read_error;
+ 			}
+--- a/xml.c
++++ b/xml.c
+@@ -1095,7 +1095,7 @@
+ {
+ 	const struct wim_reshdr *xml_reshdr;
+ 
+-	if (wim->filename == NULL && filedes_is_seekable(&wim->in_fd))
++	if (wim->filename == NULL && !wim->in_fd.iso_reader && filedes_is_seekable(&wim->in_fd))
+ 		return WIMLIB_ERR_NO_FILENAME;
+ 
+ 	if (buf_ret == NULL || bufsize_ret == NULL)
+--- a/wimlib/file_io.h
++++ b/wimlib/file_io.h
+@@ -8,7 +8,11 @@
+ /* Wrapper around a file descriptor that keeps track of offset (including in
+  * pipes, which don't support lseek()) and a cached flag that tells whether the
+  * file descriptor is a pipe or not.  */
++struct iso_file_reader;
++
+ struct filedes {
++	/* Borrowed by the read-only Rufus input extension. */
++	struct iso_file_reader* iso_reader;
+ 	int fd;
+ 	unsigned int is_pipe : 1;
+ 	off_t offset;
+@@ -38,6 +42,7 @@
+ 
+ static inline void filedes_init(struct filedes *fd, int raw_fd)
+ {
++	fd->iso_reader = NULL;
+ 	fd->fd = raw_fd;
+ 	fd->offset = 0;
+ 	fd->is_pipe = 0;

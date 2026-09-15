@@ -15,8 +15,8 @@ AM_V_WINDRES   = $(AM_V_WINDRES_$(V))
 %_rc.o: %.rc ../res/loc/embedded.loc
 	$(AM_V_WINDRES) $(AM_RCFLAGS) -i $< -o $@
 
-rufus_SOURCES = badblocks.c darkmode.c dev.c dos.c dos_locale.c drive.c format.c format_ext.c format_fat32.c hash.c icon.c iso.c localization.c \
-	 net.c parser.c pki.c process.c cregex_compile.c cregex_parse.c cregex_vm.c rufus.c smart.c stdfn.c stdio.c stdlg.c syslinux.c ui.c vhd.c wue.c xml.c
+rufus_SOURCES = badblocks.c darkmode.c dev.c dos.c dos_locale.c drive.c format.c format_ext.c format_fat32.c hash.c icon.c image_file.c image_file.h image_policy.c image_policy.h partition_layout.c partition_layout.h image_report.h iso.c iso_analyze.c iso_analyze.h iso_bootloaders.c iso_bootloaders.h embedded_efi.c embedded_efi.h iso_file.c iso_file.h winpe_scan.c winpe_scan.h wim_metadata.c wim_metadata.h pe_arch.c pe_arch.h iso_read.c iso_read.h iso_scan.c iso_scan.h localization.c \
+	 net.c parser.c pki.c process.c cregex_compile.c cregex_parse.c cregex_vm.c rufus.c smart.c stdfn.c strarray.c strarray.h stdio.c stdlg.c syslinux.c syslinux_version.c syslinux_version.h grub_inspect.c grub_inspect.h efi_boot_info.c efi_boot_info.h syslinux_scan.c syslinux_scan.h ui.c vhd.c wue.c xml.c
 rufus_CFLAGS = -I$(srcdir)/ms-sys/inc -I$(srcdir)/syslinux/libfat -I$(srcdir)/syslinux/libinstaller -I$(srcdir)/syslinux/win -I$(srcdir)/libcdio -I$(srcdir)/wimlib -I$(srcdir)/../res $(AM_CFLAGS) \
 	-DEXT2_FLAT_INCLUDES=0 -D_RUFUS -DSOLUTION=rufus
 rufus_LDFLAGS = $(AM_LDFLAGS) -mwindows -L../.mingw

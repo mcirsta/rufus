@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+find_program(RUFUS_MKISOFS NAMES genisoimage mkisofs REQUIRED)
+add_executable(standalone_wim_probe tests/standalone_wim_probe.c)
+target_compile_definitions(standalone_wim_probe PRIVATE _GNU_SOURCE _FILE_OFFSET_BITS=64)
+target_compile_options(standalone_wim_probe PRIVATE -Wall -Wextra)
+target_link_options(standalone_wim_probe PRIVATE -Wl,--wrap=wimlib_open_wim)
+target_link_libraries(standalone_wim_probe PRIVATE rufus_image_source rufus_wim_file rufus_wim_read_file)
+add_test(NAME rufus_standalone_wim COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_standalone_wim.py"
+    "$<TARGET_FILE:standalone_wim_probe>" "$<TARGET_FILE:wim_fixture>"
+    "$<TARGET_FILE:wim_capture_fixture>" --mkisofs "${RUFUS_MKISOFS}")
+set_tests_properties(rufus_standalone_wim PROPERTIES LABELS "functional;image;no-hardware" TIMEOUT 60)
+add_executable(wim_capture_fixture tests/wim_capture_fixture.c)
+target_link_libraries(wim_capture_fixture PRIVATE rufus_wimlib)
+add_executable(wim_extract_probe tests/wim_extract_probe.c)
+target_compile_options(wim_extract_probe PRIVATE -Wall -Wextra)
+target_link_libraries(wim_extract_probe PRIVATE rufus_wim_read_file)
+target_link_options(wim_extract_probe PRIVATE -Wl,--wrap=iso9660_iso_seek_read
+    -Wl,--wrap=udf_read_block -Wl,--wrap=mkdtemp -Wl,--wrap=read -Wl,--wrap=malloc
+    -Wl,--wrap=wimlib_extract_paths -Wl,--wrap=wimlib_register_progress_function)
+add_test(NAME rufus_wim_extract_images COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_wim_extract.py"
+    "$<TARGET_FILE:wim_extract_probe>" "$<TARGET_FILE:wim_capture_fixture>" --mkisofs "${RUFUS_MKISOFS}")
+set_tests_properties(rufus_wim_extract_images PROPERTIES LABELS "functional;image;no-hardware" TIMEOUT 120)
+add_executable(wim_metadata_upstream tests/wim_metadata_probe.c)
+target_link_libraries(wim_metadata_upstream PRIVATE rufus_wim_file)
+add_executable(wim_reader_probe tests/wim_reader_probe.c)
+target_compile_options(wim_reader_probe PRIVATE -Wall -Wextra)
+target_link_libraries(wim_reader_probe PRIVATE rufus_wim_metadata)
+target_link_options(wim_reader_probe PRIVATE -Wl,--wrap=iso9660_iso_seek_read -Wl,--wrap=udf_read_block)
+add_executable(test_wim_reader tests/test_wim_reader.c)
+target_compile_options(test_wim_reader PRIVATE -Wall -Wextra)
+target_link_libraries(test_wim_reader PRIVATE rufus_wimlib)
+target_link_options(test_wim_reader PRIVATE -Wl,--wrap=ReadIsoFileRange)
+add_test(NAME rufus_wim_reader_contract COMMAND test_wim_reader)
+set_tests_properties(rufus_wim_reader_contract PROPERTIES LABELS "component;image;no-hardware" TIMEOUT 10)
+add_executable(windows_image_probe tests/windows_image_probe.c)
+target_compile_options(windows_image_probe PRIVATE -Wall -Wextra)
+target_link_libraries(windows_image_probe PRIVATE rufus_windows_image)
+add_test(NAME rufus_windows_images COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_windows_images.py"
+    "$<TARGET_FILE:windows_image_probe>" "$<TARGET_FILE:wim_fixture>" --mkisofs "${RUFUS_MKISOFS}")
+set_tests_properties(rufus_windows_images PROPERTIES LABELS "functional;image;no-hardware" TIMEOUT 60)
+
+set(wim_comparator wim_metadata_upstream)
+set(wim_generator wim_fixture)
+if(RUFUS_COMPARE_SYSTEM_WIMLIB)
+    # Independent executables only: never mix header/provider versions.
+    find_path(WIMLIB_INCLUDE_DIR NAMES wimlib.h REQUIRED)
+    find_library(WIMLIB_LIBRARY NAMES wim REQUIRED)
+    add_library(native_wimlib UNKNOWN IMPORTED)
+    set_target_properties(native_wimlib PROPERTIES
+        IMPORTED_LOCATION "${WIMLIB_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${WIMLIB_INCLUDE_DIR}")
+    add_library(rufus_wim_file_system STATIC ../src/wim_metadata.c platform/wim_file.c)
+    target_compile_definitions(rufus_wim_file_system PRIVATE _GNU_SOURCE _FILE_OFFSET_BITS=64)
+    target_include_directories(rufus_wim_file_system PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(rufus_wim_file_system PUBLIC native_wimlib)
+    add_executable(wim_metadata_system tests/wim_metadata_probe.c)
+    target_link_libraries(wim_metadata_system PRIVATE rufus_wim_file_system)
+    add_executable(wim_fixture_system tests/wim_fixture.c)
+    target_link_libraries(wim_fixture_system PRIVATE rufus_wim_file_system)
+    add_executable(test_wim_metadata_system tests/test_wim_metadata.c)
+    target_link_libraries(test_wim_metadata_system PRIVATE rufus_wim_file_system)
+    add_test(NAME rufus_wim_metadata_system COMMAND test_wim_metadata_system)
+    set_tests_properties(rufus_wim_metadata_system PROPERTIES LABELS "comparison;image;no-hardware" TIMEOUT 30)
+    set(wim_comparator wim_metadata_system)
+    set(wim_generator wim_fixture_system)
+endif()
+add_test(NAME rufus_wim_reader_images COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_wim_reader.py"
+    "$<TARGET_FILE:wim_reader_probe>" "$<TARGET_FILE:${wim_comparator}>"
+    "$<TARGET_FILE:wim_metadata_upstream>" "$<TARGET_FILE:${wim_generator}>" --mkisofs "${RUFUS_MKISOFS}")
+set_tests_properties(rufus_wim_reader_images PROPERTIES LABELS "functional;image;no-hardware" TIMEOUT 120)

@@ -1,0 +1,15 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+export PATH=/usr/bin
+mount -t devtmpfs devtmpfs /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t tmpfs tmpfs /run
+modprobe virtio_pci
+modprobe virtio_blk
+modprobe ext4
+for i in {1..50}; do [ -b /dev/vda ] && break; sleep .1; done
+mount /dev/vda /newroot || exit 1
+# Package extraction runs unprivileged on the host. Assign ownership in the VM.
+chown -Rh 0:0 /newroot
+exec switch_root /newroot /usr/lib/systemd/systemd

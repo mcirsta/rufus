@@ -93,7 +93,8 @@ void *libfat_get_sector(struct libfat_filesystem *fs, libfat_sector_t n);
 
 /*
  * Search a FAT directory for a particular pre-mangled filename.
- * Copies the directory entry into direntry and returns 0 if found.
+ * Copies the directory entry into direntry; returns its starting cluster,
+ * 0 for an empty file/directory, -2 if absent, or -1 on error/cyclic chain.
  */
 int32_t libfat_searchdir(struct libfat_filesystem *fs, int32_t dirclust,
 			 const void *name, struct libfat_direntry *direntry);

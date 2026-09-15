@@ -1,0 +1,48 @@
+/* Upstream release with the Rufus reader extension; native Linux configuration. */
+#pragma once
+#define PACKAGE "wimlib"
+#define PACKAGE_NAME "wimlib"
+#define PACKAGE_STRING "wimlib 1.14.5 (Rufus reader extension)"
+#define PACKAGE_VERSION "1.14.5-rufus-reader"
+#define VERSION PACKAGE_VERSION
+#define STDC_HEADERS 1
+#define HAVE_PTHREAD 1
+#cmakedefine HAVE_ALLOCA_H 1
+#cmakedefine HAVE_BYTESWAP_H 1
+#cmakedefine HAVE_ENDIAN_H 1
+#cmakedefine HAVE_ERRNO_H 1
+#cmakedefine HAVE_GLOB_H 1
+#cmakedefine HAVE_INTTYPES_H 1
+#cmakedefine HAVE_STDARG_H 1
+#cmakedefine HAVE_STDDEF_H 1
+#cmakedefine HAVE_STDINT_H 1
+#cmakedefine HAVE_STDIO_H 1
+#cmakedefine HAVE_STDLIB_H 1
+#cmakedefine HAVE_STRINGS_H 1
+#cmakedefine HAVE_STRING_H 1
+#cmakedefine HAVE_SYS_FILE_H 1
+#cmakedefine HAVE_SYS_STAT_H 1
+#cmakedefine HAVE_SYS_SYSCALL_H 1
+#cmakedefine HAVE_SYS_TIMES_H 1
+#cmakedefine HAVE_SYS_TYPES_H 1
+#cmakedefine HAVE_SYS_XATTR_H 1
+#cmakedefine HAVE_TIME_H 1
+#cmakedefine HAVE_UNISTD_H 1
+#cmakedefine HAVE_UTIME_H 1
+#cmakedefine HAVE_FUTIMENS 1
+#cmakedefine HAVE_UTIMENSAT 1
+#cmakedefine HAVE_FLOCK 1
+#cmakedefine HAVE_MEMPCPY 1
+#cmakedefine HAVE_OPENAT 1
+#cmakedefine HAVE_FSTATAT 1
+#cmakedefine HAVE_READLINKAT 1
+#cmakedefine HAVE_FDOPENDIR 1
+#cmakedefine HAVE_POSIX_FALLOCATE 1
+#cmakedefine HAVE_LLISTXATTR 1
+#cmakedefine HAVE_LGETXATTR 1
+#cmakedefine HAVE_FSETXATTR 1
+#cmakedefine HAVE_LSETXATTR 1
+#cmakedefine HAVE_STAT_NANOSECOND_PRECISION 1
+#cmakedefine WORDS_BIGENDIAN 1
+/* WITH_LIBCDIO's filename transport is replaced by explicit borrowed readers.
+ * FUSE, NTFS-3G and Win32 backends are not enabled in this build. */

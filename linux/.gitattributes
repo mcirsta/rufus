@@ -1,0 +1,2 @@
+# Keep Linux sources and CMakeLists.txt in LF, overriding upstream *.txt rules.
+* text=auto eol=lf

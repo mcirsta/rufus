@@ -1,0 +1,47 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#pragma once
+#define LIBCDIO_CONFIG_H 1
+#define EMPTY_ARRAY_SIZE
+#define STDC_HEADERS 1
+#cmakedefine HAVE_ERRNO_H 1
+#cmakedefine HAVE_FCNTL_H 1
+#cmakedefine HAVE_INTTYPES_H 1
+#cmakedefine HAVE_LIMITS_H 1
+#cmakedefine HAVE_MEMORY_H 1
+#cmakedefine HAVE_STDARG_H 1
+#cmakedefine HAVE_STDBOOL_H 1
+#cmakedefine HAVE_STDINT_H 1
+#cmakedefine HAVE_STDIO_H 1
+#cmakedefine HAVE_STDLIB_H 1
+#cmakedefine HAVE_STRINGS_H 1
+#cmakedefine HAVE_STRING_H 1
+#cmakedefine HAVE_SYS_STAT_H 1
+#cmakedefine HAVE_SYS_TIME_H 1
+#cmakedefine HAVE_SYS_TYPES_H 1
+#cmakedefine HAVE_UNISTD_H 1
+#cmakedefine HAVE_FSEEKO 1
+#cmakedefine HAVE_FTRUNCATE 1
+#cmakedefine HAVE_ICONV 1
+#define ICONV_CONST @ICONV_CONST@
+#define HAVE_JOLIET 1
+#define HAVE_ROCK 1
+#cmakedefine HAVE_MEMCPY 1
+#cmakedefine HAVE_MEMSET 1
+#cmakedefine HAVE_STRDUP 1
+#cmakedefine HAVE_STRNDUP 1
+#cmakedefine HAVE_SNPRINTF 1
+#cmakedefine HAVE_VSNPRINTF 1
+#cmakedefine HAVE_S_ISLNK 1
+#cmakedefine HAVE_S_ISSOCK 1
+#cmakedefine HAVE_GMTIME_R 1
+#cmakedefine HAVE_LOCALTIME_R 1
+#cmakedefine HAVE_TIMEGM 1
+#cmakedefine HAVE_SETENV 1
+#cmakedefine HAVE_UNSETENV 1
+#cmakedefine HAVE_STRUCT_TIMESPEC 1
+#cmakedefine HAVE_TM_GMTOFF 1
+#cmakedefine HAVE_STRUCT_TM_TM_ZONE 1
+#cmakedefine HAVE_TIMEZONE_VAR 1
+#cmakedefine HAVE_TZSET 1
+
+#cmakedefine WORDS_BIGENDIAN 1

@@ -42,6 +42,7 @@
 
 #include "file.h"
 #include "drive.h"
+#include "partition_layout.h"
 #include "mbr_types.h"
 #include "gpt_types.h"
 #include "br.h"
@@ -2312,23 +2313,11 @@ BOOL CreatePartition(HANDLE hDrive, int partition_style, int file_system, BOOL m
 	memset(SelectedDrive.Partition, 0, sizeof(SelectedDrive.Partition));
 
 	// Compute the starting offset of the first partition
-	if ((partition_style == PARTITION_STYLE_GPT) || (!IsChecked(IDC_OLD_BIOS_FIXES))) {
-		// Go with the MS 1 MB wastage at the beginning...
-		SelectedDrive.Partition[pi].Offset = 1 * MB;
-	} else {
-		// Some folks appear to think that 'Fixes for old BIOSes' is some kind of magic
-		// wand and are adamant to try to apply them when creating *MODERN* VHD drives.
-		// This, however, wrecks havok on MS' internal format calls because, as opposed
-		// to what is the case for regular drives, VHDs require each cluster block to
-		// be aligned to the cluster size, and that may not be the case with the stupid
-		// CHS sizes that IBM imparted upon us. Long story short, we now align to a
-		// cylinder size that is itself aligned to the cluster size.
-		// If this actually breaks old systems, please send your complaints to IBM.
-		SelectedDrive.Partition[pi].Offset = CEILING_ALIGN(bytes_per_track, ClusterSize);
-		// GRUB2 no longer fits in the usual 31½ KB that the above computation provides
-		// so just unconditionally double that size and get on with it.
-		SelectedDrive.Partition[pi].Offset *= 2;
-	}
+	SelectedDrive.Partition[pi].Offset = GetPartitionStartOffset(SelectedDrive.SectorSize,
+		SelectedDrive.SectorsPerTrack, (uint32_t)ClusterSize,
+		(partition_style != PARTITION_STYLE_GPT) && IsChecked(IDC_OLD_BIOS_FIXES));
+	if (SelectedDrive.Partition[pi].Offset == 0)
+		return FALSE;
 
 	// Having the ESP up front may help (and is the Microsoft recommended way) but this
 	// is only achievable if we can mount more than one partition at once, which means
@@ -2408,15 +2397,14 @@ BOOL CreatePartition(HANDLE hDrive, int partition_style, int file_system, BOOL m
 
 	// With the above, Compute the main partition size (which we align to a track)
 	assert(last_offset > SelectedDrive.Partition[mi].Offset);
-	SelectedDrive.Partition[mi].Size = FLOOR_ALIGN(last_offset - SelectedDrive.Partition[mi].Offset, bytes_per_track);
 	// Try to make sure that the main partition size is a multiple of the cluster size
 	// This can be especially important when trying to capture an NTFS partition as FFU, as, when
 	// the NTFS partition is aligned to cluster size, the FFU capture parses the NTFS allocated
 	// map to only record clusters that are in use, whereas, if not aligned, the FFU capture uses
 	// a full sector by sector scan of the NTFS partition and records any non-zero garbage, which
 	// may include garbage leftover data from a previous reformat...
-	if (ClusterSize % SelectedDrive.SectorSize == 0)
-		SelectedDrive.Partition[mi].Size = FLOOR_ALIGN(SelectedDrive.Partition[mi].Size, ClusterSize);
+	SelectedDrive.Partition[mi].Size = GetMainPartitionSize(SelectedDrive.Partition[mi].Offset,
+		last_offset, SelectedDrive.SectorSize, SelectedDrive.SectorsPerTrack, (uint32_t)ClusterSize);
 	if (SelectedDrive.Partition[mi].Size <= 0) {
 		uprintf("Error: Invalid %S size", SelectedDrive.Partition[mi].Name);
 		return FALSE;

@@ -39,32 +39,6 @@ static inline void write8(le8_t * _p, uint8_t _v)
     *_p = _v;
 }
 
-#if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
-
-/* Littleendian architectures which support unaligned memory accesses */
-
-static inline unsigned short read16(le16_t * _p)
-{
-    return *((const uint16_t *)_p);
-}
-
-static inline void write16(le16_t * _p, unsigned short _v)
-{
-    *((uint16_t *) _p) = _v;
-}
-
-static inline unsigned int read32(le32_t * _p)
-{
-    return *((const uint32_t *)_p);
-}
-
-static inline void write32(le32_t * _p, uint32_t _v)
-{
-    *((uint32_t *) _p) = _v;
-}
-
-#else
-
 /* Generic, mostly portable versions */
 
 static inline unsigned short read16(le16_t * _pp)
@@ -93,7 +67,7 @@ static inline unsigned int read32(le32_t * _pp)
     _v = _p[0];
     _v |= _p[1] << 8;
     _v |= _p[2] << 16;
-    _v |= _p[3] << 24;
+    _v |= (uint32_t)_p[3] << 24;
     return _v;
 }
 
@@ -106,7 +80,5 @@ static inline void write32(le32_t * _pp, uint32_t _v)
     _p[2] = (_v >> 16) & 0xFF;
     _p[3] = (_v >> 24) & 0xFF;
 }
-
-#endif
 
 #endif /* ULINT_H */
