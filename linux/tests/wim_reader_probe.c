@@ -12,6 +12,7 @@
 static bool active;
 static long reads, max_blocks, iso_reads;
 static long cancel_at = -1, fail_at = -1, short_at = -1;
+enum { MAX_FAULT_READ = 1000 };
 
 int IsIsoScanCancelled(void)
 {
@@ -70,7 +71,9 @@ static int SetFault(const char* mode, const char* value)
 
 	errno = 0;
 	number = strtol(value, &end, 10);
-	if (errno || *end || number < 0 || number > 1000)
+	bool parsed = errno == 0 && *end == 0;
+	bool valid_read = number >= 0 && number <= MAX_FAULT_READ;
+	if (!parsed || !valid_read)
 		return 64;
 	if (strcmp(mode, "cancel") == 0)
 		cancel_at = number;
@@ -94,7 +97,9 @@ int main(int argc, char** argv)
 	uint8_t signature[8];
 	int result = ISO_SCAN_ERROR, error = 0, flags = 0;
 
-	if ((argc != 4 && argc != 5 && argc != 6) || stat(argv[1], &info) != 0 || !S_ISREG(info.st_mode))
+	if (argc < 4 || argc > 6)
+		return 64;
+	if (stat(argv[1], &info) != 0 || !S_ISREG(info.st_mode))
 		return 64;
 	if (argc == 5)
 	{
@@ -136,8 +141,8 @@ int main(int argc, char** argv)
 	wim = NULL;
 	active = false;
 	// The borrow survives both successful and failed wimlib opens.
-	if (reader.size >= sizeof(signature) && fail_at < 0 && short_at < 0 &&
-		ReadIsoFileRange(&reader, 0, signature, sizeof(signature)) != ISO_SCAN_OK)
+	bool can_check_borrow = reader.size >= sizeof(signature) && fail_at < 0 && short_at < 0;
+	if (can_check_borrow && ReadIsoFileRange(&reader, 0, signature, sizeof(signature)) != ISO_SCAN_OK)
 		result = 66;
 out:
 	active = false;

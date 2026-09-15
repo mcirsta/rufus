@@ -25,10 +25,15 @@
 #include <memory>
 #include <stdexcept>
 
+static constexpr int workerTimeoutMs = 5000;
+static constexpr int analysisTimeoutMs = 3000;
+static constexpr int uiTimeoutMs = 1000;
+
 namespace
 {
 
 enum Gate { None, BeforeScan, AfterScan, Throw, BeforeWim, AfterWim };
+enum ImageChange { ChangeSize, RemoveFile, ChangeTimestamp, ChangeMarker };
 std::atomic<int> nextGate{None};
 std::atomic<int> wimGate{None};
 std::atomic<int> scanCalls{0};
@@ -39,7 +44,7 @@ QSemaphore releaseScan;
 void waitForTest()
 {
     entered.release();
-    if (!releaseScan.tryAcquire(1, 5000))
+    if (!releaseScan.tryAcquire(1, workerTimeoutMs))
         throw std::runtime_error("test scan release timed out");
 }
 
@@ -146,7 +151,7 @@ private:
                 QStringLiteral("--options"), QStringLiteral("iso9660:volume-id=") + name,
                 QStringLiteral("-cf"), image, QStringLiteral("-C"), tree, QStringLiteral(".")});
         }
-        if (!process.waitForFinished(5000) || process.exitStatus() != QProcess::NormalExit
+        if (!process.waitForFinished(workerTimeoutMs) || process.exitStatus() != QProcess::NormalExit
             || process.exitCode() != 0)
             return {};
         return image;
@@ -162,7 +167,7 @@ private:
     {
         QProcess process;
         process.start(program, arguments);
-        return process.waitForFinished(5000) && process.exitStatus() == QProcess::NormalExit
+        return process.waitForFinished(workerTimeoutMs) && process.exitStatus() == QProcess::NormalExit
             && process.exitCode() == 0;
     }
 
@@ -267,10 +272,10 @@ private slots:
         picker->selectFile(image);
         QDialogButtonBox* buttons = picker->findChild<QDialogButtonBox*>();
         QVERIFY(buttons && buttons->button(QDialogButtonBox::Open));
-        QTRY_VERIFY_WITH_TIMEOUT(buttons->button(QDialogButtonBox::Open)->isEnabled(), 1000);
+        QTRY_VERIFY_WITH_TIMEOUT(buttons->button(QDialogButtonBox::Open)->isEnabled(), uiTimeoutMs);
         QTest::mouseClick(buttons->button(QDialogButtonBox::Open), Qt::LeftButton);
-        QTRY_COMPARE_WITH_TIMEOUT(controller_->selection().imageState, rufus::ImageState::Complete, 3000);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(controller_->selection().imageState, rufus::ImageState::Complete, analysisTimeoutMs);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         const ISO_ANALYSIS& analysis = controller_->selection().imageAnalysis;
         QCOMPARE(analysis.files, uint64_t(2));
         QVERIFY(analysis.tree_complete);
@@ -298,7 +303,7 @@ private slots:
             {QStringLiteral("EFI/BOOT/bootx64.efi"), QByteArray(512, '\0')}});
         QVERIFY(!image.isEmpty());
         controller_->selectImage(image);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Partial);
         QCOMPARE(controller_->selection().imageAnalysis.pending, uint32_t(ISO_PENDING_SECURE_BOOT));
         QCOMPARE(volume_->text(), QStringLiteral("EFI_PREVIEW"));
@@ -344,7 +349,7 @@ private slots:
         }
         controller_->selectImage(image);
         QCOMPARE(controller_->isoWriteChoices(0, false, true).count, 0);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         const auto& selection = controller_->selection();
         QCOMPARE(selection.imageState, rufus::ImageState::Complete);
         QCOMPARE(selection.imageAnalysis.report.is_bootable_img, int8_t(marker ? 1 : 0));
@@ -392,7 +397,7 @@ private slots:
         QCOMPARE(file.write(data), qint64(data.size()));
         file.close();
         controller_->selectImage(image);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Failed);
         QCOMPARE(controller_->selection().imageAnalysis.report.is_bootable_img, int8_t(0));
         QCOMPARE(controller_->isoWriteChoices(0, false, true).count, 0);
@@ -427,7 +432,7 @@ private slots:
             {QStringLiteral("Sources/Install.wim"), wim}}, udf);
         QVERIFY(!image.isEmpty());
         controller_->selectImage(image);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), workerTimeoutMs);
         const rufus::Selection& selection = controller_->selection();
         QCOMPARE(selection.imageState, known ? rufus::ImageState::Complete : rufus::ImageState::Partial);
         QCOMPARE(selection.windowsAnalysis.state,
@@ -463,7 +468,7 @@ private slots:
         const QString next = makeImage(QStringLiteral("AFTER_WINDOWS"), {}, udf);
         QVERIFY(!next.isEmpty());
         controller_->selectImage(next);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().windowsAnalysis.state, WINDOWS_IMAGE_UNCHECKED);
         QCOMPARE(controller_->selection().imageAnalysis.report.wininst_version, uint32_t(0));
         QCOMPARE(controller_->selection().imageAnalysis.report.win_version.major, uint16_t(0));
@@ -490,7 +495,7 @@ private slots:
         QVERIFY(!image.isEmpty() && !next.isEmpty());
         wimGate = gate;
         controller_->selectImage(image);
-        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, analysisTimeoutMs);
         QCOMPARE(close_->text(), QStringLiteral("CANCEL"));
         if (replace)
             controller_->selectImage(next);
@@ -498,7 +503,7 @@ private slots:
             QTest::mouseClick(close_, Qt::LeftButton);
         messages_.clear();
         releaseScan.release();
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), workerTimeoutMs);
         QCOMPARE(controller_->selection().imageState,
             replace ? rufus::ImageState::Complete : rufus::ImageState::Cancelled);
         QCOMPARE(controller_->selection().windowsAnalysis.state, WINDOWS_IMAGE_UNCHECKED);
@@ -506,7 +511,7 @@ private slots:
         QVERIFY(!messages_.join(QLatin1Char('\n')).contains(QStringLiteral("Windows version: 11")));
         QVERIFY(!start_->isEnabled());
         controller_->selectImage(image);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), workerTimeoutMs);
         QCOMPARE(controller_->selection().windowsAnalysis.state, WINDOWS_IMAGE_KNOWN);
     }
 
@@ -526,7 +531,7 @@ private slots:
             {QStringLiteral("I386/TXTSETUP.SIF"), QByteArray("OsLoadOptions=\"/MININT /fastdetect\"\r\n")}}, udf);
         QVERIFY(!image.isEmpty());
         controller_->selectImage(image);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Complete);
         QVERIFY(controller_->selection().imageAnalysis.report.winpe_options_known);
         QVERIFY(controller_->selection().imageAnalysis.report.uses_minint);
@@ -541,7 +546,7 @@ private slots:
             {QStringLiteral("i386/txtsetup.sif"), QByteArray()}}, udf);
         QVERIFY(!unreadable.isEmpty());
         controller_->selectImage(unreadable);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Partial);
         QCOMPARE(controller_->selection().imageAnalysis.pending, uint32_t(ISO_PENDING_WINDOWS));
         QVERIFY(!controller_->selection().imageAnalysis.report.winpe_options_known);
@@ -550,10 +555,10 @@ private slots:
 
         nextGate = AfterScan;
         controller_->selectImage(image);
-        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, analysisTimeoutMs);
         QTest::mouseClick(close_, Qt::LeftButton);
         releaseScan.release();
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Cancelled);
         QVERIFY(!controller_->selection().imageAnalysis.report.uses_minint);
         QVERIFY(volume_->text().isEmpty() && !start_->isEnabled());
@@ -566,7 +571,7 @@ private slots:
             {QString::fromUtf8("ș-é/data"), QByteArray("unicode path")}}, true);
         QVERIFY(!image.isEmpty());
         controller_->selectImage(image);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Complete);
         const ISO_ANALYSIS& analysis = controller_->selection().imageAnalysis;
         QCOMPARE(analysis.filesystem, ISO_FILESYSTEM_UDF);
@@ -584,7 +589,7 @@ private slots:
             {QStringLiteral("sources/install.wim"), QByteArray(512, '\0')}}, true);
         QVERIFY(!windows.isEmpty());
         controller_->selectImage(windows);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Partial);
         QCOMPARE(controller_->selection().imageAnalysis.pending, uint32_t(ISO_PENDING_WINDOWS));
         QCOMPARE(progress_->format(), QStringLiteral("INCOMPLETE"));
@@ -608,7 +613,7 @@ private slots:
             {QStringLiteral("boot/efi.img"), fat}}, udf);
         QVERIFY(!image.isEmpty());
         controller_->selectImage(image);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         const ISO_ANALYSIS& analysis = controller_->selection().imageAnalysis;
         QCOMPARE(analysis.filesystem, udf ? ISO_FILESYSTEM_UDF : ISO_FILESYSTEM_ISO9660);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Partial);
@@ -626,7 +631,7 @@ private slots:
             {QStringLiteral("boot/efi.img"), emptyFat}}, udf);
         QVERIFY(!noLoader.isEmpty());
         controller_->selectImage(noLoader);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Complete);
         QCOMPARE(controller_->selection().imageAnalysis.report.has_efi, uint16_t(0));
         QCOMPARE(controller_->selection().imageAnalysis.pending, uint32_t(0));
@@ -637,17 +642,17 @@ private slots:
             {QStringLiteral("boot/efi.img"), QByteArray(512, '\0')}}, udf);
         QVERIFY(!unreadable.isEmpty());
         controller_->selectImage(unreadable);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageAnalysis.pending, uint32_t(ISO_PENDING_EMBEDDED_EFI));
         QCOMPARE(controller_->selection().imageAnalysis.report.has_efi, uint16_t(0));
         QVERIFY(controller_->imageStatusText().contains(QStringLiteral("embedded EFI image")));
 
         nextGate = AfterScan;
         controller_->selectImage(image);
-        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, analysisTimeoutMs);
         QTest::mouseClick(close_, Qt::LeftButton);
         releaseScan.release();
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Cancelled);
         QCOMPARE(controller_->selection().imageAnalysis.report.has_efi, uint16_t(0));
         QVERIFY(volume_->text().isEmpty() && !start_->isEnabled());
@@ -660,15 +665,15 @@ private slots:
         QVERIFY(!image.isEmpty());
         nextGate = AfterScan;
         controller_->selectImage(image);
-        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, analysisTimeoutMs);
         QTest::mouseClick(close_, Qt::LeftButton);
         releaseScan.release();
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Cancelled);
         QCOMPARE(controller_->selection().imageAnalysis.filesystem, ISO_FILESYSTEM_NONE);
         QVERIFY(volume_->text().isEmpty() && !start_->isEnabled());
         controller_->selectImage(image);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Complete);
         QCOMPARE(controller_->selection().imageAnalysis.filesystem, ISO_FILESYSTEM_UDF);
         QCOMPARE(scanCalls.load(), 2);
@@ -682,7 +687,7 @@ private slots:
             {QStringLiteral("ldlinux.c32"), QByteArray(512, '\0')}});
         QVERIFY(!image.isEmpty());
         controller_->selectImage(image);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Complete);
         const RUFUS_IMG_REPORT& report = controller_->selection().imageAnalysis.report;
         QCOMPARE(report.sl_detected_version, uint16_t(0));
@@ -697,7 +702,7 @@ private slots:
         QVERIFY(!image.isEmpty());
         nextGate = BeforeScan;
         controller_->selectImage(image);
-        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, analysisTimeoutMs);
         QCOMPARE(close_->text(), QStringLiteral("CANCEL"));
         QVERIFY(!select_->isEnabled() && !start_->isEnabled());
         QCOMPARE(progress_->maximum(), 0);
@@ -713,14 +718,14 @@ private slots:
         QVERIFY(window_->isVisible() && !close_->isEnabled());
         QVERIFY(volume_->text().isEmpty());
         releaseScan.release();
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Cancelled);
         QCOMPARE(progress_->format(), QStringLiteral("CANCELLED"));
         QVERIFY(select_->isEnabled() && close_->isEnabled());
         QVERIFY(controller_->selection().imageAnalysis.report.label[0] == 0);
         QCOMPARE(controller_->selection().imagePath, image);
         controller_->selectImage(image); // Restart gets a fresh interruption flag.
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Complete);
         QTest::mouseClick(logButton, Qt::LeftButton);
         QVERIFY(logWindow->isVisible());
@@ -737,13 +742,13 @@ private slots:
         QVERIFY(!first.isEmpty() && !skipped.isEmpty() && !latest.isEmpty());
         nextGate = AfterScan; // Old C result is already complete but not delivered.
         controller_->selectImage(first);
-        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, analysisTimeoutMs);
         controller_->selectImage(skipped);
         controller_->selectImage(latest);
         QVERIFY(volume_->text().isEmpty());
         messages_.clear();
         releaseScan.release();
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(scanCalls.load(), 2);
         QCOMPARE(controller_->selection().imagePath, latest);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Complete);
@@ -758,13 +763,13 @@ private slots:
         QVERIFY(!first.isEmpty());
         nextGate = AfterScan;
         controller_->selectImage(first);
-        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, analysisTimeoutMs);
         controller_->selectImage(directory_->filePath(QStringLiteral("missing.iso")));
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Failed);
         const QString problem = controller_->selection().imageProblem;
         messages_.clear();
         releaseScan.release();
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(scanCalls.load(), 1);
         QCOMPARE(controller_->selection().imageProblem, problem);
         QVERIFY(controller_->selection().imagePath.isEmpty());
@@ -781,12 +786,12 @@ private slots:
         controller_->selectImage(first);
         // Do not deliver GUI events: all reports, including a successful result,
         // must remain queued until after the next selection invalidates them.
-        QVERIFY(entered.tryAcquire(1, 3000));
+        QVERIFY(entered.tryAcquire(1, analysisTimeoutMs));
         releaseScan.release();
-        QVERIFY(scanThread.load()->wait(3000));
+        QVERIFY(scanThread.load()->wait(analysisTimeoutMs));
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Scanning);
         controller_->selectImage(latest);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Complete);
         QCOMPARE(volume_->text(), QStringLiteral("QUEUED_NEW"));
         QVERIFY(!messages_.contains(QStringLiteral("late scan output")));
@@ -799,10 +804,10 @@ private slots:
         QVERIFY(!image.isEmpty());
         nextGate = AfterScan;
         controller_->selectImage(image);
-        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, analysisTimeoutMs);
         QTest::keyClick(window_.get(), Qt::Key_Escape);
         releaseScan.release();
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Cancelled);
         QVERIFY(controller_->selection().imageAnalysis.report.label[0] == 0);
         QVERIFY(window_->isVisible());
@@ -815,11 +820,11 @@ private slots:
         QVERIFY(!image.isEmpty());
         nextGate = AfterScan;
         controller_->selectImage(image);
-        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, analysisTimeoutMs);
         controller_->selectImage(image);
         messages_.clear();
         releaseScan.release();
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(scanCalls.load(), 2);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Complete);
         QVERIFY(!messages_.contains(QStringLiteral("late scan output")));
@@ -828,10 +833,10 @@ private slots:
     void changedFileDoesNotPublishACompletedReport_data()
     {
         QTest::addColumn<int>("change");
-        QTest::newRow("size-changed") << 0;
-        QTest::newRow("removed") << 1;
-        QTest::newRow("same-size-timestamp-changed") << 2;
-        QTest::newRow("marker-changed-timestamp-restored") << 3;
+        QTest::newRow("size-changed") << int(ChangeSize);
+        QTest::newRow("removed") << int(RemoveFile);
+        QTest::newRow("same-size-timestamp-changed") << int(ChangeTimestamp);
+        QTest::newRow("marker-changed-timestamp-restored") << int(ChangeMarker);
     }
 
     void changedFileDoesNotPublishACompletedReport()
@@ -841,18 +846,18 @@ private slots:
         QVERIFY(!image.isEmpty());
         nextGate = AfterScan;
         controller_->selectImage(image);
-        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, analysisTimeoutMs);
         QFile file(image);
-        if (change == 1)
+        if (change == RemoveFile)
             QVERIFY(file.remove());
-        else if (change == 2)
+        else if (change == ChangeTimestamp)
         {
             QVERIFY(file.open(QIODevice::ReadOnly));
             QVERIFY(file.setFileTime(file.fileTime(QFileDevice::FileModificationTime).addSecs(2),
                                      QFileDevice::FileModificationTime));
             file.close();
         }
-        else if (change == 3)
+        else if (change == ChangeMarker)
         {
             const QDateTime modified = QFileInfo(image).lastModified();
             QVERIFY(file.open(QIODevice::ReadWrite) && file.seek(510));
@@ -867,7 +872,7 @@ private slots:
             file.close();
         }
         releaseScan.release();
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Failed);
         QVERIFY(controller_->selection().imageProblem.contains(QStringLiteral("changed during analysis")));
         QVERIFY(volume_->text().isEmpty());
@@ -881,14 +886,14 @@ private slots:
         const cdio_log_handler_t previous = cdio_log_set_handler(previousCdioHandler);
         nextGate = Throw;
         controller_->selectImage(image);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         const cdio_log_handler_t restored = cdio_log_set_handler(previous);
         QVERIFY(restored == previousCdioHandler);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Failed);
         QCOMPARE(controller_->selection().imageProblem, QStringLiteral("test analysis exception"));
         QVERIFY(volume_->text().isEmpty());
         controller_->selectImage(image);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(controller_->selection().imageState, rufus::ImageState::Complete);
     }
 
@@ -898,17 +903,17 @@ private slots:
         QVERIFY(!image.isEmpty());
         nextGate = BeforeScan;
         controller_->selectImage(image);
-        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, analysisTimeoutMs);
         rufus::SelectionController other;
         other.selectImage(image);
-        QTRY_VERIFY_WITH_TIMEOUT(!other.isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!other.isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(other.selection().imageState, rufus::ImageState::Failed);
         QVERIFY(other.selection().imageProblem.contains(QStringLiteral("Another Rufus operation")));
         QVERIFY(!other.selection().imageAnalysis.tree_complete);
         releaseScan.release();
-        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), analysisTimeoutMs);
         other.selectImage(image);
-        QTRY_VERIFY_WITH_TIMEOUT(!other.isAnalyzing(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(!other.isAnalyzing(), analysisTimeoutMs);
         QCOMPARE(other.selection().imageState, rufus::ImageState::Complete);
     }
 
@@ -918,7 +923,7 @@ private slots:
         QVERIFY(!image.isEmpty());
         nextGate = BeforeScan;
         controller_->selectImage(image);
-        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(entered.available(), 1, analysisTimeoutMs);
         controller_->cancelAnalysis();
         window_.reset();
         releaseScan.release();

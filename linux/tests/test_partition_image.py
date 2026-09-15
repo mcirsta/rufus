@@ -15,21 +15,27 @@ import zlib
 from test_fat_format import copy_volume, invoke as format_image
 
 MIB = 1024 * 1024
+SECTOR_BYTES = 512
+GPT_FIRST_USABLE_SECTOR = 34
+GPT_TAIL_SECTORS = 33
+TOOL_TIMEOUT_SECONDS = 10
 DATA_TYPE = uuid.UUID("EBD0A0A2-B9E5-4433-87C0-68B6B72699C7")
 runs = 0
 
 
 def extent(size, cluster, track=63):
     # Original Rufus order, independently calculated in sectors/bytes.
-    length = ((size - 33*512 - MIB) // (track*512)) * (track*512)
+    usable_bytes = size - GPT_TAIL_SECTORS * SECTOR_BYTES - MIB
+    track_bytes = track * SECTOR_BYTES
+    length = usable_bytes // track_bytes * track_bytes
     return MIB, length // cluster * cluster
 
 
 def make_image(root, name, size, cluster=512, track=63):
     image = root / name
     offset, length = extent(size, cluster, track)
-    segments = [(34*512, b"P" * (MIB - 34*512)), (offset, b"D" * 65536),
-                (size//2, b"M" * 65536), (offset + length, b"T" * (size - 33*512 - offset - length))]
+    segments = [(GPT_FIRST_USABLE_SECTOR * SECTOR_BYTES, b"P" * (MIB - GPT_FIRST_USABLE_SECTOR * SECTOR_BYTES)), (offset, b"D" * 65536),
+                (size//2, b"M" * 65536), (offset + length, b"T" * (size - GPT_TAIL_SECTORS * SECTOR_BYTES - offset - length))]
     with image.open("wb") as target:
         target.truncate(size)
         for start, data in segments:
@@ -40,10 +46,10 @@ def make_image(root, name, size, cluster=512, track=63):
 
 def check_preserved(image, size, segments, formatted=None):
     assert image.stat().st_size == size
-    ranges = [(34*512, size - 33*512)]
+    ranges = [(GPT_FIRST_USABLE_SECTOR * SECTOR_BYTES, size - GPT_TAIL_SECTORS * SECTOR_BYTES)]
     if formatted:
         start, length = formatted
-        ranges = [(34*512, start), (start + length, size - 33*512)]
+        ranges = [(GPT_FIRST_USABLE_SECTOR * SECTOR_BYTES, start), (start + length, size - GPT_TAIL_SECTORS * SECTOR_BYTES)]
     with image.open("rb") as source:
         for start, end in ranges:
             source.seek(start)
@@ -69,7 +75,7 @@ def digest(image):
 def invoke(args, image, size, cluster=512, track=63, fault="none", error=0, started=True):
     global runs
     process = subprocess.run([str(args.probe), str(image), str(size), str(cluster), str(track), fault],
-                             capture_output=True, timeout=10)
+                             capture_output=True, timeout=TOOL_TIMEOUT_SECONDS)
     runs += 1
     assert process.returncode == 0, (process.returncode, process.stdout, process.stderr)
     values = {key.decode(): int(value) for key, value in re.findall(rb"([A-Z_]+)=(-?\d+)", process.stdout)}
@@ -97,7 +103,9 @@ def inspect_gpt(args, image, size, cluster, track=63):
             header = source.read(512)
             fields = struct.unpack_from("<8sIIIIQQQQ16sQIII", header)
             signature, revision, header_size, crc, reserved, here, alternate, first, last, disk_id, entries, count, width, table_crc = fields
-            assert signature == b"EFI PART" and revision == 0x10000 and header_size == 92 and reserved == 0
+            valid_signature = signature == b"EFI PART" and revision == 0x10000
+            valid_header = header_size == 92 and reserved == 0
+            assert valid_signature and valid_header, fields
             checked = bytearray(header[:header_size])
             checked[16:20] = bytes(4)
             assert zlib.crc32(checked) == crc
@@ -117,14 +125,14 @@ def inspect_gpt(args, image, size, cluster, track=63):
         assert struct.unpack_from("<QQQ", table, 32) == (expected_start//512, (expected_start+expected_size)//512-1, 0)
         assert table[56:128].decode("utf-16le").rstrip("\0") == "Main Data Partition"
         assert table[128:] == bytes(len(table)-128)
-    listing = subprocess.run([args.sfdisk, "--json", str(image)], check=True, capture_output=True, timeout=10)
+    listing = subprocess.run([args.sfdisk, "--json", str(image)], check=True, capture_output=True, timeout=TOOL_TIMEOUT_SECONDS)
     parsed = json.loads(listing.stdout)["partitiontable"]
     assert parsed["label"] == "gpt" and parsed["firstlba"] == 34 and parsed["lastlba"] == total-34
     assert len(parsed["partitions"]) == 1
     partition = parsed["partitions"][0]
     assert (partition["start"]*512, partition["size"]*512) == (expected_start, expected_size)
     assert uuid.UUID(partition["type"]) == DATA_TYPE and partition["name"] == "Main Data Partition"
-    subprocess.run([args.sfdisk, "--verify", str(image)], check=True, capture_output=True, timeout=10)
+    subprocess.run([args.sfdisk, "--verify", str(image)], check=True, capture_output=True, timeout=TOOL_TIMEOUT_SECONDS)
     return raw
 
 
@@ -144,7 +152,7 @@ def check_format(args, root, image, size, cluster, segments):
     volume = root / "volume.img"
     copy_volume(image, volume, offset, length)
     subprocess.run([args.fsck, "-n", str(volume)], check=True, capture_output=True, timeout=15)
-    listing = subprocess.run([args.mdir, "-i", f"{image}@@{offset}", "::"], check=True, capture_output=True, timeout=10)
+    listing = subprocess.run([args.mdir, "-i", f"{image}@@{offset}", "::"], check=True, capture_output=True, timeout=TOOL_TIMEOUT_SECONDS)
     assert b"No files" in listing.stdout
     volume.unlink()
 

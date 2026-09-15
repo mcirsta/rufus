@@ -12,6 +12,12 @@
 
 #define COPY_BUFFER_SIZE (1024 * 1024)
 
+enum {
+	MIN_SECTOR_BYTES = 512,
+	MAX_SECTOR_BYTES = 64 * 1024,
+	UNSUPPORTED_TARGET_FLAGS = O_APPEND | O_DIRECT | O_PATH
+};
+
 int CheckRawBlockTarget(int fd, uint64_t device, uint64_t capacity, uint64_t image_size)
 {
 	struct stat info;
@@ -23,12 +29,19 @@ int CheckRawBlockTarget(int fd, uint64_t device, uint64_t capacity, uint64_t ima
 		return errno;
 	if (!S_ISBLK(info.st_mode))
 		return ENOTBLK;
-	if (device == 0 || capacity == 0 || image_size == 0 || (uint64_t)info.st_rdev != device)
+	bool valid_plan = device != 0 && capacity != 0 && image_size != 0;
+	bool same_device = (uint64_t)info.st_rdev == device;
+	if (!valid_plan || !same_device)
 		return ESTALE;
-	if ((flags & O_ACCMODE) != O_RDWR || (flags & (O_APPEND | O_DIRECT | O_PATH)))
+	bool read_write = (flags & O_ACCMODE) == O_RDWR;
+	bool unsupported_flags = (flags & UNSUPPORTED_TARGET_FLAGS) != 0;
+	if (!read_write || unsupported_flags)
 		return EINVAL;
-	if (ioctl(fd, BLKGETSIZE64, &size) != 0 || ioctl(fd, BLKROGET, &read_only) != 0 ||
-		ioctl(fd, BLKSSZGET, &sector) != 0)
+	if (ioctl(fd, BLKGETSIZE64, &size) != 0)
+		return errno;
+	if (ioctl(fd, BLKROGET, &read_only) != 0)
+		return errno;
+	if (ioctl(fd, BLKSSZGET, &sector) != 0)
 		return errno;
 	if (read_only)
 		return EROFS;
@@ -36,7 +49,12 @@ int CheckRawBlockTarget(int fd, uint64_t device, uint64_t capacity, uint64_t ima
 		return ESTALE;
 	if (image_size > size)
 		return ENOSPC;
-	if (sector < 512 || sector > 65536 || (sector & (sector - 1)) != 0 || image_size % sector != 0)
+	bool supported_sector_size = sector >= MIN_SECTOR_BYTES && sector <= MAX_SECTOR_BYTES;
+	if (!supported_sector_size)
+		return EINVAL;
+	bool power_of_two = (sector & (sector - 1)) == 0;
+	bool sector_aligned = image_size % sector == 0;
+	if (!power_of_two || !sector_aligned)
 		return EINVAL;
 	return 0;
 }
@@ -73,7 +91,7 @@ static int CheckFiles(const IMAGE_FILE_SOURCE* source, const char* path, int tar
 	if (flags < 0)
 		return errno;
 	// Linux pwrite with O_APPEND ignores the supplied offset.
-	if ((flags & O_ACCMODE) != O_RDWR || (flags & (O_APPEND | O_DIRECT | O_PATH)))
+	if ((flags & O_ACCMODE) != O_RDWR || (flags & UNSUPPORTED_TARGET_FLAGS))
 		return EINVAL;
 	return 0;
 }

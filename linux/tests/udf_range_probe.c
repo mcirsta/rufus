@@ -9,6 +9,7 @@
 #include "driver/_cdio_stream.h"
 
 static bool active, short_read;
+enum { MAX_READ_BLOCKS = 16 };
 
 ssize_t __real_cdio_stream_read(CdioDataSource_t*, void*, size_t, size_t);
 
@@ -30,18 +31,21 @@ int main(int argc, char** argv)
 {
 	udf_t* udf = NULL;
 	udf_dirent_t *root = NULL, *file = NULL;
-	uint8_t buffer[16 * UDF_BLOCKSIZE];
+	uint8_t buffer[MAX_READ_BLOCKS * UDF_BLOCKSIZE];
 	uint64_t offset;
 	unsigned long blocks;
 	struct stat metadata;
 	ssize_t count;
 	int result = 1;
 
-	if ((argc != 5 && argc != 6) || stat(argv[1], &metadata) != 0 || !S_ISREG(metadata.st_mode))
+	if (argc != 5 && argc != 6)
+		return 64;
+	if (stat(argv[1], &metadata) != 0 || !S_ISREG(metadata.st_mode))
 		return 64;
 	offset = strtoull(argv[3], NULL, 10);
 	blocks = strtoul(argv[4], NULL, 10);
-	if (offset > INT64_MAX || blocks == 0 || blocks > 16)
+	bool valid_blocks = blocks > 0 && blocks <= MAX_READ_BLOCKS;
+	if (offset > INT64_MAX || !valid_blocks)
 		return 64;
 	short_read = argc == 6;
 	cdio_log_set_handler(LogCdio);

@@ -24,7 +24,8 @@ using State = rufus::WriteState;
 QByteArray readFile(const QString& path)
 {
     QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) return {};
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
     return file.readAll();
 }
 
@@ -40,8 +41,10 @@ QByteArray xdo(const QStringList& args)
 {
     QProcess process;
     process.start(QStringLiteral("xdotool"), args);
-    if (!process.waitForFinished(3000)) return {};
-    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) return {};
+    if (!process.waitForFinished(3000))
+        return {};
+    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
+        return {};
     return process.readAllStandardOutput().trimmed();
 }
 }
@@ -75,7 +78,8 @@ class TestUsbGuest : public QObject
         while (timer.elapsed() < 10000 && state() == State::Authorizing)
         {
             authWindow_ = authWindow();
-            if (!authWindow_.isEmpty()) return;
+            if (!authWindow_.isEmpty())
+                return;
             QTest::qWait(50);
         }
         QVERIFY(state() == State::Writing || !authWindow_.isEmpty());
@@ -157,7 +161,8 @@ private slots:
         QCOMPARE(device.path, QStringLiteral("/dev/sda"));
         // Prove the account itself has no raw-write permission.
         const int fd = open("/dev/sda", O_RDWR | O_CLOEXEC);
-        if (fd >= 0) close(fd);
+        if (fd >= 0)
+            close(fd);
         QVERIFY(fd < 0 && errno == EACCES);
         controller_.selectDevice(device.id);
         selectImage(QStringLiteral("/opt/rufus/boot.img"));
@@ -300,14 +305,22 @@ private slots:
     void cleanupTestCase()
     {
         agent_.terminate();
-        if (!agent_.waitForFinished(2000)) { agent_.kill(); agent_.waitForFinished(2000); }
+        if (!agent_.waitForFinished(2000))
+        {
+            agent_.kill();
+            agent_.waitForFinished(2000);
+        }
     }
 };
 
 int main(int argc, char* argv[])
 {
     // Check before QApplication, constructing discovery or connecting to any bus.
-    if (!fixtureGuest()) { fprintf(stderr, "This test requires the disposable Rufus USB guest.\n"); return 77; }
+    if (!fixtureGuest())
+    {
+        fprintf(stderr, "This test requires the disposable Rufus USB guest.\n");
+        return 77;
+    }
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QApplication application(argc, argv);
     TestUsbGuest test;

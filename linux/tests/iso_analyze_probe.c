@@ -30,8 +30,9 @@ void uprintf(const char* format, ...)
 int IsIsoScanCancelled(void)
 {
 	queries++;
-	return (cancel_after != 0 && queries >= cancel_after) ||
-		(cancel_read != 0 && reads >= cancel_read);
+	bool query_limit_reached = cancel_after != 0 && queries >= cancel_after;
+	bool read_limit_reached = cancel_read != 0 && reads >= cancel_read;
+	return query_limit_reached || read_limit_reached;
 }
 
 uint32_t __real_ReadISOFileToBufferExt(const char*, const char*, uint8_t**, iso_extension_mask_t);
@@ -124,12 +125,16 @@ int main(int argc, char** argv)
 		memset(options.embedded_sl_version, 0, sizeof(options.embedded_sl_version));
 	else if (strcmp(argv[2], "rr") != 0)
 		return 64;
-	if (sscanf(argv[3], "cancel:%u", &cancel_after) != 1 &&
-		sscanf(argv[3], "cancel-read:%u", &cancel_read) != 1 &&
-		sscanf(argv[3], "fail-read:%u", &fail_read) != 1 &&
-		sscanf(argv[3], "fail-dir:%u", &fail_dir) != 1 &&
-		sscanf(argv[3], "fail-open-dir:%u", &fail_open_dir) != 1 &&
-		sscanf(argv[3], "fail-array:%u", &fail_array) != 1) {
+	bool cancellation_fault = sscanf(argv[3], "cancel:%u", &cancel_after) == 1 ||
+		sscanf(argv[3], "cancel-read:%u", &cancel_read) == 1;
+	bool read_fault = false, setup_fault = false;
+	if (!cancellation_fault)
+		read_fault = sscanf(argv[3], "fail-read:%u", &fail_read) == 1 ||
+			sscanf(argv[3], "fail-dir:%u", &fail_dir) == 1;
+	if (!cancellation_fault && !read_fault)
+		setup_fault = sscanf(argv[3], "fail-open-dir:%u", &fail_open_dir) == 1 ||
+			sscanf(argv[3], "fail-array:%u", &fail_array) == 1;
+	if (!cancellation_fault && !read_fault && !setup_fault) {
 		if (strcmp(argv[3], "fail-fs") == 0)
 			fail_filesystem_name = true;
 		else if (strcmp(argv[3], "none") != 0)

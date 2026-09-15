@@ -19,7 +19,8 @@ int __real_wimlib_open_wim(const char*, int, WIMStruct**);
 
 int __wrap_wimlib_open_wim(const char* path, int flags, WIMStruct** wim)
 {
-	if (strncmp(path, "/proc/self/fd/", 14) != 0 || flags != 0) abort();
+	if (strncmp(path, "/proc/self/fd/", 14) != 0 || flags != 0)
+		abort();
 	opened++;
 	return __real_wimlib_open_wim(path, flags, wim);
 }
@@ -28,7 +29,8 @@ static int DescriptorCount(void)
 {
 	DIR* directory = opendir("/proc/self/fd");
 	int count = 0;
-	if (!directory) abort();
+	if (!directory)
+		abort();
 	while (readdir(directory)) count++;
 	closedir(directory);
 	return count;
@@ -37,7 +39,8 @@ static int DescriptorCount(void)
 static void ReplacePath(const char* path, const char* replacement, const struct stat* original)
 {
 	struct timespec times[2] = { original->st_atim, original->st_mtim };
-	if (rename(replacement, path) != 0 || utimensat(AT_FDCWD, path, times, 0) != 0) abort();
+	if (rename(replacement, path) != 0 || utimensat(AT_FDCWD, path, times, 0) != 0)
+		abort();
 }
 
 static void ChangeInPlace(const char* path, const struct stat* original)
@@ -45,9 +48,11 @@ static void ChangeInPlace(const char* path, const struct stat* original)
 	struct timespec times[2] = { original->st_atim, original->st_mtim };
 	uint8_t byte;
 	int fd = open(path, O_RDWR);
-	if (fd < 0 || pread(fd, &byte, 1, 0) != 1) abort();
+	if (fd < 0 || pread(fd, &byte, 1, 0) != 1)
+		abort();
 	byte ^= 1;
-	if (pwrite(fd, &byte, 1, 0) != 1 || futimens(fd, times) != 0) abort();
+	if (pwrite(fd, &byte, 1, 0) != 1 || futimens(fd, times) != 0)
+		abort();
 	close(fd);
 }
 
@@ -63,40 +68,51 @@ int main(int argc, char** argv)
 	int arch = ARCH_UNKNOWN, before, is_wim, source_current;
 	char prefix[8];
 
-	if (argc < 2 || argc > 4) return 64;
+	if (argc < 2 || argc > 4)
+		return 64;
 	if (wimlib_global_init(WIMLIB_INIT_FLAG_ASSUME_UTF8 | WIMLIB_INIT_FLAG_DEFAULT_CASE_INSENSITIVE) != 0)
 		return 65;
 	before = DescriptorCount();
-	if (strcmp(mode, "cancel-before") == 0) cancelled = 1;
+	if (strcmp(mode, "cancel-before") == 0)
+		cancelled = 1;
 	source_error = OpenImageFileSource(argv[1], &source);
 	is_wim = source.is_wim;
 	if (source_error == 0) {
 		if (argc == 4 && strcmp(mode, "replace-before-open") == 0)
 			ReplacePath(argv[1], argv[3], &source.info);
-		if (strcmp(mode, "unlink-before-open") == 0 && unlink(argv[1]) != 0) abort();
+		if (strcmp(mode, "unlink-before-open") == 0 && unlink(argv[1]) != 0)
+			abort();
 		if (source.is_wim) {
-			if (lseek(source.fd, 3, SEEK_SET) != 3) abort();
+			if (lseek(source.fd, 3, SEEK_SET) != 3)
+				abort();
 			wim_error = OpenWimFileDescriptor(source.fd, &wim);
-			if (lseek(source.fd, 0, SEEK_CUR) != 3) abort();
+			if (lseek(source.fd, 0, SEEK_CUR) != 3)
+				abort();
 			if (argc == 4 && strcmp(mode, "replace-after-open") == 0)
 				ReplacePath(argv[1], argv[3], &source.info);
 			if (wim_error == 0) {
 				metadata_error = ReadWimMetadata(wim, 1, &metadata);
 				efi_error = ReadWimFile(wim, 1, "Windows/Boot/EFI/bootmgr.efi", &data, &size);
-				if (efi_error != 0 && (data != NULL || size != 0)) abort();
+				if (efi_error != 0 && (data != NULL || size != 0))
+					abort();
 				arch = FindPeArch(data, size);
 			}
 		}
 		free(data);
 		wimlib_free(wim);
 		// wimlib must not take ownership of the retained source or its offset.
-		if (fcntl(source.fd, F_GETFD) < 0) abort();
-		if (source.info.st_size >= 8 && pread(source.fd, prefix, 8, 0) != 8) abort();
+		if (fcntl(source.fd, F_GETFD) < 0)
+			abort();
+		if (source.info.st_size >= 8 && pread(source.fd, prefix, 8, 0) != 8)
+			abort();
 		if (argc == 4 && strcmp(mode, "replace-after-read") == 0)
 			ReplacePath(argv[1], argv[3], &source.info);
-		if (strcmp(mode, "change-after-read") == 0) ChangeInPlace(argv[1], &source.info);
-		if (strcmp(mode, "truncate-after-read") == 0 && truncate(argv[1], 1) != 0) abort();
-		if (strcmp(mode, "cancel-after-read") == 0) cancelled = 1;
+		if (strcmp(mode, "change-after-read") == 0)
+			ChangeInPlace(argv[1], &source.info);
+		if (strcmp(mode, "truncate-after-read") == 0 && truncate(argv[1], 1) != 0)
+			abort();
+		if (strcmp(mode, "cancel-after-read") == 0)
+			cancelled = 1;
 		check_error = CheckImageFileSource(&source, argv[1]);
 	}
 	source_current = source_error == 0 && check_error == 0;
@@ -110,7 +126,8 @@ int main(int argc, char** argv)
 		metadata.invalid_fields, metadata.win_version.major, source_current, source_current ? arch : 0);
 	CloseImageFileSource(&source);
 	CloseImageFileSource(&source);
-	if (source.fd != -1 || source.is_wim || DescriptorCount() != before) abort();
+	if (source.fd != -1 || source.is_wim || DescriptorCount() != before)
+		abort();
 	wimlib_global_cleanup();
 	return 0;
 }

@@ -12,6 +12,10 @@ import time
 from boot_linux import boot_linux
 
 USB_SIZE = 256 * 1024 * 1024
+COPY_CHUNK_BYTES = 1024 * 1024
+GUEST_TIMEOUT_SECONDS = 360
+QMP_TIMEOUT_SECONDS = 5
+POLL_INTERVAL_SECONDS = 0.05
 
 
 def digest(path):
@@ -21,14 +25,14 @@ def digest(path):
 
 def verify_usb(path, source, previous=None):
     with path.open('rb') as target, source.open('rb') as image:
-        while chunk := image.read(1024 * 1024):
+        while chunk := image.read(COPY_CHUNK_BYTES):
             if target.read(len(chunk)) != chunk:
                 raise RuntimeError('Written USB range differs from the source')
         tail = previous.open('rb') if previous else None
         try:
             if tail:
                 tail.seek(image.tell())
-            while chunk := target.read(1024 * 1024):
+            while chunk := target.read(COPY_CHUNK_BYTES):
                 expected = tail.read(len(chunk)) if tail else bytes([0xa5]) * len(chunk)
                 if chunk != expected:
                     raise RuntimeError('USB tail was modified')
@@ -50,7 +54,7 @@ def qmp_reply(stream):
 
 def qmp_command(path, command, arguments):
     with socket.socket(socket.AF_UNIX) as client:
-        client.settimeout(5)
+        client.settimeout(QMP_TIMEOUT_SECONDS)
         client.connect(str(path))
         stream = client.makefile('rwb', buffering=0)
         json.loads(stream.readline())
@@ -66,8 +70,8 @@ def run_guest(base, output, accel, linux_images):
     # Every run receives its own files. Never attach a block node or a shared host tree.
     shutil.copyfile(base / 'system.raw', system)
     with usb.open('xb') as file:
-        for _ in range(USB_SIZE // (1024 * 1024)):
-            file.write(bytes([0xa5]) * (1024 * 1024))
+        for _ in range(USB_SIZE // COPY_CHUNK_BYTES):
+            file.write(bytes([0xa5]) * COPY_CHUNK_BYTES)
     source = base / 'boot.img'
     serial = output / 'serial.log'
     qmp = output / 'qmp.sock'
@@ -90,11 +94,11 @@ def run_guest(base, output, accel, linux_images):
     copied = removed = reattached = False
     with (output / 'qemu.log').open('wb') as log:
         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
-        deadline = time.monotonic() + 360
+        deadline = time.monotonic() + GUEST_TIMEOUT_SECONDS
         try:
             while process.poll() is None:
                 if time.monotonic() >= deadline:
-                    raise TimeoutError('Native guest did not finish in 360 seconds')
+                    raise TimeoutError(f'Native guest did not finish in {GUEST_TIMEOUT_SECONDS} seconds')
                 text = serial.read_text(errors='replace') if serial.exists() else ''
                 if not copied and 'RUFUS_NATIVE_PARTITION_DISCOVERED' in text:
                     # Capture the successful, flushed output before later fault cases.
@@ -111,7 +115,7 @@ def run_guest(base, output, accel, linux_images):
                                 'drive': 'stick', 'removable': True, 'serial': 'RUFUS-TEST-USB'})
                     reattached = True
                     print('Reattached the same emulated USB.', flush=True)
-                time.sleep(.05)
+                time.sleep(POLL_INTERVAL_SECONDS)
             if process.returncode != 0:
                 raise RuntimeError('QEMU failed; see ' + str(output / 'qemu.log'))
         finally:
@@ -133,7 +137,9 @@ def run_guest(base, output, accel, linux_images):
                 'Totals: %d passed, 0 failed' % (6 + len(linux_images)), 'RUFUS_GUI_EXIT 0', 'RUFUS_GUEST_FINISHED']
     for record in linux_images:
         required.append('RUFUS_OPENWRT_WRITTEN_' + record['firmware'])
-    if not copied or not removed or not reattached or any(marker not in text for marker in required):
+    device_lifecycle_complete = copied and removed and reattached
+    all_checks_reported = all(marker in text for marker in required)
+    if not device_lifecycle_complete or not all_checks_reported:
         raise RuntimeError('Native qualification failed; see ' + str(serial))
     verify_usb(output / 'verified-usb.raw', source)
     previous = None

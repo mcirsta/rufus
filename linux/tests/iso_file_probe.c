@@ -73,7 +73,11 @@ int main(int argc, char** argv)
 	struct stat metadata;
 	int i, result = ISO_SCAN_ERROR;
 
-	if (argc < 6 || argc % 2 != 0 || stat(argv[1], &metadata) != 0 || !S_ISREG(metadata.st_mode))
+	// Image, view, path, then one or more offset/count pairs.
+	bool valid_arguments = argc >= 6 && argc % 2 == 0;
+	if (!valid_arguments)
+		return 64;
+	if (stat(argv[1], &metadata) != 0 || !S_ISREG(metadata.st_mode))
 		return 64;
 	cdio_log_set_handler(LogCdio);
 	if (strcmp(argv[2], "udf") == 0)

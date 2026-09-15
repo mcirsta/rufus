@@ -10,6 +10,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+enum { WIM_READ_CHUNK_BYTES = 32 * 1024 };
+
 typedef struct {
 	char name[256];
 	size_t size;
@@ -23,13 +25,18 @@ static int CheckFile(const struct wimlib_dir_entry* entry, void* context)
 
 	if (IsIsoScanCancelled())
 		return WIMLIB_ERR_ABORTED_BY_PROGRESS;
-	if (entry->attributes & (WIMLIB_FILE_ATTRIBUTE_DIRECTORY | WIMLIB_FILE_ATTRIBUTE_DEVICE |
-		WIMLIB_FILE_ATTRIBUTE_REPARSE_POINT | WIMLIB_FILE_ATTRIBUTE_ENCRYPTED))
+	const unsigned unsupported_attributes = WIMLIB_FILE_ATTRIBUTE_DIRECTORY | WIMLIB_FILE_ATTRIBUTE_DEVICE |
+		WIMLIB_FILE_ATTRIBUTE_REPARSE_POINT | WIMLIB_FILE_ATTRIBUTE_ENCRYPTED;
+	if (entry->attributes & unsupported_attributes)
 		return WIMLIB_ERR_NOT_A_REGULAR_FILE;
 	if (entry->num_named_streams != 0 || size > WIM_READ_FILE_MAX_SIZE)
 		return WIMLIB_ERR_UNSUPPORTED;
-	if (name == NULL || *name == 0 || strlen(name) >= sizeof(file->name) ||
-		strchr(name, '/') || strchr(name, '\\') || strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+	if (name == NULL)
+		return WIMLIB_ERR_INVALID_PARAM;
+	bool valid_length = *name != 0 && strlen(name) < sizeof(file->name);
+	bool has_separator = strchr(name, '/') != NULL || strchr(name, '\\') != NULL;
+	bool dot_directory = strcmp(name, ".") == 0 || strcmp(name, "..") == 0;
+	if (!valid_length || has_separator || dot_directory)
 		return WIMLIB_ERR_INVALID_PARAM;
 	strcpy(file->name, name);
 	file->size = (size_t)size;
@@ -56,8 +63,10 @@ static int ReadExtractedFile(const char* path, size_t size, uint8_t** data)
 
 	if (fd < 0)
 		return WIMLIB_ERR_OPEN;
-	if (fstat(fd, &info) != 0 || !S_ISREG(info.st_mode) || info.st_size < 0 ||
-		(uint64_t)info.st_size != size)
+	if (fstat(fd, &info) != 0)
+		goto out;
+	bool expected_size = info.st_size >= 0 && (uint64_t)info.st_size == size;
+	if (!S_ISREG(info.st_mode) || !expected_size)
 		goto out;
 	if (size != 0) {
 		bytes = malloc(size);
@@ -71,7 +80,9 @@ static int ReadExtractedFile(const char* path, size_t size, uint8_t** data)
 			error = WIMLIB_ERR_ABORTED_BY_PROGRESS;
 			goto out;
 		}
-		count = read(fd, bytes + position, size - position > 32768 ? 32768 : size - position);
+		size_t remaining = size - position;
+		size_t chunk = remaining > WIM_READ_CHUNK_BYTES ? WIM_READ_CHUNK_BYTES : remaining;
+		count = read(fd, bytes + position, chunk);
 		if (count < 0 && errno == EINTR)
 			continue;
 		if (count <= 0)
@@ -99,7 +110,10 @@ int ReadWimFile(WIMStruct* wim, int image, const char* path, uint8_t** data, siz
 		*data = NULL;
 	if (size != NULL)
 		*size = 0;
-	if (wim == NULL || image < 1 || path == NULL || *path == 0 || data == NULL || size == NULL)
+	bool valid_image = wim != NULL && image >= 1;
+	bool valid_path = path != NULL && *path != 0;
+	bool valid_output = data != NULL && size != NULL;
+	if (!valid_image || !valid_path || !valid_output)
 		return WIMLIB_ERR_INVALID_PARAM;
 	if (IsIsoScanCancelled())
 		return WIMLIB_ERR_ABORTED_BY_PROGRESS;

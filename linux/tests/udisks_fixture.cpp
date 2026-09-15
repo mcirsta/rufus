@@ -68,10 +68,11 @@ private:
         ++opens_;
         const QList<QVariant> args = message.arguments();
         const QVariantMap options = args.size() == 2 ? qdbus_cast<QVariantMap>(args.at(1)) : QVariantMap();
-        if (args.size() != 2 || args.at(0).toString() != QStringLiteral("rw")
-            || options.value(QStringLiteral("flags")).toInt() != (O_EXCL | O_SYNC | O_CLOEXEC)
-            || options.value(QStringLiteral("auth.no_user_interaction"), true).toBool()
-            || !message.isInteractiveAuthorizationAllowed())
+        const bool readWrite = args.size() == 2 && args.at(0).toString() == QStringLiteral("rw");
+        const bool expectedFlags = options.value(QStringLiteral("flags")).toInt() == (O_EXCL | O_SYNC | O_CLOEXEC);
+        const bool interactive = !options.value(QStringLiteral("auth.no_user_interaction"), true).toBool()
+            && message.isInteractiveAuthorizationAllowed();
+        if (!readWrite || !expectedFlags || !interactive)
         {
             ++unexpected_;
             connection.send(message.createErrorReply(QDBusError::InvalidArgs, QStringLiteral("Wrong raw open request")));
@@ -190,8 +191,11 @@ int main(int argc, char* argv[])
     QDBusConnection connection = QDBusConnection::connectToBus(app.arguments().at(1),
         QStringLiteral("fixture"));
     UDisksFixture fixture;
-    if (!connection.isConnected() || !connection.registerVirtualObject(root, &fixture, QDBusConnection::SubPath)
-        || !connection.registerService(control) || !connection.registerService(service))
+    if (!connection.isConnected())
+        return 3;
+    if (!connection.registerVirtualObject(root, &fixture, QDBusConnection::SubPath))
+        return 3;
+    if (!connection.registerService(control) || !connection.registerService(service))
         return 3;
     QTextStream(stdout) << "ready\n" << Qt::flush;
     return app.exec();

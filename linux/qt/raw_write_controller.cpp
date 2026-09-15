@@ -20,9 +20,17 @@ RawWriteController::~RawWriteController()
 
 bool RawWriteController::isActive() const
 {
-    return status_.state == WriteState::Checking || status_.state == WriteState::AwaitingConfirmation
-        || status_.state == WriteState::Authorizing || status_.state == WriteState::Writing
-        || status_.state == WriteState::Cancelling;
+    switch (status_.state)
+    {
+    case WriteState::Checking:
+    case WriteState::AwaitingConfirmation:
+    case WriteState::Authorizing:
+    case WriteState::Writing:
+    case WriteState::Cancelling:
+        return true;
+    default:
+        return false;
+    }
 }
 
 bool RawWriteController::isAvailable() const
@@ -170,12 +178,15 @@ void RawWriteController::workerFinished()
     }
     else if (status_.state == WriteState::Cancelling && status_.outcome.error == 0)
         status_.outcome.error = ECANCELED;
-    if (status_.outcome.io.sync_error != 0 || (status_.outcome.error != 0 && status_.outcome.error != ECANCELED))
+    const bool writeFailed = status_.outcome.error != 0 && status_.outcome.error != ECANCELED;
+    const bool syncFailed = status_.outcome.io.sync_error != 0;
+    const bool fullyVerified = status_.outcome.io.bytes_written == status_.size
+        && status_.outcome.io.bytes_verified == status_.size;
+    if (writeFailed || syncFailed)
         status_.state = WriteState::Failed;
     else if (status_.outcome.error == ECANCELED)
         status_.state = WriteState::Cancelled;
-    else if (status_.outcome.io.phase == RAW_WRITE_DONE
-        && status_.outcome.io.bytes_written == status_.size && status_.outcome.io.bytes_verified == status_.size)
+    else if (status_.outcome.io.phase == RAW_WRITE_DONE && fullyVerified)
         status_.state = WriteState::Complete;
     else
     {
@@ -227,7 +238,9 @@ int RawWriteController::percent() const
     if (status_.size == 0)
         return 0;
     const double bytes = double(status_.outcome.io.bytes_written) + double(status_.outcome.io.bytes_verified);
-    return qBound(0, int(50.0 * bytes / double(status_.size)), 99);
+    // Copying and verification each account for half; reserve 100% for completion.
+    constexpr double percentPerPass = 50.0;
+    return qBound(0, int(percentPerPass * bytes / double(status_.size)), 99);
 }
 
 QString RawWriteController::statusText() const

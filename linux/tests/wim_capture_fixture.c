@@ -29,15 +29,20 @@ int main(int argc, char** argv)
 	else if (strcmp(argv[3], "none") != 0)
 		return 64;
 	error = wimlib_global_init(WIMLIB_INIT_FLAG_ASSUME_UTF8);
-	if (!error) error = wimlib_create_new_wim(compression, &wim);
-	if (!error) error = wimlib_add_image(wim, argv[1], "Generated image", NULL, 0);
+	if (!error)
+		error = wimlib_create_new_wim(compression, &wim);
+	if (!error)
+		error = wimlib_add_image(wim, argv[1], "Generated image", NULL, 0);
 	if (!error && argc == 5) {
 		error = wimlib_add_image(wim, argv[4], "Second image", NULL, 0);
 		info.boot_index = 2;
-		if (!error) error = wimlib_set_wim_info(wim, &info, WIMLIB_CHANGE_BOOT_INDEX);
+		if (!error)
+			error = wimlib_set_wim_info(wim, &info, WIMLIB_CHANGE_BOOT_INDEX);
 	}
-	if (!error) error = wimlib_write(wim, argv[2], WIMLIB_ALL_IMAGES, flags, 1);
-	if (error) fprintf(stderr, "Fixture: %s\n", wimlib_get_error_string(error));
+	if (!error)
+		error = wimlib_write(wim, argv[2], WIMLIB_ALL_IMAGES, flags, 1);
+	if (error)
+		fprintf(stderr, "Fixture: %s\n", wimlib_get_error_string(error));
 	wimlib_free(wim);
 	wimlib_global_cleanup();
 	return error != 0;

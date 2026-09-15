@@ -3,6 +3,7 @@
 #include "syslinux/libfat/libfatint.h"
 #include <cdio/logging.h>
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,6 +14,14 @@ static unsigned int queries, cancel_after, reads, fail_read, max_blocks, blocks_
 static bool active, fail_context, fail_open, fail_cache, injected;
 static bool fail_seek, fail_root, fail_file;
 static unsigned int iso_reads;
+
+enum {
+	CONTEXT_MIN_BYTES = 32 * 1024,
+	CONTEXT_MAX_BYTES = 64 * 1024,
+	PRIOR_SECTOR_SHIFT = 12,
+	PRIOR_SECTOR_BYTES = 1 << PRIOR_SECTOR_SHIFT,
+	PRIOR_SECTOR_MASK = PRIOR_SECTOR_BYTES - 1
+};
 
 void uprintf(const char* format, ...)
 {
@@ -107,7 +116,8 @@ int __real_posix_memalign(void**, size_t, size_t);
 
 void* __wrap_calloc(size_t count, size_t size)
 {
-	if (active && fail_context && count == 1 && size >= 32768 && size < 65536) {
+	bool context_allocation = count == 1 && size >= CONTEXT_MIN_BYTES && size < CONTEXT_MAX_BYTES;
+	if (active && fail_context && context_allocation) {
 		injected = true;
 		return NULL;
 	}
@@ -127,7 +137,7 @@ int __wrap_posix_memalign(void** ptr, size_t alignment, size_t size)
 {
 	if (active && fail_cache) {
 		injected = true;
-		return 12;
+		return ENOMEM;
 	}
 	return __real_posix_memalign(ptr, alignment, size);
 }
@@ -140,7 +150,9 @@ int main(int argc, char** argv)
 	bool found = true;
 	int result;
 
-	if ((argc != 4 && argc != 5) || stat(argv[1], &metadata) != 0 || !S_ISREG(metadata.st_mode))
+	if (argc != 4 && argc != 5)
+		return 64;
+	if (stat(argv[1], &metadata) != 0 || !S_ISREG(metadata.st_mode))
 		return 64;
 	if (sscanf(argv[3], "cancel:%u", &cancel_after) != 1 &&
 		sscanf(argv[3], "fail-read:%u", &fail_read) != 1) {
@@ -150,8 +162,9 @@ int main(int argc, char** argv)
 		fail_seek = strcmp(argv[3], "fail-seek") == 0;
 		fail_root = strcmp(argv[3], "fail-root") == 0;
 		fail_file = strcmp(argv[3], "fail-file") == 0;
-		if (!fail_context && !fail_open && !fail_cache && !fail_seek && !fail_root && !fail_file &&
-			strcmp(argv[3], "none") != 0)
+		bool allocation_fault = fail_context || fail_open || fail_cache;
+		bool lookup_fault = fail_seek || fail_root || fail_file;
+		if (!allocation_fault && !lookup_fault && strcmp(argv[3], "none") != 0)
 			return 64;
 	}
 	cdio_log_set_handler(LogCdio);
@@ -162,9 +175,9 @@ int main(int argc, char** argv)
 	if (iso == NULL && udf == NULL)
 		return 65;
 	// Simulate a prior 4K device operation. Every return must restore all three.
-	LIBFAT_SECTOR_SIZE = 4096;
-	LIBFAT_SECTOR_MASK = 4095;
-	LIBFAT_SECTOR_SHIFT = 12;
+	LIBFAT_SECTOR_SIZE = PRIOR_SECTOR_BYTES;
+	LIBFAT_SECTOR_MASK = PRIOR_SECTOR_MASK;
+	LIBFAT_SECTOR_SHIFT = PRIOR_SECTOR_SHIFT;
 	active = true;
 	result = InspectEfiImage(iso, udf, argv[2], &found);
 	active = false;
@@ -172,7 +185,9 @@ int main(int argc, char** argv)
 		iso9660_close(iso);
 	if (udf != NULL)
 		udf_close(udf);
-	if (LIBFAT_SECTOR_SIZE != 4096 || LIBFAT_SECTOR_MASK != 4095 || LIBFAT_SECTOR_SHIFT != 12)
+	bool restored_geometry = LIBFAT_SECTOR_SIZE == PRIOR_SECTOR_BYTES &&
+		LIBFAT_SECTOR_MASK == PRIOR_SECTOR_MASK && LIBFAT_SECTOR_SHIFT == PRIOR_SECTOR_SHIFT;
+	if (!restored_geometry)
 		return 66;
 	if (result != ISO_SCAN_OK && found)
 		return 67;

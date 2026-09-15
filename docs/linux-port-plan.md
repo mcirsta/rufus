@@ -305,7 +305,7 @@ build multiple interchangeable backends in advance.
 | Authorization and opening a target | Existing UDisks2 authorization and descriptor APIs. | Verify the access mode and lifetime needed by each write path. |
 | Mounting and unmounting | UDisks2 filesystem services. | Coordinate active mounts, later automounts and cleanup of resources owned by the job. |
 | Partition layout | Assess UDisks2 partition APIs first. | Use libfdisk or controlled `sfdisk` execution if required layouts are not expressible. |
-| Filesystem creation | Existing formatting services and `mkfs.fat`, `mkntfs`, `mkfs.exfat` as needed. | Validate support for the exact filesystem, label and cluster-size options exposed by the UI. |
+| Filesystem creation | Direct invocation of native `mkfs.fat`, `mkntfs`/`mkfs.ntfs` and `mkfs.exfat`. | Preserve Rufus's explicit options; qualify the installed tool's filesystem, label and cluster-size capabilities. Authorization remains separate. |
 | WIM inspection, splitting and updating | Linux wimlib. | Preserve the Rufus choices and parameters; verify bundled-versus-system differences. |
 | ISO/UDF access | Rufus's libcdio-based approach. | Choose bundled or system libraries after the behavioral audit. |
 | Raw image writing | A small operation using an authorized descriptor and established POSIX I/O. | Partial I/O, size limits, cancellation, flush, verification and accurate error reporting. |
@@ -316,6 +316,14 @@ For external tools, use structured arguments without a shell, check exit status
 and diagnostics, and implement bounded cancellation/cleanup. Check required
 capabilities before changing a target. Source analysis should use library file
 access without requiring privileged mounts where the chosen library supports it.
+
+The formatting decision is to keep direct control of native tool arguments for
+FAT32, NTFS and exFAT. Keep process handling small and use existing facilities
+where they help; the C monotonic-millisecond helper can stay. Qualify
+`ntfsprogs-plus` and current NTFS-3G utilities as NTFS providers, and exfatprogs
+for exFAT, before relying on their options. Tool selection must preserve Rufus's
+media decisions and remains separate from mounting-driver selection and
+UDisks2/polkit authorization.
 
 CP10e uses libfdisk (2.35+) for regular image files: its descriptor API and
 explicit partition bounds avoid loop devices or privileges in this checkpoint.
@@ -438,6 +446,24 @@ takes precedence. Preserve the established style of unchanged upstream files.
   helpers. Follow the reference's brace-on-next-line style for new C++ code.
   Use RAII for actual resource lifetimes; avoid wrappers that only rename a
   call. Keep error handling explicit without a new generic result framework.
+- **Name compound conditions.** Use local variables that explain the meaning of
+  a check, such as `fits_partition`, `cluster_size_matches` or `sector_aligned`.
+  Keep each branch focused on related checks; do not pack unrelated validations
+  into a long `if` expression. Preserve short-circuit guards before dereferencing
+  pointers, subtracting unsigned sizes or dividing. Report which validation
+  failed where that helps diagnosis.
+- **Name repeated values and their units.** Use constants for filesystem limits,
+  sector/block sizes, layout fields and timeouts. Derive dependent values from
+  those constants, including formatter arguments, rather than repeating numeric
+  and string literals. Keep constants near their users and reuse existing
+  definitions when their meaning matches; do not create an abstraction layer
+  just to share constants. Ordinary zero/one checks need no symbolic names.
+  Apply these rules to our test drivers too: name fault modes and operational
+  limits, while keeping format reference values independent of production.
+- **Keep useful small C helpers.** `MonotonicMilliseconds` can remain a direct
+  wrapper over the native clock. Short helpers are acceptable when they clarify
+  a repeated operation; brevity alone is neither a reason to remove them nor
+  to create a chain of trivial wrappers.
 - **Preserve performance in the work that matters.** Keep UI updates and
   authorization requests out of per-block loops. Use reusable bounded buffers,
   avoid repeated allocation and unnecessary copies, and retain 64-bit sizes

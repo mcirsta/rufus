@@ -13,10 +13,14 @@ int OpenWimFromIsoReader(ISO_FILE_READER* reader, int flags, WIMStruct** wim)
 	if (wim == NULL)
 		return WIMLIB_ERR_INVALID_PARAM;
 	*wim = NULL;
-	if (reader == NULL || ((reader->iso == NULL) == (reader->udf_file == NULL)) ||
-		reader->size > INT64_MAX ||
-		(flags & ~(WIMLIB_OPEN_FLAG_CHECK_INTEGRITY | WIMLIB_OPEN_FLAG_ERROR_IF_SPLIT |
-			WIMLIB_OPEN_FLAG_WRITE_ACCESS)))
+	if (reader == NULL)
+		return WIMLIB_ERR_INVALID_PARAM;
+	const int supported_flags = WIMLIB_OPEN_FLAG_CHECK_INTEGRITY | WIMLIB_OPEN_FLAG_ERROR_IF_SPLIT |
+		WIMLIB_OPEN_FLAG_WRITE_ACCESS;
+	bool has_one_backend = (reader->iso != NULL) != (reader->udf_file != NULL);
+	bool supported_size = reader->size <= INT64_MAX;
+	bool unknown_flags = (flags & ~supported_flags) != 0;
+	if (!has_one_backend || !supported_size || unknown_flags)
 		return WIMLIB_ERR_INVALID_PARAM;
 	if (flags & WIMLIB_OPEN_FLAG_WRITE_ACCESS)
 		return WIMLIB_ERR_WIM_IS_READONLY;
@@ -46,8 +50,9 @@ int WimReaderRead(struct filedes* fd, void* buffer, size_t count, off_t offset)
 		errno = ECANCELED;
 		return WIMLIB_ERR_ABORTED_BY_PROGRESS;
 	}
-	if (offset < 0 || (uint64_t)offset > fd->iso_reader->size ||
-		count > fd->iso_reader->size - (uint64_t)offset)
+	bool valid_offset = offset >= 0 && (uint64_t)offset <= fd->iso_reader->size;
+	bool fits_reader = valid_offset && count <= fd->iso_reader->size - (uint64_t)offset;
+	if (!fits_reader)
 	{
 		errno = EINVAL;
 		return WIMLIB_ERR_UNEXPECTED_END_OF_FILE;

@@ -14,6 +14,10 @@
 
 static const char* fault;
 static int cancelled, writes, syncs;
+enum {
+	SECTOR_BYTES = 512,
+	INITIAL_POSITION = 17
+};
 int __real_fdisk_write_disklabel(struct fdisk_context*);
 int __real_fdisk_add_partition(struct fdisk_context*, struct fdisk_partition*, size_t*);
 int __real_fsync(int);
@@ -29,13 +33,16 @@ void uprintf(const char* format, ...)
 
 int __wrap_fdisk_add_partition(struct fdisk_context* context, struct fdisk_partition* partition, size_t* number)
 {
-	if (strcmp(fault, "add-fail") == 0) return -ENOMEM;
+	if (strcmp(fault, "add-fail") == 0)
+		return -ENOMEM;
 	int status = __real_fdisk_add_partition(context, partition, number);
-	if (strcmp(fault, "cancel-before-write") == 0) cancelled = 1;
+	if (strcmp(fault, "cancel-before-write") == 0)
+		cancelled = 1;
 	if (strcmp(fault, "resize-before-write") == 0) {
 		int fd = fdisk_get_devfd(context);
 		struct stat info;
-		if (fstat(fd, &info) != 0 || ftruncate(fd, info.st_size - 512) != 0) abort();
+		if (fstat(fd, &info) != 0 || ftruncate(fd, info.st_size - SECTOR_BYTES) != 0)
+			abort();
 	}
 	return status;
 }
@@ -44,13 +51,18 @@ int __wrap_fdisk_write_disklabel(struct fdisk_context* context)
 {
 	int status;
 	writes++;
-	if (strcmp(fault, "write-fail") == 0) return -EIO;
+	if (strcmp(fault, "write-fail") == 0)
+		return -EIO;
 	status = __real_fdisk_write_disklabel(context);
-	if (strcmp(fault, "cancel-after-write") == 0) cancelled = 1;
+	if (strcmp(fault, "cancel-after-write") == 0)
+		cancelled = 1;
 	if (strcmp(fault, "damaged-primary") == 0 || strcmp(fault, "damaged-backup") == 0) {
-		off_t offset = strcmp(fault, "damaged-primary") == 0 ? 512 : (off_t)(fdisk_get_nsectors(context) - 1) * 512;
+		bool primary = strcmp(fault, "damaged-primary") == 0;
+		off_t header_sector = primary ? 1 : (off_t)(fdisk_get_nsectors(context) - 1);
+		off_t offset = header_sector * SECTOR_BYTES;
 		char bad = 0;
-		if (pwrite(fdisk_get_devfd(context), &bad, 1, offset) != 1) abort();
+		if (pwrite(fdisk_get_devfd(context), &bad, 1, offset) != 1)
+			abort();
 	}
 	return status;
 }
@@ -58,8 +70,14 @@ int __wrap_fdisk_write_disklabel(struct fdisk_context* context)
 int __wrap_fsync(int fd)
 {
 	syncs++;
-	if (strcmp(fault, "sync-fail") == 0) { errno = EIO; return -1; }
-	if (strcmp(fault, "sync-eintr") == 0 && syncs == 1) { errno = EINTR; return -1; }
+	if (strcmp(fault, "sync-fail") == 0) {
+		errno = EIO;
+		return -1;
+	}
+	if (strcmp(fault, "sync-eintr") == 0 && syncs == 1) {
+		errno = EINTR;
+		return -1;
+	}
 	return __real_fsync(fd);
 }
 
@@ -68,42 +86,52 @@ static int DescriptorCount(void)
 	DIR* directory = opendir("/proc/self/fd");
 	struct dirent* entry;
 	int count = 0;
-	if (directory == NULL) abort();
+	if (directory == NULL)
+		abort();
 	while ((entry = readdir(directory)) != NULL)
-		if (entry->d_name[0] != '.') count++;
+		if (entry->d_name[0] != '.')
+			count++;
 	closedir(directory);
 	return count;
 }
 
 int main(int argc, char** argv)
 {
-	GPT_IMAGE_OPTIONS options = { 0, 512, 63, 512 };
+	GPT_IMAGE_OPTIONS options = { 0, SECTOR_BYTES, 63, SECTOR_BYTES };
 	GPT_IMAGE_RESULT result;
 	int fd, error, before, original_flags, flags;
 
-	if (argc != 6) return 64;
+	if (argc != 6)
+		return 64;
 	fault = argv[5];
 	options.disk_size = strtoull(argv[2], NULL, 10);
 	options.cluster_size = (uint32_t)strtoul(argv[3], NULL, 10);
 	options.sectors_per_track = (uint32_t)strtoul(argv[4], NULL, 10);
-	if (strcmp(fault, "sector-4k") == 0) options.sector_size = 4096;
+	if (strcmp(fault, "sector-4k") == 0)
+		options.sector_size = 4096;
 	flags = strcmp(fault, "readonly") == 0 ? O_RDONLY : O_RDWR;
-	if (strcmp(fault, "append") == 0) flags |= O_APPEND;
+	if (strcmp(fault, "append") == 0)
+		flags |= O_APPEND;
 	fd = open(argv[1], flags | O_CLOEXEC);
-	if (fd < 0) return 65;
+	if (fd < 0)
+		return 65;
 	if (strcmp(fault, "pipe") == 0) {
 		int ends[2];
 		close(fd);
-		if (pipe2(ends, O_CLOEXEC) != 0) abort();
+		if (pipe2(ends, O_CLOEXEC) != 0)
+			abort();
 		fd = ends[0];
 		close(ends[1]);
-	} else if (lseek(fd, 17, SEEK_SET) != 17) return 66;
+	} else if (lseek(fd, INITIAL_POSITION, SEEK_SET) != INITIAL_POSITION)
+		return 66;
 	if (strcmp(fault, "replace-path") == 0) {
 		char retained[4096];
 		snprintf(retained, sizeof(retained), "%s.held", argv[1]);
-		if (rename(argv[1], retained) != 0) abort();
+		if (rename(argv[1], retained) != 0)
+			abort();
 		int replacement = open(argv[1], O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
-		if (replacement < 0 || write(replacement, "retained", 8) != 8) abort();
+		if (replacement < 0 || write(replacement, "retained", 8) != 8)
+			abort();
 		close(replacement);
 	}
 	original_flags = fcntl(fd, F_GETFD);

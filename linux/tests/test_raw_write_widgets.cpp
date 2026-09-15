@@ -32,6 +32,12 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+static constexpr int fixtureTimeoutMs = 2000;
+static constexpr int uiTimeoutMs = 1000;
+static constexpr int writeTimeoutMs = 4000;
+static constexpr int cancelTimeoutMs = 3000;
+static constexpr int resumeTimeoutMs = 5000;
+
 // Only the private fixture's regular-file inode gets synthetic kernel facts.
 // No block nodes are created or opened, and production has no test-mode branch.
 static ino_t fixtureInode;
@@ -54,7 +60,8 @@ extern "C" int __real_ioctl(int, unsigned long, ...);
 extern "C" int WrappedStat(int fd, struct stat* info)
 {
     const int error = RealStat(fd, info);
-    if (error == 0 && emulateBlock && info->st_ino == fixtureInode && info->st_dev == fixtureDevice)
+    const bool fixtureFile = error == 0 && info->st_ino == fixtureInode && info->st_dev == fixtureDevice;
+    if (emulateBlock && fixtureFile)
     {
         info->st_mode = (info->st_mode & ~S_IFMT) | S_IFBLK;
         info->st_rdev = dev_t(nativeNumber);
@@ -69,14 +76,23 @@ extern "C" int __wrap_ioctl(int fd, unsigned long request, ...)
     void* value = va_arg(args, void*);
     va_end(args);
     struct stat info;
-    if (RealStat(fd, &info) == 0 && emulateBlock && info.st_ino == fixtureInode
-        && info.st_dev == fixtureDevice)
+    const int error = RealStat(fd, &info);
+    const bool fixtureFile = error == 0 && info.st_ino == fixtureInode && info.st_dev == fixtureDevice;
+    if (emulateBlock && fixtureFile)
     {
-        if (nativeError) { errno = nativeError; return -1; }
-        if (request == BLKGETSIZE64) *static_cast<uint64_t*>(value) = nativeCapacity;
-        else if (request == BLKROGET) *static_cast<int*>(value) = nativeReadOnly;
-        else if (request == BLKSSZGET) *static_cast<int*>(value) = nativeSector;
-        else qFatal("Unexpected fixture ioctl");
+        if (nativeError)
+        {
+            errno = nativeError;
+            return -1;
+        }
+        if (request == BLKGETSIZE64)
+            *static_cast<uint64_t*>(value) = nativeCapacity;
+        else if (request == BLKROGET)
+            *static_cast<int*>(value) = nativeReadOnly;
+        else if (request == BLKSSZGET)
+            *static_cast<int*>(value) = nativeSector;
+        else
+            qFatal("Unexpected fixture ioctl");
         return 0;
     }
     return __real_ioctl(fd, request, value);
@@ -111,39 +127,55 @@ static bool fixtureTarget(int fd)
 static void pauseIo()
 {
     pausedIo.release();
-    if (!resumeIo.tryAcquire(1, 5000)) qFatal("Test did not release paused worker I/O");
+    if (!resumeIo.tryAcquire(1, resumeTimeoutMs))
+        qFatal("Test did not release paused worker I/O");
 }
 
 extern "C" ssize_t WrappedWrite(int fd, const void* data, size_t size, off_t offset)
 {
-    if (!fixtureTarget(fd)) return RealWrite(fd, data, size, offset);
+    if (!fixtureTarget(fd))
+        return RealWrite(fd, data, size, offset);
     const int call = ++writeCalls;
-    if (faultKind == PauseCopy && call == 2) pauseIo();
+    if (faultKind == PauseCopy && call == 2)
+        pauseIo();
     if (faultKind == WriteError)
     {
-        if (call > 1) { errno = ENOSPC; return -1; }
+        if (call > 1)
+        {
+            errno = ENOSPC;
+            return -1;
+        }
         size = qMin(size, size_t(4096));
     }
     const ssize_t written = RealWrite(fd, data, size, offset);
-    if (written > 0) actualWritten += uint64_t(written);
+    if (written > 0)
+        actualWritten += uint64_t(written);
     return written;
 }
 
 extern "C" ssize_t WrappedRead(int fd, void* data, size_t size, off_t offset)
 {
     const bool target = fixtureTarget(fd);
-    if (target && faultKind == PauseVerify && offset == 0) pauseIo();
+    if (target && faultKind == PauseVerify && offset == 0)
+        pauseIo();
     const ssize_t read = RealRead(fd, data, size, offset);
-    if (target && faultKind == CorruptVerify && read > 0) static_cast<char*>(data)[0] ^= 1;
+    if (target && faultKind == CorruptVerify && read > 0)
+        static_cast<char*>(data)[0] ^= 1;
     return read;
 }
 
 extern "C" int __wrap_fsync(int fd)
 {
-    if (!fixtureTarget(fd)) return __real_fsync(fd);
+    if (!fixtureTarget(fd))
+        return __real_fsync(fd);
     ++syncCalls;
-    if (faultKind == PauseSync) pauseIo();
-    if (faultKind == SyncError) { errno = EIO; return -1; }
+    if (faultKind == PauseSync)
+        pauseIo();
+    if (faultKind == SyncError)
+    {
+        errno = EIO;
+        return -1;
+    }
     return __real_fsync(fd);
 }
 
@@ -163,21 +195,28 @@ using State = rufus::WriteState;
 void writeFile(const QString& path, const QByteArray& bytes)
 {
     QFile file(path);
-    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size()) qFatal("Fixture write failed");
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size())
+        qFatal("Fixture write failed");
 }
 
 QByteArray readFile(const QString& path)
 {
     QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) qFatal("Fixture read failed");
+    if (!file.open(QIODevice::ReadOnly))
+        qFatal("Fixture read failed");
     return file.readAll();
 }
 
 void stopProcess(QProcess& process)
 {
-    if (process.state() == QProcess::NotRunning) return;
+    if (process.state() == QProcess::NotRunning)
+        return;
     process.terminate();
-    if (!process.waitForFinished(2000)) { process.kill(); process.waitForFinished(2000); }
+    if (!process.waitForFinished(fixtureTimeoutMs))
+    {
+        process.kill();
+        process.waitForFinished(fixtureTimeoutMs);
+    }
 }
 
 }
@@ -209,8 +248,9 @@ class TestRawWriteWidgets : public QObject
     {
         QDBusMessage request = QDBusMessage::createMethodCall(controlInterface, root, controlInterface, method);
         request.setArguments(args);
-        const QDBusMessage reply = connection_->call(request, QDBus::Block, 2000);
-        if (reply.type() != QDBusMessage::ReplyMessage) QTest::qFail(qPrintable(reply.errorMessage()), __FILE__, __LINE__);
+        const QDBusMessage reply = connection_->call(request, QDBus::Block, fixtureTimeoutMs);
+        if (reply.type() != QDBusMessage::ReplyMessage)
+            QTest::qFail(qPrintable(reply.errorMessage()), __FILE__, __LINE__);
         return reply;
     }
 
@@ -229,7 +269,7 @@ class TestRawWriteWidgets : public QObject
         const int opens = stat(QStringLiteral("opens"));
         QVERIFY(start_->isEnabled());
         QTest::mouseClick(start_, Qt::LeftButton);
-        QTRY_COMPARE_WITH_TIMEOUT(state(), State::AwaitingConfirmation, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(state(), State::AwaitingConfirmation, fixtureTimeoutMs);
         QCOMPARE(stat(QStringLiteral("opens")), opens);
     }
 
@@ -249,9 +289,9 @@ class TestRawWriteWidgets : public QObject
         dialog->selectFile(sourcePath_);
         auto* buttons = dialog->findChild<QDialogButtonBox*>();
         QVERIFY(buttons);
-        QTRY_VERIFY_WITH_TIMEOUT(buttons->button(QDialogButtonBox::Open)->isEnabled(), 1000);
+        QTRY_VERIFY_WITH_TIMEOUT(buttons->button(QDialogButtonBox::Open)->isEnabled(), uiTimeoutMs);
         QTest::mouseClick(buttons->button(QDialogButtonBox::Open), Qt::LeftButton);
-        QTRY_VERIFY_WITH_TIMEOUT(controller_->selection().rawImage, 1000);
+        QTRY_VERIFY_WITH_TIMEOUT(controller_->selection().rawImage, uiTimeoutMs);
         auto* devices = window_->findChild<QComboBox*>(QStringLiteral("deviceCombo"));
         QVERIFY(devices);
         devices->setFocus();
@@ -263,7 +303,8 @@ class TestRawWriteWidgets : public QObject
     {
         guiDelivery_ = guiDelivery_ && QThread::currentThread() == window_->thread();
         const int phase = writer().status().outcome.io.phase;
-        if (phases_.isEmpty() || phases_.last() != phase) phases_.append(phase);
+        if (phases_.isEmpty() || phases_.last() != phase)
+            phases_.append(phase);
     }
 
 private slots:
@@ -298,15 +339,15 @@ private slots:
         daemon_.start(QStringLiteral(RUFUS_DBUS_DAEMON), {QStringLiteral("--session"),
             QStringLiteral("--nofork"), QStringLiteral("--print-address=1"),
             QStringLiteral("--address=unix:tmpdir=%1").arg(directory_.path())});
-        QVERIFY(daemon_.waitForStarted(2000));
-        QVERIFY(daemon_.waitForReadyRead(2000));
+        QVERIFY(daemon_.waitForStarted(fixtureTimeoutMs));
+        QVERIFY(daemon_.waitForReadyRead(fixtureTimeoutMs));
         const QString address = QString::fromUtf8(daemon_.readLine()).trimmed();
         QVERIFY(address.startsWith(QStringLiteral("unix:")));
         connection_ = std::make_unique<QDBusConnection>(QDBusConnection::connectToBus(address, QStringLiteral("raw-widgets-test")));
         QVERIFY(connection_->isConnected());
         fixture_.start(QCoreApplication::applicationDirPath() + QStringLiteral("/udisks_fixture"), {address});
-        QVERIFY(fixture_.waitForStarted(2000));
-        QVERIFY2(fixture_.waitForReadyRead(2000), fixture_.readAllStandardError().constData());
+        QVERIFY(fixture_.waitForStarted(fixtureTimeoutMs));
+        QVERIFY2(fixture_.waitForReadyRead(fixtureTimeoutMs), fixture_.readAllStandardError().constData());
         QCOMPARE(fixture_.readLine(), QByteArray("ready\n"));
         objects_.clear();
         objects_[disk][blockInterface] = {
@@ -355,8 +396,10 @@ private slots:
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         const bool connected = connection_ && connection_->isConnected() && fixture_.state() == QProcess::Running;
         const int unexpected = connected ? stat(QStringLiteral("unexpected")) : 0;
-        if (connected) control(QStringLiteral("Quit"));
-        if (fixture_.state() != QProcess::NotRunning) fixture_.waitForFinished(2000);
+        if (connected)
+            control(QStringLiteral("Quit"));
+        if (fixture_.state() != QProcess::NotRunning)
+            fixture_.waitForFinished(fixtureTimeoutMs);
         connection_.reset();
         QDBusConnection::disconnectFromBus(QStringLiteral("raw-widgets-test"));
         stopProcess(fixture_); stopProcess(daemon_);
@@ -390,11 +433,12 @@ private slots:
         QCOMPARE(dialog->textFormat(), Qt::PlainText);
         QCOMPARE(dialog->defaultButton(), dialog->button(QMessageBox::Cancel));
         const QString screenshot = qEnvironmentVariable("RUFUS_TEST_WRITE_SCREENSHOT");
-        if (!screenshot.isEmpty()) QVERIFY(dialog->grab().save(screenshot));
+        if (!screenshot.isEmpty())
+            QVERIFY(dialog->grab().save(screenshot));
         QVERIFY(!select_->isEnabled());
         QVERIFY(!start_->isEnabled());
         approvePlan();
-        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Complete, 4000);
+        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Complete, writeTimeoutMs);
         QVERIFY(!writer().isActive());
         QVERIFY(!writer().isWriting());
         QVERIFY(!writer().plan());
@@ -423,12 +467,12 @@ private slots:
         startPlan();
         auto* dialog = window_->findChild<QMessageBox*>(QStringLiteral("writeConfirmation"));
         QTest::keyClick(dialog, Qt::Key_Escape);
-        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Cancelled, 1000);
+        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Cancelled, uiTimeoutMs);
         QCOMPARE(stat(QStringLiteral("opens")), 0);
         QCOMPARE(actualWritten.load(), uint64_t(0));
         startPlan();
         approvePlan();
-        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Complete, 4000);
+        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Complete, writeTimeoutMs);
         QCOMPARE(stat(QStringLiteral("opens")), 1);
     }
 
@@ -451,7 +495,8 @@ private slots:
         }
         else
         {
-            if (kind == QStringLiteral("source")) writeFile(sourcePath_, sourceBytes_);
+            if (kind == QStringLiteral("source"))
+                writeFile(sourcePath_, sourceBytes_);
             else
             {
                 objects_[disk][fsInterface][QStringLiteral("MountPoints")] =
@@ -460,7 +505,7 @@ private slots:
             }
             approvePlan();
         }
-        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Failed, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Failed, fixtureTimeoutMs);
         QCOMPARE(stat(QStringLiteral("opens")), 0);
         QCOMPARE(actualWritten.load(), uint64_t(0));
         const auto dialogs = window_->findChildren<QMessageBox*>(QStringLiteral("writeConfirmation"));
@@ -481,7 +526,7 @@ private slots:
         QFETCH(QString, mode);
         control(QStringLiteral("OpenMode"), {mode});
         startPlan(); approvePlan();
-        QTRY_COMPARE_WITH_TIMEOUT(state(), mode == QStringLiteral("dismiss") ? State::Cancelled : State::Failed, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(state(), mode == QStringLiteral("dismiss") ? State::Cancelled : State::Failed, fixtureTimeoutMs);
         QVERIFY(select_->isEnabled());
         QCOMPARE(actualWritten.load(), uint64_t(0));
         QVERIFY(progress_->value() < 100);
@@ -492,7 +537,7 @@ private slots:
     {
         control(QStringLiteral("HoldOpen"), {true});
         startPlan(); approvePlan();
-        QTRY_COMPARE_WITH_TIMEOUT(stat(QStringLiteral("openHeld")), 1, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(stat(QStringLiteral("openHeld")), 1, fixtureTimeoutMs);
         QTest::mouseClick(close_, Qt::LeftButton);
         QCOMPARE(state(), State::Cancelled);
         QVERIFY(window_->isVisible());
@@ -517,7 +562,7 @@ private slots:
         QFETCH(int, fault);
         faultKind = fault;
         startPlan(); approvePlan();
-        QTRY_COMPARE_WITH_TIMEOUT(pausedIo.available(), 1, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(pausedIo.available(), 1, fixtureTimeoutMs);
         QVERIFY(writer().isWriting());
         QVERIFY(!select_->isEnabled());
         QVERIFY(!start_->isEnabled());
@@ -545,7 +590,7 @@ private slots:
         QVERIFY(window_->isVisible());
         QVERIFY(progress_->value() < 100);
         resumeIo.release();
-        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Cancelled, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Cancelled, cancelTimeoutMs);
         QCOMPARE(syncCalls.load(), 1); // A cancellation still flushes copied bytes.
         QCOMPARE(writer().status().outcome.io.bytes_written, actualWritten.load());
         QVERIFY(actualWritten.load() > 0);
@@ -558,7 +603,7 @@ private slots:
     {
         faultKind = PauseCopy;
         startPlan(); approvePlan();
-        QTRY_COMPARE_WITH_TIMEOUT(pausedIo.available(), 1, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(pausedIo.available(), 1, fixtureTimeoutMs);
         window_->close();
         auto* dialog = window_->findChild<QMessageBox*>(QStringLiteral("cancelConfirmation"));
         QVERIFY(dialog && dialog->isVisible());
@@ -566,22 +611,22 @@ private slots:
         QCOMPARE(state(), State::Writing);
         QVERIFY(window_->isVisible());
         resumeIo.release();
-        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Complete, 4000);
+        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Complete, writeTimeoutMs);
     }
 
     void cancelledWorkerCanBeRetried()
     {
         faultKind = PauseCopy;
         startPlan(); approvePlan();
-        QTRY_COMPARE_WITH_TIMEOUT(pausedIo.available(), 1, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(pausedIo.available(), 1, fixtureTimeoutMs);
         writer().cancel();
         resumeIo.release();
-        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Cancelled, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Cancelled, cancelTimeoutMs);
         QVERIFY(actualWritten.load() > 0);
         faultKind = NoFault;
         actualWritten = 0; syncCalls = 0;
         startPlan(); approvePlan();
-        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Complete, 4000);
+        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Complete, writeTimeoutMs);
         QCOMPARE(actualWritten.load(), uint64_t(sourceBytes_.size()));
         QCOMPARE(stat(QStringLiteral("opens")), 2);
         QCOMPARE(syncCalls.load(), 1);
@@ -591,11 +636,11 @@ private slots:
     {
         faultKind = PauseCopy;
         startPlan(); approvePlan();
-        QTRY_COMPARE_WITH_TIMEOUT(pausedIo.available(), 1, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(pausedIo.available(), 1, fixtureTimeoutMs);
         controller_->setDiscovery({}, {});
         QCOMPARE(state(), State::Cancelling);
         resumeIo.release();
-        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Failed, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Failed, cancelTimeoutMs);
         QVERIFY(writer().statusText().contains(QStringLiteral("removed")));
         QCOMPARE(syncCalls.load(), 1);
         QVERIFY(!start_->isEnabled());
@@ -615,7 +660,7 @@ private slots:
         QFETCH(int, fault);
         faultKind = fault;
         startPlan(); approvePlan();
-        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Failed, 4000);
+        QTRY_COMPARE_WITH_TIMEOUT(state(), State::Failed, writeTimeoutMs);
         QVERIFY(!writer().plan());
         QVERIFY(!writer().status().outcome.problem.isEmpty());
         QCOMPARE(writer().status().outcome.io.bytes_written, actualWritten.load());
@@ -624,15 +669,17 @@ private slots:
         QCOMPARE(progress_->format(), QStringLiteral("FAILED"));
         QVERIFY(progress_->value() < 100);
         QVERIFY(select_->isEnabled());
-        if (fault == WriteError) QCOMPARE(actualWritten.load(), uint64_t(4096));
-        if (fault == SyncError) QVERIFY(writer().statusText().contains(QStringLiteral("Flushing failed")));
+        if (fault == WriteError)
+            QCOMPARE(actualWritten.load(), uint64_t(4096));
+        if (fault == SyncError)
+            QVERIFY(writer().statusText().contains(QStringLiteral("Flushing failed")));
     }
 
     void teardownJoinsWorker()
     {
         faultKind = PauseCopy;
         startPlan(); approvePlan();
-        QTRY_COMPARE_WITH_TIMEOUT(pausedIo.available(), 1, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(pausedIo.available(), 1, fixtureTimeoutMs);
         writer().cancel();
         resumeIo.release();
         window_.reset(); controller_.reset();

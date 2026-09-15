@@ -118,11 +118,11 @@ void RufusJob::reportPercentage(Percentage update)
 {
     // Negative percentages are discrete steps: never discard them. Starts,
     // completion, operation changes and resets must also pass through.
-    const bool boundary = !lastPercentage_
-        || update.operation != lastPercentage_->operation
-        || update.percent <= 0 || update.percent >= 100
-        || !std::isfinite(update.percent)
-        || update.percent < lastPercentage_->percent;
+    const bool operationChanged = lastPercentage_ && update.operation != lastPercentage_->operation;
+    const bool reset = lastPercentage_ && update.percent < lastPercentage_->percent;
+    const bool endpoint = update.percent <= 0 || update.percent >= 100 || !std::isfinite(update.percent);
+    const bool continuous = lastPercentage_ && !operationChanged && !reset;
+    const bool boundary = !continuous || endpoint;
     if (boundary)
         flushProgress();
     lastPercentage_ = update;
@@ -135,13 +135,14 @@ void RufusJob::reportPercentage(Percentage update)
 
 void RufusJob::reportCounts(Counts update)
 {
-    const bool boundary = !lastCounts_ || update.operation < 0 || update.forced
-        || update.operation != lastCounts_->operation
-        || update.messageId != lastCounts_->messageId
-        || update.total != lastCounts_->total
-        || update.processed == 0
-        || (update.total != 0 && update.processed >= update.total)
-        || update.processed < lastCounts_->processed;
+    const bool sameOperation = lastCounts_ && update.operation == lastCounts_->operation
+        && update.messageId == lastCounts_->messageId;
+    const bool sameTotal = lastCounts_ && update.total == lastCounts_->total;
+    const bool reset = lastCounts_ && update.processed < lastCounts_->processed;
+    const bool continuous = sameOperation && sameTotal && !reset;
+    const bool endpoint = update.processed == 0 || (update.total != 0 && update.processed >= update.total);
+    const bool explicitUpdate = update.operation < 0 || update.forced;
+    const bool boundary = !continuous || endpoint || explicitUpdate;
     if (boundary)
         flushProgress();
     lastCounts_ = update;

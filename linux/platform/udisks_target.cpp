@@ -14,12 +14,13 @@ namespace
 {
 const QString service = QStringLiteral("org.freedesktop.UDisks2");
 const QString root = QStringLiteral("/org/freedesktop/UDisks2");
+constexpr int requestTimeoutMs = 5000;
 }
 
 UDisksTarget::UDisksTarget(const QDBusConnection& connection, const RawWritePlan& plan,
     int authorizationTimeout, QObject* parent)
     : QObject(parent), connection_(connection), plan_(plan),
-      authorizationTimeout_(authorizationTimeout > 0 ? authorizationTimeout : 120000)
+      authorizationTimeout_(authorizationTimeout > 0 ? authorizationTimeout : DefaultAuthorizationTimeoutMs)
 {
     qDBusRegisterMetaType<UDisksInterfaces>();
     qDBusRegisterMetaType<UDisksObjects>();
@@ -61,8 +62,8 @@ void UDisksTarget::check()
 {
     if (state_ != State::Idle)
         return;
-    if (!connection_.isConnected() || !watchesDisconnect_
-        || !(connection_.connectionCapabilities() & QDBusConnection::UnixFileDescriptorPassing))
+    const bool passesDescriptors = connection_.connectionCapabilities() & QDBusConnection::UnixFileDescriptorPassing;
+    if (!connection_.isConnected() || !watchesDisconnect_ || !passesDescriptors)
     {
         fail(tr("D-Bus with Unix descriptor passing is required for target access."));
         return;
@@ -76,7 +77,7 @@ void UDisksTarget::snapshot(State state)
         QStringLiteral("/org/freedesktop/DBus"), QStringLiteral("org.freedesktop.DBus"), QStringLiteral("GetNameOwner"));
     request.setArguments({service});
     state_ = state;
-    pending_ = new QDBusPendingCallWatcher(connection_.asyncCall(request, 5000), this);
+    pending_ = new QDBusPendingCallWatcher(connection_.asyncCall(request, requestTimeoutMs), this);
     connect(pending_, &QDBusPendingCallWatcher::finished, this, &UDisksTarget::ownerResolved);
     emit stateChanged(state_);
 }
@@ -95,7 +96,7 @@ void UDisksTarget::ownerResolved(QDBusPendingCallWatcher* watcher)
     }
     const QDBusMessage request = QDBusMessage::createMethodCall(plan_.target().serviceOwner, root,
         QStringLiteral("org.freedesktop.DBus.ObjectManager"), QStringLiteral("GetManagedObjects"));
-    pending_ = new QDBusPendingCallWatcher(connection_.asyncCall(request, 5000), this);
+    pending_ = new QDBusPendingCallWatcher(connection_.asyncCall(request, requestTimeoutMs), this);
     connect(pending_, &QDBusPendingCallWatcher::finished, this, &UDisksTarget::snapshotFinished);
 }
 

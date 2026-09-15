@@ -62,8 +62,9 @@ int ScanWimFile(const char* path, int image, WIM_FILE_ANALYSIS* analysis)
 		else if (error == 0)
 		{
 			status = ISO_SCAN_PARTIAL;
-			if (analysis->metadata.valid_fields == WIM_VERSION_ALL &&
-				analysis->metadata.win_version.major != 0 && analysis->metadata.win_version.build != 0)
+			bool complete_version = analysis->metadata.valid_fields == WIM_VERSION_ALL;
+			bool known_version = analysis->metadata.win_version.major != 0 && analysis->metadata.win_version.build != 0;
+			if (complete_version && known_version)
 				status = ISO_SCAN_OK;
 		}
 	}

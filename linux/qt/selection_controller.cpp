@@ -75,19 +75,22 @@ void SelectionController::setDevices(const QList<Device>& devices)
     QList<Device> available;
     for (const Device& device : devices)
     {
-        if (device.removable && !device.readOnly && device.size > 0
-            && device.size <= quint64(std::numeric_limits<qint64>::max())
-            && !device.id.isEmpty() && !device.path.isEmpty()
-            && !ambiguous.contains(device.id))
+        const bool writableMedia = device.removable && !device.readOnly;
+        const bool supportedSize = device.size > 0 && device.size <= quint64(std::numeric_limits<qint64>::max());
+        const bool identified = !device.id.isEmpty() && !device.path.isEmpty() && !ambiguous.contains(device.id);
+        if (writableMedia && supportedSize && identified)
             available.append(device);
     }
 
     const Device* previous = findDevice(selection_.devices, selection_.deviceId);
     const Device* current = findDevice(available, selection_.deviceId);
-    const bool invalidated = !selection_.deviceId.isEmpty()
-        && (!previous || !current || previous->path != current->path
-            || previous->size != current->size || previous->identity != current->identity
-            || previous->serviceOwner != current->serviceOwner || previous->number != current->number);
+    const bool sameMedia = previous && current
+        && previous->path == current->path && previous->size == current->size;
+    const bool sameIdentity = previous && current
+        && previous->identity == current->identity && previous->number == current->number;
+    const bool sameService = previous && current && previous->serviceOwner == current->serviceOwner;
+    const bool selectionPreserved = sameMedia && sameIdentity && sameService;
+    const bool invalidated = !selection_.deviceId.isEmpty() && !selectionPreserved;
     selection_.devices = available;
     if (invalidated)
     {
@@ -168,10 +171,12 @@ void SelectionController::selectImage(const QString& path)
 bool SelectionController::canStartWrite() const
 {
     const Device* device = findDevice(selection_.devices, selection_.deviceId);
-    return !analysisActive_ && !writer_.isActive() && writer_.isAvailable()
-        && selection_.discoveryAvailable && selection_.rawImage
-        && selection_.imageState == ImageState::Complete
-        && device && !device->identity.isEmpty() && device->size >= selection_.imageSize;
+    const bool writerReady = !analysisActive_ && !writer_.isActive() && writer_.isAvailable();
+    const bool imageReady = selection_.rawImage && selection_.imageState == ImageState::Complete;
+    const bool targetReady = device && !device->identity.isEmpty() && device->size >= selection_.imageSize;
+    if (!selection_.discoveryAvailable || !targetReady)
+        return false;
+    return writerReady && imageReady;
 }
 
 IMAGE_WRITE_CHOICES SelectionController::isoWriteChoices(quint64 persistenceSize, bool gpt, bool fat) const

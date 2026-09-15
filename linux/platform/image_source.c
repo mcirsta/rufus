@@ -11,12 +11,15 @@ extern int IsIsoScanCancelled(void);
 
 static bool SameImageFile(const struct stat* initial, const struct stat* current)
 {
-	return S_ISREG(current->st_mode) && initial->st_dev == current->st_dev &&
-		initial->st_ino == current->st_ino && initial->st_size == current->st_size &&
-		initial->st_mtim.tv_sec == current->st_mtim.tv_sec &&
-		initial->st_mtim.tv_nsec == current->st_mtim.tv_nsec &&
-		initial->st_ctim.tv_sec == current->st_ctim.tv_sec &&
+	bool same_inode = initial->st_dev == current->st_dev && initial->st_ino == current->st_ino;
+	bool same_size = initial->st_size == current->st_size;
+	bool same_mtime = initial->st_mtim.tv_sec == current->st_mtim.tv_sec &&
+		initial->st_mtim.tv_nsec == current->st_mtim.tv_nsec;
+	bool same_ctime = initial->st_ctim.tv_sec == current->st_ctim.tv_sec &&
 		initial->st_ctim.tv_nsec == current->st_ctim.tv_nsec;
+	bool same_content = same_size && same_mtime && same_ctime;
+
+	return S_ISREG(current->st_mode) && same_inode && same_content;
 }
 
 void CloseImageFileSource(IMAGE_FILE_SOURCE* source)
@@ -95,7 +98,9 @@ int CheckImageFileSource(const IMAGE_FILE_SOURCE* source, const char* path)
 {
 	struct stat current;
 
-	if (source == NULL || source->fd < 0 || path == NULL || *path == 0)
+	if (source == NULL || source->fd < 0)
+		return EINVAL;
+	if (path == NULL || *path == 0)
 		return EINVAL;
 	if (IsIsoScanCancelled())
 		return ECANCELED;

@@ -21,6 +21,8 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+static constexpr int fixtureTimeoutMs = 2000;
+
 // Only the private fixture's regular-file inode gets synthetic kernel facts.
 // No block nodes are created or opened, and production has no test-mode branch.
 static ino_t fixtureInode;
@@ -46,7 +48,8 @@ extern "C" int __real_ioctl(int, unsigned long, ...);
 extern "C" int WrappedStat(int fd, struct stat* info)
 {
     const int error = RealStat(fd, info);
-    if (error == 0 && emulateBlock && info->st_ino == fixtureInode && info->st_dev == fixtureDevice)
+    const bool fixtureFile = error == 0 && info->st_ino == fixtureInode && info->st_dev == fixtureDevice;
+    if (emulateBlock && fixtureFile)
     {
         info->st_mode = (info->st_mode & ~S_IFMT) | S_IFBLK;
         info->st_rdev = dev_t(nativeNumber);
@@ -61,14 +64,23 @@ extern "C" int __wrap_ioctl(int fd, unsigned long request, ...)
     void* value = va_arg(args, void*);
     va_end(args);
     struct stat info;
-    if (RealStat(fd, &info) == 0 && emulateBlock && info.st_ino == fixtureInode
-        && info.st_dev == fixtureDevice)
+    const int error = RealStat(fd, &info);
+    const bool fixtureFile = error == 0 && info.st_ino == fixtureInode && info.st_dev == fixtureDevice;
+    if (emulateBlock && fixtureFile)
     {
-        if (nativeError) { errno = nativeError; return -1; }
-        if (request == BLKGETSIZE64) *static_cast<uint64_t*>(value) = nativeCapacity;
-        else if (request == BLKROGET) *static_cast<int*>(value) = nativeReadOnly;
-        else if (request == BLKSSZGET) *static_cast<int*>(value) = nativeSector;
-        else qFatal("Unexpected fixture ioctl");
+        if (nativeError)
+        {
+            errno = nativeError;
+            return -1;
+        }
+        if (request == BLKGETSIZE64)
+            *static_cast<uint64_t*>(value) = nativeCapacity;
+        else if (request == BLKROGET)
+            *static_cast<int*>(value) = nativeReadOnly;
+        else if (request == BLKSSZGET)
+            *static_cast<int*>(value) = nativeSector;
+        else
+            qFatal("Unexpected fixture ioctl");
         return 0;
     }
     return __real_ioctl(fd, request, value);
@@ -90,27 +102,35 @@ using State = rufus::UDisksTarget::State;
 void writeFile(const QString& path, const QByteArray& bytes)
 {
     QFile file(path);
-    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size()) qFatal("Fixture write failed");
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size())
+        qFatal("Fixture write failed");
 }
 
 QByteArray readFile(const QString& path)
 {
     QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) qFatal("Fixture read failed");
+    if (!file.open(QIODevice::ReadOnly))
+        qFatal("Fixture read failed");
     return file.readAll();
 }
 
 void stopProcess(QProcess& process)
 {
-    if (process.state() == QProcess::NotRunning) return;
+    if (process.state() == QProcess::NotRunning)
+        return;
     process.terminate();
-    if (!process.waitForFinished(2000)) { process.kill(); process.waitForFinished(2000); }
+    if (!process.waitForFinished(fixtureTimeoutMs))
+    {
+        process.kill();
+        process.waitForFinished(fixtureTimeoutMs);
+    }
 }
 
 int descriptorCount()
 {
     DIR* directory = opendir("/proc/self/fd");
-    if (!directory) qFatal("Cannot count descriptors");
+    if (!directory)
+        qFatal("Cannot count descriptors");
     int count = 0;
     while (readdir(directory)) ++count;
     closedir(directory);
@@ -136,8 +156,9 @@ class TestUDisksTarget : public QObject
     {
         QDBusMessage request = QDBusMessage::createMethodCall(controlInterface, root, controlInterface, method);
         request.setArguments(args);
-        const QDBusMessage reply = connection_->call(request, QDBus::Block, 2000);
-        if (reply.type() != QDBusMessage::ReplyMessage) QTest::qFail(qPrintable(reply.errorMessage()), __FILE__, __LINE__);
+        const QDBusMessage reply = connection_->call(request, QDBus::Block, fixtureTimeoutMs);
+        if (reply.type() != QDBusMessage::ReplyMessage)
+            QTest::qFail(qPrintable(reply.errorMessage()), __FILE__, __LINE__);
         return reply;
     }
 
@@ -184,15 +205,15 @@ private slots:
         daemon_.start(QStringLiteral(RUFUS_DBUS_DAEMON), {QStringLiteral("--session"),
             QStringLiteral("--nofork"), QStringLiteral("--print-address=1"),
             QStringLiteral("--address=unix:tmpdir=%1").arg(directory_.path())});
-        QVERIFY(daemon_.waitForStarted(2000));
-        QVERIFY(daemon_.waitForReadyRead(2000));
+        QVERIFY(daemon_.waitForStarted(fixtureTimeoutMs));
+        QVERIFY(daemon_.waitForReadyRead(fixtureTimeoutMs));
         const QString address = QString::fromUtf8(daemon_.readLine()).trimmed();
         QVERIFY(address.startsWith(QStringLiteral("unix:")));
         connection_ = std::make_unique<QDBusConnection>(QDBusConnection::connectToBus(address, QStringLiteral("raw-private-test")));
         QVERIFY(connection_->isConnected());
         fixture_.start(QCoreApplication::applicationDirPath() + QStringLiteral("/udisks_fixture"), {address});
-        QVERIFY(fixture_.waitForStarted(2000));
-        QVERIFY2(fixture_.waitForReadyRead(2000), fixture_.readAllStandardError().constData());
+        QVERIFY(fixture_.waitForStarted(fixtureTimeoutMs));
+        QVERIFY2(fixture_.waitForReadyRead(fixtureTimeoutMs), fixture_.readAllStandardError().constData());
         QCOMPARE(fixture_.readLine(), QByteArray("ready\n"));
         objects_.clear();
         objects_[disk][blockInterface] = {
@@ -225,8 +246,10 @@ private slots:
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         const bool connected = connection_ && connection_->isConnected() && fixture_.state() == QProcess::Running;
         const int unexpected = connected ? stat(QStringLiteral("unexpected")) : 0;
-        if (connected) control(QStringLiteral("Quit"));
-        if (fixture_.state() != QProcess::NotRunning) fixture_.waitForFinished(2000);
+        if (connected)
+            control(QStringLiteral("Quit"));
+        if (fixture_.state() != QProcess::NotRunning)
+            fixture_.waitForFinished(fixtureTimeoutMs);
         connection_.reset();
         QDBusConnection::disconnectFromBus(QStringLiteral("raw-private-test"));
         stopProcess(fixture_); stopProcess(daemon_);
@@ -238,11 +261,11 @@ private slots:
     {
         const int before = descriptorCount();
         makeAccess();
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), 2000);
+        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
         QCOMPARE(stat(QStringLiteral("opens")), 0); // Checking cannot prompt.
         QVERIFY(!access_->takeDescriptor().isValid());
         access_->authorize();
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Ready, qPrintable(access_->problem()), 2000);
+        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Ready, qPrintable(access_->problem()), fixtureTimeoutMs);
         QVERIFY2(access_->problem().isEmpty(), qPrintable(access_->problem()));
         QDBusUnixFileDescriptor descriptor = access_->takeDescriptor();
         QVERIFY(descriptor.isValid());
@@ -256,7 +279,7 @@ private slots:
         QCOMPARE(readFile(sourcePath_), sourceBytes_);
         descriptor = {};
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-        QTRY_COMPARE_WITH_TIMEOUT(descriptorCount(), before, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(descriptorCount(), before, fixtureTimeoutMs);
     }
 
     void invalidInput_data()
@@ -276,9 +299,9 @@ private slots:
         objects_[partition][fsInterface][QStringLiteral("MountPoints")] = QVariant::fromValue(QList<QByteArray>{});
         setObjects();
         makeAccess();
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), 2000);
+        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
         access_->authorize();
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Ready, qPrintable(access_->problem()), 2000);
+        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Ready, qPrintable(access_->problem()), fixtureTimeoutMs);
         QDBusUnixFileDescriptor descriptor = access_->takeDescriptor();
         QVERIFY(descriptor.isValid());
         RAW_WRITE_RESULT result;
@@ -295,9 +318,9 @@ private slots:
     void changedAfterAcquisition()
     {
         makeAccess();
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), 2000);
+        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
         access_->authorize();
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Ready, qPrintable(access_->problem()), 2000);
+        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Ready, qPrintable(access_->problem()), fixtureTimeoutMs);
         QDBusUnixFileDescriptor descriptor = access_->takeDescriptor();
         nativeNumber++;
         RAW_WRITE_RESULT result;
@@ -311,12 +334,21 @@ private slots:
     {
         QFETCH(QString, kind);
         QString path = sourcePath_;
-        if (kind == QStringLiteral("empty")) writeFile(path, {});
-        if (kind == QStringLiteral("marker")) writeFile(path, QByteArray(4096, '\0'));
-        if (kind == QStringLiteral("alignment")) writeFile(path, sourceBytes_ + 'x');
-        if (kind == QStringLiteral("suffix")) { path += QStringLiteral(".vhd"); writeFile(path, sourceBytes_); }
-        if (kind == QStringLiteral("capacity")) device_.size = 512;
-        if (kind == QStringLiteral("synthetic")) device_.identity.clear();
+        if (kind == QStringLiteral("empty"))
+            writeFile(path, {});
+        if (kind == QStringLiteral("marker"))
+            writeFile(path, QByteArray(4096, '\0'));
+        if (kind == QStringLiteral("alignment"))
+            writeFile(path, sourceBytes_ + 'x');
+        if (kind == QStringLiteral("suffix"))
+        {
+            path += QStringLiteral(".vhd");
+            writeFile(path, sourceBytes_);
+        }
+        if (kind == QStringLiteral("capacity"))
+            device_.size = 512;
+        if (kind == QStringLiteral("synthetic"))
+            device_.identity.clear();
         QVERIFY(!plan_->prepare(path, device_).isEmpty());
         QCOMPARE(plan_->source().fd, -1);
         QCOMPARE(stat(QStringLiteral("opens")), 0);
@@ -338,15 +370,21 @@ private slots:
         };
         if (kind == QStringLiteral("mounted"))
             objects_[partition][fsInterface][QStringLiteral("MountPoints")] = QVariant::fromValue(QList<QByteArray>{QByteArray("/media/test\0", 12)});
-        if (kind == QStringLiteral("mount-unknown")) objects_[partition][fsInterface] = {};
-        if (kind == QStringLiteral("mount-malformed")) objects_[partition][fsInterface][QStringLiteral("MountPoints")] = 7;
-        if (kind == QStringLiteral("source")) objects_[partition][blockInterface][QStringLiteral("DeviceNumber")] = QVariant::fromValue(quint64(plan_->source().info.st_dev));
-        if (kind == QStringLiteral("swap")) objects_[partition][QStringLiteral("org.freedesktop.UDisks2.Swapspace")] = {};
-        if (kind == QStringLiteral("encrypted")) objects_[partition][QStringLiteral("org.freedesktop.UDisks2.Encrypted")] = {};
-        if (kind == QStringLiteral("raid")) objects_[partition][blockInterface][QStringLiteral("MDRaidMember")] = QVariant::fromValue(QDBusObjectPath(root + QStringLiteral("/mdraid/test")));
+        if (kind == QStringLiteral("mount-unknown"))
+            objects_[partition][fsInterface] = {};
+        if (kind == QStringLiteral("mount-malformed"))
+            objects_[partition][fsInterface][QStringLiteral("MountPoints")] = 7;
+        if (kind == QStringLiteral("source"))
+            objects_[partition][blockInterface][QStringLiteral("DeviceNumber")] = QVariant::fromValue(quint64(plan_->source().info.st_dev));
+        if (kind == QStringLiteral("swap"))
+            objects_[partition][QStringLiteral("org.freedesktop.UDisks2.Swapspace")] = {};
+        if (kind == QStringLiteral("encrypted"))
+            objects_[partition][QStringLiteral("org.freedesktop.UDisks2.Encrypted")] = {};
+        if (kind == QStringLiteral("raid"))
+            objects_[partition][blockInterface][QStringLiteral("MDRaidMember")] = QVariant::fromValue(QDBusObjectPath(root + QStringLiteral("/mdraid/test")));
         setObjects();
         makeAccess();
-        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, fixtureTimeoutMs);
         QVERIFY(!access_->problem().isEmpty());
         QCOMPARE(stat(QStringLiteral("opens")), 0);
     }
@@ -363,9 +401,9 @@ private slots:
         QFETCH(QString, mode);
         control(QStringLiteral("OpenMode"), {mode});
         makeAccess();
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), 2000);
+        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
         access_->authorize();
-        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), mode == QStringLiteral("dismiss") ? State::Cancelled : State::Failed, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), mode == QStringLiteral("dismiss") ? State::Cancelled : State::Failed, fixtureTimeoutMs);
         QVERIFY(!access_->takeDescriptor().isValid());
         QCOMPARE(stat(QStringLiteral("opens")), 1);
     }
@@ -380,16 +418,22 @@ private slots:
     void invalidDescriptor()
     {
         QFETCH(QString, kind);
-        if (kind == QStringLiteral("regular")) emulateBlock = false;
-        if (kind == QStringLiteral("number")) nativeNumber++;
-        if (kind == QStringLiteral("capacity")) nativeCapacity--;
-        if (kind == QStringLiteral("readonly")) nativeReadOnly = 1;
-        if (kind == QStringLiteral("sector")) nativeSector = 8192;
-        if (kind == QStringLiteral("ioctl")) nativeError = ENODEV;
+        if (kind == QStringLiteral("regular"))
+            emulateBlock = false;
+        if (kind == QStringLiteral("number"))
+            nativeNumber++;
+        if (kind == QStringLiteral("capacity"))
+            nativeCapacity--;
+        if (kind == QStringLiteral("readonly"))
+            nativeReadOnly = 1;
+        if (kind == QStringLiteral("sector"))
+            nativeSector = 8192;
+        if (kind == QStringLiteral("ioctl"))
+            nativeError = ENODEV;
         makeAccess();
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), 2000);
+        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
         access_->authorize();
-        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, fixtureTimeoutMs);
         QVERIFY(!access_->takeDescriptor().isValid());
         QVERIFY(!access_->problem().isEmpty());
     }
@@ -397,11 +441,11 @@ private slots:
     void changedBeforeAuthorization()
     {
         makeAccess();
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), 2000);
+        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
         objects_[drive][driveInterface][QStringLiteral("Serial")] = QStringLiteral("replaced");
         setObjects();
         access_->authorize();
-        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, fixtureTimeoutMs);
         QCOMPARE(stat(QStringLiteral("opens")), 0);
     }
 
@@ -409,7 +453,7 @@ private slots:
     {
         control(QStringLiteral("ReleaseName"));
         makeAccess();
-        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, fixtureTimeoutMs);
         QVERIFY(!access_->takeDescriptor().isValid());
         QCOMPARE(stat(QStringLiteral("opens")), 0);
     }
@@ -418,11 +462,11 @@ private slots:
     {
         control(QStringLiteral("HoldOpen"), {true});
         makeAccess();
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), 2000);
+        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
         access_->authorize();
-        QTRY_COMPARE_WITH_TIMEOUT(stat(QStringLiteral("openHeld")), 1, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(stat(QStringLiteral("openHeld")), 1, fixtureTimeoutMs);
         stopProcess(daemon_);
-        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, fixtureTimeoutMs);
         QVERIFY(!access_->takeDescriptor().isValid());
     }
 
@@ -439,19 +483,26 @@ private slots:
         const int before = descriptorCount();
         control(QStringLiteral("HoldOpen"), {true});
         makeAccess(kind == QStringLiteral("timeout") ? 100 : 5000);
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), 2000);
+        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
         access_->authorize();
-        QTRY_COMPARE_WITH_TIMEOUT(stat(QStringLiteral("openHeld")), 1, 2000);
-        if (kind == QStringLiteral("device")) objects_[drive][driveInterface][QStringLiteral("TimeMediaDetected")] = QVariant::fromValue(quint64(99999));
-        if (kind == QStringLiteral("source")) writeFile(sourcePath_, sourceBytes_);
-        if (kind == QStringLiteral("mount")) objects_[disk][fsInterface][QStringLiteral("MountPoints")] = QVariant::fromValue(QList<QByteArray>{QByteArray("/media/test\0", 12)});
-        if (kind == QStringLiteral("remove")) objects_.remove(disk);
+        QTRY_COMPARE_WITH_TIMEOUT(stat(QStringLiteral("openHeld")), 1, fixtureTimeoutMs);
+        if (kind == QStringLiteral("device"))
+            objects_[drive][driveInterface][QStringLiteral("TimeMediaDetected")] = QVariant::fromValue(quint64(99999));
+        if (kind == QStringLiteral("source"))
+            writeFile(sourcePath_, sourceBytes_);
+        if (kind == QStringLiteral("mount"))
+            objects_[disk][fsInterface][QStringLiteral("MountPoints")] = QVariant::fromValue(QList<QByteArray>{QByteArray("/media/test\0", 12)});
+        if (kind == QStringLiteral("remove"))
+            objects_.remove(disk);
         setObjects();
-        if (kind == QStringLiteral("service")) control(QStringLiteral("ReleaseName"));
-        if (kind == QStringLiteral("cancel")) access_->cancel();
-        if (kind == QStringLiteral("timeout")) QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, 2000);
+        if (kind == QStringLiteral("service"))
+            control(QStringLiteral("ReleaseName"));
+        if (kind == QStringLiteral("cancel"))
+            access_->cancel();
+        if (kind == QStringLiteral("timeout"))
+            QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, fixtureTimeoutMs);
         control(QStringLiteral("ReplyOpen"));
-        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), kind == QStringLiteral("cancel") ? State::Cancelled : State::Failed, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), kind == QStringLiteral("cancel") ? State::Cancelled : State::Failed, fixtureTimeoutMs);
         QVERIFY(!access_->takeDescriptor().isValid());
         QCOMPARE(stat(QStringLiteral("opens")), 1);
         // An ordinary bus round trip ensures the fixture sent the late reply.
@@ -460,7 +511,7 @@ private slots:
         QVERIFY(access_->state() != State::Ready);
         access_.reset();
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-        QTRY_COMPARE_WITH_TIMEOUT(descriptorCount(), before, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(descriptorCount(), before, fixtureTimeoutMs);
     }
 };
 

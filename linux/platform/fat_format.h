@@ -4,12 +4,17 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+enum {
+	FAT32_LABEL_LENGTH = 11,
+	FAT32_DIAGNOSTIC_CAPACITY = 4096
+};
+
 typedef struct {
 	uint64_t offset;
 	uint64_t size;
 	uint32_t cluster_size;
 	uint32_t volume_id;
-	char label[12];
+	char label[FAT32_LABEL_LENGTH + 1];
 } FAT32_FORMAT_OPTIONS;
 
 typedef struct {
@@ -18,7 +23,7 @@ typedef struct {
 	int signal;
 	int sync_error;
 	uint64_t filesystem_bytes;
-	char diagnostics[4096];
+	char diagnostics[FAT32_DIAGNOSTIC_CAPACITY];
 } FAT32_FORMAT_RESULT;
 
 #ifdef __cplusplus

@@ -30,7 +30,8 @@ int main(void)
 			for (int extra = 0; extra < 2; extra++) {
 				uint64_t end = last - extra * (16ULL << 20);
 				size = ((end - first) / track) * track;
-				if (cluster % sectors[s] == 0) size = (size / cluster) * cluster;
+				if (cluster % sectors[s] == 0)
+					size = (size / cluster) * cluster;
 				CHECK(GetMainPartitionSize(first, end, sectors[s], tracks[t], clusters[c]) == size);
 			}
 		}

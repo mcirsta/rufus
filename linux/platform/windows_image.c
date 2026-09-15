@@ -25,8 +25,9 @@ int ScanWindowsImage(const ISO_ANALYSIS_SOURCE* source, ISO_ANALYSIS* analysis,
 	memset(&analysis->report.win_version, 0, sizeof(analysis->report.win_version));
 	analysis->pending |= ISO_PENDING_WINDOWS;
 	path = analysis->report.wininst_path[0];
-	if (source == NULL || memchr(path, 0, sizeof(analysis->report.wininst_path[0])) == NULL ||
-		strncmp(path, "?:/", 3) != 0)
+	bool terminated_path = memchr(path, 0, sizeof(analysis->report.wininst_path[0])) != NULL;
+	bool image_relative_path = terminated_path && strncmp(path, "?:/", 3) == 0;
+	if (source == NULL || !image_relative_path)
 	{
 		error = WIMLIB_ERR_INVALID_PARAM;
 		goto out;
@@ -57,8 +58,9 @@ out:
 	analysis->report.wininst_version = windows->metadata.archive.version;
 	analysis->report.win_version = windows->metadata.win_version;
 	windows->state = WINDOWS_IMAGE_UNKNOWN;
-	if (windows->metadata.valid_fields == WIM_VERSION_ALL &&
-		windows->metadata.win_version.major != 0 && windows->metadata.win_version.build != 0)
+	bool complete_version = windows->metadata.valid_fields == WIM_VERSION_ALL;
+	bool known_version = windows->metadata.win_version.major != 0 && windows->metadata.win_version.build != 0;
+	if (complete_version && known_version)
 	{
 		windows->state = WINDOWS_IMAGE_KNOWN;
 		if (!HAS_WINPE(analysis->report) || analysis->report.winpe_options_known)

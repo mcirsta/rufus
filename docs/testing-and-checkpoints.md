@@ -2622,3 +2622,79 @@ cleanup against actual filesystem behavior. Real-device orchestration, other
 partition layouts, filesystem-specific policy and boot support remain later
 work. Application `.iso` START stays gated; this checkpoint does not establish
 bootability or erase old filesystem signatures/data.
+
+## CP10e follow-up: readable validation and named constants (2026-09-15)
+
+The native FAT32 and GPT components now name compound checks by their meaning,
+including sector alignment, supported cluster sizes, partition bounds and
+expected filesystem fields. Pointer checks, division guards and unsigned-size
+guards remain explicit. The FAT32 read-back check also reports the particular
+validation that failed, while retaining its existing error codes.
+
+Repeated geometry, FAT limits, GPT table dimensions, descriptor slots and
+timeouts have named constants. Dependent GPT locations and formatter arguments
+are derived from those definitions. Label and diagnostic buffer capacities are
+named without changing the public structures' sizes. The small C
+`MonotonicMilliseconds` helper stays; no new abstraction or helper chain was
+introduced. Native formatter choices and the preference for direct tool
+invocation are recorded in the plan.
+
+Repository-level `AGENTS.md` and the plan's coding-style section record the
+user's preference for future code: meaningful helper variables for compound
+conditions, constants with clear purpose/units, and useful function boundaries.
+
+The affected targets build without warnings. The three affected CTest suites
+pass normally (**5.53 seconds**) and with **ASan/UBSan/leak checking
+(6.56 seconds)**: 37 FAT32 cases, 27 GPT cases including three formatting
+integrations, and 2,527 shared placement checks. Existing tests were reused for
+this cleanup. The full 47-entry suite was not rerun; Windows code and the UI
+were not changed. Logs are `/tmp/rufus-readability-build.log`,
+`/tmp/rufus-readability-tests.log`, `/tmp/rufus-readability-sanitizer-build.log`
+and `/tmp/rufus-readability-sanitizer-tests.log`. Changes remain uncommitted.
+
+## Port-wide coding review (2026-09-15)
+
+Reviewed the newly authored Linux adapters, Qt code, headers, test drivers,
+functional fixtures and build support against the recorded coding preferences.
+The scope includes the small upstream-wimlib reader extension. Copied/extracted
+Rufus algorithms retain their original style. This pass changes 46 code/test
+files; a hash comparison confirms all 528 files under `src/` captured before
+this review remain unchanged, including pre-existing local modifications.
+
+The fixes give image identity, target eligibility, sector alignment, extraction
+paths, WIM input and progress boundaries meaningful local condition names.
+Pointer, offset and division guards remain explicit; system-call failures retain
+their original ordering and error codes. Repeated transfer limits, timeouts,
+sector geometry and test descriptor offsets now have names. Numeric test fault
+modes and UI actions use enums. Compressed test branches were expanded, and two
+coherent groups were moved out of the long WIM extraction test entry point.
+Device records explicitly default their native discovery fields to empty values,
+which also removes incomplete-initializer warnings from synthetic test records.
+
+No authored lambdas, custom templates or abstraction layers were introduced.
+The small C clock helper and bounded, batched I/O remain. Test format expectations
+stay independent of production constants. `AGENTS.md` and the plan clarify that
+these preferences apply to our test drivers as well as production code.
+
+Validation:
+
+- The first affected batch passed 11/11 component and functional tests.
+- The complete normal suite passed **47/47 CTest entries (45.53 seconds)**.
+- The complete **ASan/UBSan/leak-check suite passed 47/47 (84.25 seconds)**.
+- After the final enum naming changes in two Qt test tables, all three affected
+  Qt entries passed again: **3/3 normal (5.04 seconds)** and **3/3 sanitized
+  (8.09 seconds)**. No production code changed after the full suite runs.
+- Both builds include the optional system-wimlib comparison. The guest-only
+  `test_usb_guest` and `check_usb_mount` helpers also compile. All 26 Python
+  scripts parse, guest shell scripts pass `bash -n`, and whitespace checks pass.
+- Rebuilt authored files produce no compiler warnings. Existing bundled
+  libcdio/wimlib pedantic warnings remain; those sources were not restyled.
+
+Full test logs are `/tmp/rufus-style-tests.log` and
+`/tmp/rufus-style-sanitizer-tests.log`. The final Qt logs are
+`/tmp/rufus-style-qt-final-tests.log` and
+`/tmp/rufus-style-qt-final-sanitizer-tests.log`. The cleanup-only code diff is
+`/tmp/rufus-style-review.diff`; these temporary files are not durable artifacts.
+No new VM boot, physical USB or Windows validation was performed. Changes remain
+local and uncommitted. The next implementation checkpoint remains the FAT32
+extraction qualification described above.

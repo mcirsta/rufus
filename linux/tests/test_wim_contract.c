@@ -235,7 +235,8 @@ static void CheckDescriptorArguments(const char* directory)
 	CHECK(OpenWimFileDescriptor(-1, NULL) == WIMLIB_ERR_INVALID_PARAM);
 	CHECK(OpenWimFileDescriptor(-1, &wim) == WIMLIB_ERR_INVALID_PARAM && wim == NULL);
 	fd = open(directory, O_RDONLY | O_DIRECTORY);
-	if (fd < 0 || pipe(pipes) != 0) exit(2);
+	if (fd < 0 || pipe(pipes) != 0)
+		exit(2);
 	wim = (WIMStruct*)1;
 	CHECK(OpenWimFileDescriptor(fd, &wim) == WIMLIB_ERR_INVALID_PARAM && wim == NULL);
 	CHECK(fcntl(fd, F_GETFD) >= 0);

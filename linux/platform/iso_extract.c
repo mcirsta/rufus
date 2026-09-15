@@ -64,12 +64,17 @@ static bool ValidImagePath(const char* path)
 	const char* end;
 	size_t size;
 
-	if (path == NULL || path[0] != '/' || path[1] == 0 || strlen(path) >= ISO_SCAN_PATH_MAX)
+	if (path == NULL || path[0] != '/')
+		return false;
+	bool valid_length = path[1] != 0 && strlen(path) < ISO_SCAN_PATH_MAX;
+	if (!valid_length)
 		return false;
 	for (path++; *path; path = end + 1) {
 		end = strchr(path, '/');
 		size = end == NULL ? strlen(path) : (size_t)(end - path);
-		if (size == 0 || (size == 1 && path[0] == '.') || (size == 2 && path[0] == '.' && path[1] == '.'))
+		bool dot_directory = size == 1 && path[0] == '.';
+		bool parent_directory = size == 2 && path[0] == '.' && path[1] == '.';
+		if (size == 0 || dot_directory || parent_directory)
 			return false;
 		if (end == NULL)
 			return true;
@@ -174,8 +179,12 @@ static int ExtractFile(ISO_EXTRACT_CONTEXT* context, const ISO_TREE_ENTRY* entry
 	int status = OpenIsoFileReader(&reader, context->view.iso, context->view.udf, entry->path);
 	int error = status == ISO_SCAN_OK ? 0 : (status == ISO_SCAN_CANCELLED ? ECANCELED : EIO);
 
-	if (error == 0 && (reader.size != size || (entry->iso != NULL && reader.lsn != entry->iso->lsn)))
-		error = EIO;
+	if (error == 0) {
+		bool same_size = reader.size == size;
+		bool same_location = entry->iso == NULL || reader.lsn == entry->iso->lsn;
+		if (!same_size || !same_location)
+			error = EIO;
+	}
 	if (error == 0) {
 		output = openat(parent, entry->name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0644);
 		if (output < 0)
@@ -206,20 +215,27 @@ static int CheckEntry(ISO_EXTRACT_CONTEXT* context, const ISO_TREE_ENTRY* entry,
 	*skip = false;
 	if (entry->kind == ISO_TREE_DEEP)
 		return ENOTSUP;
-	if (!ValidImagePath(entry->path) || entry->name[0] == 0 || strchr(entry->name, '/') != NULL)
+	bool valid_name = entry->name[0] != 0 && strchr(entry->name, '/') == NULL;
+	if (!ValidImagePath(entry->path) || !valid_name)
 		return EINVAL;
-	if (entry->iso != NULL && context->rockridge && entry->iso->rr.b3_rock == yep) {
+	bool has_posix_metadata = entry->iso != NULL && context->rockridge && entry->iso->rr.b3_rock == yep;
+	if (has_posix_metadata) {
 		mode = iso9660_get_posix_filemode(entry->iso);
-		if (entry->iso->rr.psz_symlink != NULL || (!S_ISREG(mode) && !S_ISDIR(mode)))
+		bool supported_type = S_ISREG(mode) || S_ISDIR(mode);
+		if (entry->iso->rr.psz_symlink != NULL || !supported_type)
 			return ENOTSUP;
 	}
-	if (entry->udf != NULL && entry->udf->fe.icb_tag.file_type != ICBTAG_FILE_TYPE_REGULAR &&
-		entry->udf->fe.icb_tag.file_type != ICBTAG_FILE_TYPE_DIRECTORY)
-		return ENOTSUP;
+	if (entry->udf != NULL) {
+		uint8_t type = entry->udf->fe.icb_tag.file_type;
+		bool supported_type = type == ICBTAG_FILE_TYPE_REGULAR || type == ICBTAG_FILE_TYPE_DIRECTORY;
+		if (!supported_type)
+			return ENOTSUP;
+	}
 	if (entry->kind != ISO_TREE_FILE)
 		return 0;
 	size = entry->iso != NULL ? entry->iso->total_size : udf_get_file_length(entry->udf);
-	if (size > INT64_MAX || (context->preflight && size > UINT64_MAX - context->expected_bytes))
+	bool total_overflow = context->preflight && size > UINT64_MAX - context->expected_bytes;
+	if (size > INT64_MAX || total_overflow)
 		return EOVERFLOW;
 	GetIsoFileProps(entry->parent, (int64_t)size, entry->name, &props);
 	*skip = props.is_root_ldlinux_sys;
@@ -285,7 +301,8 @@ static int OpenExtractionSource(ISO_EXTRACT_CONTEXT* context, const ISO_ANALYSIS
 		options, &analysis, &context->view);
 	if (status != ISO_SCAN_OK && status != ISO_SCAN_PARTIAL)
 		return status == ISO_SCAN_CANCELLED ? ECANCELED : EIO;
-	if (!analysis.tree_complete || (analysis.pending & (ISO_PENDING_DEEP_DIRECTORIES | ISO_PENDING_TRUNCATED)))
+	bool incomplete_tree = (analysis.pending & (ISO_PENDING_DEEP_DIRECTORIES | ISO_PENDING_TRUNCATED)) != 0;
+	if (!analysis.tree_complete || incomplete_tree)
 		return ENOTSUP;
 	return 0;
 }

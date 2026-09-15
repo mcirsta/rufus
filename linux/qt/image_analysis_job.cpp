@@ -8,6 +8,7 @@
 #include <cdio/logging.h>
 #include <QFile>
 #include <QFileInfo>
+#include <iterator>
 
 static void initializeImageResources()
 {
@@ -84,7 +85,7 @@ private:
 void readEmbeddedVersions(ISO_ANALYSIS_OPTIONS& options)
 {
     const char* paths[] = {":/rufus/syslinux/ldlinux_v4.sys", ":/rufus/syslinux/ldlinux_v6.sys"};
-    for (int i = 0; i < 2; i++)
+    for (size_t i = 0; i < std::size(paths); i++)
     {
         QFile file(QString::fromLatin1(paths[i]));
         if (!file.open(QIODevice::ReadOnly))
@@ -124,8 +125,9 @@ void ImageAnalysisJob::reportFailure(QString message)
 bool ImageAnalysisJob::imageUnchanged() const
 {
     const QFileInfo info(path_);
-    return info.isFile() && info.size() > 0 && quint64(info.size()) == size_
-        && info.lastModified() == modified_;
+    const bool sameSize = info.size() > 0 && quint64(info.size()) == size_;
+    const bool sameModification = info.lastModified() == modified_;
+    return info.isFile() && sameSize && sameModification;
 }
 
 void ImageAnalysisJob::execute()

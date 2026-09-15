@@ -20,6 +20,8 @@
 
 #include <memory>
 
+static constexpr int uiTimeoutMs = 1000;
+
 namespace
 {
 
@@ -196,9 +198,9 @@ private slots:
         dialog->selectFile(path);
         QDialogButtonBox* buttons = dialog->findChild<QDialogButtonBox*>();
         QVERIFY(buttons && buttons->button(QDialogButtonBox::Open));
-        QTRY_VERIFY_WITH_TIMEOUT(buttons->button(QDialogButtonBox::Open)->isEnabled(), 1000);
+        QTRY_VERIFY_WITH_TIMEOUT(buttons->button(QDialogButtonBox::Open)->isEnabled(), uiTimeoutMs);
         QTest::mouseClick(buttons->button(QDialogButtonBox::Open), Qt::LeftButton);
-        QTRY_COMPARE_WITH_TIMEOUT(bootCombo_->currentData().toString(), path, 1000);
+        QTRY_COMPARE_WITH_TIMEOUT(bootCombo_->currentData().toString(), path, uiTimeoutMs);
         QCOMPARE(bootCombo_->currentText(), QString::fromUtf8("Mediu și fișiere.img"));
         QCOMPARE(controller_->selection().imageSize, quint64(10));
         QTRY_VERIFY_WITH_TIMEOUT(!controller_->isAnalyzing(), 3000);
@@ -212,7 +214,7 @@ private slots:
         QTest::mouseClick(selectButton_, Qt::LeftButton);
         QVERIFY(dialog->isVisible());
         QTest::keyClick(dialog, Qt::Key_Escape);
-        QTRY_VERIFY_WITH_TIMEOUT(!dialog->isVisible(), 1000);
+        QTRY_VERIFY_WITH_TIMEOUT(!dialog->isVisible(), uiTimeoutMs);
         QCOMPARE(bootCombo_->currentData().toString(), path);
         QCOMPARE(controller_->selection().deviceId, QStringLiteral("test-usb-a"));
     }
@@ -361,14 +363,14 @@ private slots:
         QVERIFY(!driveOptions->isEnabled() && !formatOptions->isEnabled());
         QCOMPARE(drive->text(), QStringLiteral("Hide advanced drive properties"));
         QCOMPARE(format->arrowType(), Qt::UpArrow);
-        QTRY_VERIFY_WITH_TIMEOUT(window_->height() > initialHeight, 1000);
+        QTRY_VERIFY_WITH_TIMEOUT(window_->height() > initialHeight, uiTimeoutMs);
         const QString screenshot = qEnvironmentVariable("RUFUS_TEST_EXPANDED_SCREENSHOT");
         if (!screenshot.isEmpty())
             QVERIFY(window_->grab().save(screenshot));
         QTest::mouseClick(drive, Qt::LeftButton);
         QTest::mouseClick(format, Qt::LeftButton);
         QVERIFY(!driveOptions->isVisible() && !formatOptions->isVisible());
-        QTRY_COMPARE_WITH_TIMEOUT(window_->height(), initialHeight, 1000);
+        QTRY_COMPARE_WITH_TIMEOUT(window_->height(), initialHeight, uiTimeoutMs);
     }
 
     void logCanBeSavedAndCleared()
@@ -390,7 +392,7 @@ private slots:
         QVERIFY(buttons && buttons->button(QDialogButtonBox::Save));
         QTest::mouseClick(buttons->button(QDialogButtonBox::Save), Qt::LeftButton);
         QFile output(directory.filePath(QStringLiteral("rufus.log")));
-        QTRY_VERIFY_WITH_TIMEOUT(output.exists(), 1000);
+        QTRY_VERIFY_WITH_TIMEOUT(output.exists(), uiTimeoutMs);
         QVERIFY(output.open(QIODevice::ReadOnly));
         QCOMPARE(output.readAll(), expected);
         QTest::mouseClick(clear, Qt::LeftButton);

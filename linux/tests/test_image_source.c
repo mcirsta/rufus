@@ -8,7 +8,13 @@
 #include <string.h>
 #include <unistd.h>
 
-static int failures, checks, cancelled, read_calls, fault;
+static int failures, checks, cancelled, read_calls;
+enum READ_FAULT { READ_NORMAL, READ_INTERRUPTED, READ_SHORT, READ_ERROR,
+	READ_CANCELLED, READ_EOF, READ_CHANGED };
+static enum READ_FAULT fault;
+static const enum READ_FAULT read_faults[] = {
+	READ_INTERRUPTED, READ_SHORT, READ_ERROR, READ_CANCELLED, READ_EOF, READ_CHANGED
+};
 static const char signature[8] = { 'M', 'S', 'W', 'I', 'M', 0, 0, 0 };
 
 #define CHECK(expression) do { checks++; if (!(expression)) { \
@@ -29,14 +35,24 @@ ssize_t RealPread(int fd, void* data, size_t size, off_t offset);
 ssize_t WrappedPread(int fd, void* data, size_t size, off_t offset)
 {
 	read_calls++;
-	if (fault == 1 && read_calls == 1) { errno = EINTR; return -1; }
-	if (fault == 2) size = 1;
-	if (fault == 3) { errno = EIO; return -1; }
-	if (fault == 4) cancelled = 1;
-	if (fault == 5) return 0;
-	if (fault == 6) {
+	if (fault == READ_INTERRUPTED && read_calls == 1) {
+		errno = EINTR;
+		return -1;
+	}
+	if (fault == READ_SHORT)
+		size = 1;
+	if (fault == READ_ERROR) {
+		errno = EIO;
+		return -1;
+	}
+	if (fault == READ_CANCELLED)
+		cancelled = 1;
+	if (fault == READ_EOF)
+		return 0;
+	if (fault == READ_CHANGED) {
 		struct timespec times[2] = { { 1, 0 }, { 1, 0 } };
-		if (futimens(fd, times) != 0) abort();
+		if (futimens(fd, times) != 0)
+			abort();
 	}
 	return RealPread(fd, data, size, offset);
 }
@@ -44,14 +60,16 @@ ssize_t WrappedPread(int fd, void* data, size_t size, off_t offset)
 static void WriteFile(const char* path, const void* data, size_t size)
 {
 	FILE* file = fopen(path, "wb");
-	if (!file || fwrite(data, 1, size, file) != size || fclose(file) != 0) abort();
+	if (!file || fwrite(data, 1, size, file) != size || fclose(file) != 0)
+		abort();
 }
 
 static int DescriptorCount(void)
 {
 	DIR* dir = opendir("/proc/self/fd");
 	int count = 0;
-	if (!dir) abort();
+	if (!dir)
+		abort();
 	while (readdir(dir)) count++;
 	closedir(dir);
 	return count;
@@ -66,7 +84,7 @@ static void CheckOpen(const char* path)
 	for (size = 0; size <= sizeof(signature); size++) {
 		WriteFile(path, signature, size);
 		CHECK(OpenImageFileSource(path, &source) == 0);
-		CHECK(source.fd >= 0 && source.is_wim == (size == 8));
+		CHECK(source.fd >= 0 && source.is_wim == (size == sizeof(signature)));
 		CHECK(source.info.st_size == (off_t)size);
 		CHECK(lseek(source.fd, 0, SEEK_CUR) == 0);
 		CHECK((fcntl(source.fd, F_GETFD) & FD_CLOEXEC) != 0);
@@ -76,21 +94,29 @@ static void CheckOpen(const char* path)
 		CloseImageFileSource(&source);
 		CHECK(source.fd == -1 && !source.is_wim && source.info.st_size == 0);
 	}
-	for (fault = 1; fault <= 6; fault++) {
+	for (size_t i = 0; i < sizeof(read_faults) / sizeof(read_faults[0]); i++) {
+		fault = read_faults[i];
 		read_calls = 0;
 		error = OpenImageFileSource(path, &source);
 		CHECK(read_calls > 0);
-		if (fault >= 3) {
-			CHECK(error == (fault == 4 ? ECANCELED : fault == 6 ? ESTALE : EIO));
+		bool recoverable = fault == READ_INTERRUPTED || fault == READ_SHORT;
+		if (!recoverable) {
+			int expected_error = EIO;
+			if (fault == READ_CANCELLED)
+				expected_error = ECANCELED;
+			else if (fault == READ_CHANGED)
+				expected_error = ESTALE;
+			CHECK(error == expected_error);
 			CHECK(source.fd == -1 && !source.is_wim && source.info.st_size == 0);
 		} else {
 			CHECK(error == 0 && source.is_wim);
-			CHECK(read_calls == (fault == 1 ? 2 : fault == 2 ? 8 : 1));
+			int expected_reads = fault == READ_INTERRUPTED ? 2 : (int)sizeof(signature);
+			CHECK(read_calls == expected_reads);
 		}
 		cancelled = 0;
 		CloseImageFileSource(&source);
 	}
-	fault = 0;
+	fault = READ_NORMAL;
 	cancelled = 1; read_calls = 0;
 	CHECK(OpenImageFileSource(path, &source) == ECANCELED && read_calls == 0);
 	cancelled = 0;
@@ -169,19 +195,22 @@ static void CheckBootMarker(const char* path)
 		CloseImageFileSource(&source);
 		CHECK(!source.has_boot_marker);
 	}
-	for (fault = 1; fault <= 6; fault++) {
+	for (size_t i = 0; i < sizeof(read_faults) / sizeof(read_faults[0]); i++) {
+		fault = read_faults[i];
 		read_calls = 0;
 		int error = OpenImageFileSource(path, &source);
-		if (fault < 3) {
+		bool recoverable = fault == READ_INTERRUPTED || fault == READ_SHORT;
+		if (recoverable) {
 			CHECK(error == 0 && source.has_boot_marker);
-			CHECK(read_calls == (fault == 1 ? 2 : 512));
+			int expected_reads = fault == READ_INTERRUPTED ? 2 : (int)sizeof(sector);
+			CHECK(read_calls == expected_reads);
 		} else {
 			CHECK(error != 0 && source.fd == -1 && !source.has_boot_marker);
 		}
 		cancelled = 0;
 		CloseImageFileSource(&source);
 	}
-	fault = 0;
+	fault = READ_NORMAL;
 	sector[511] = 0;
 	WriteFile(path, sector, sizeof(sector));
 	CHECK(OpenImageFileSource(path, &source) == 0 && !source.has_boot_marker);
@@ -196,7 +225,8 @@ int main(void)
 	IMAGE_FILE_SOURCE source = { .fd = -1 };
 	int before = DescriptorCount();
 
-	if (!mkdtemp(directory)) return 2;
+	if (!mkdtemp(directory))
+		return 2;
 	snprintf(path, sizeof(path), "%s/image", directory);
 	snprintf(moved, sizeof(moved), "%s/moved", directory);
 	snprintf(link, sizeof(link), "%s/link", directory);

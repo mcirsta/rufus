@@ -6,7 +6,9 @@
 #include <stdio.h>
 #include <string.h>
 
-static int failures, checks, cancelled, opens, closes;
+static int failures, checks, opens, closes;
+enum CANCEL_MODE { CANCEL_NONE, CANCEL_BEFORE_OPEN, CANCEL_AFTER_OPEN };
+static enum CANCEL_MODE cancel_mode;
 static uint64_t fake_udf;
 
 #define CHECK(expression) do { \
@@ -24,7 +26,8 @@ void uprintf(const char* format, ...)
 
 int IsIsoScanCancelled(void)
 {
-	return cancelled == 1 || (cancelled == 2 && opens != 0);
+	bool opened_then_cancelled = cancel_mode == CANCEL_AFTER_OPEN && opens != 0;
+	return cancel_mode == CANCEL_BEFORE_OPEN || opened_then_cancelled;
 }
 
 udf_t* __wrap_udf_open(const char* path)
@@ -101,14 +104,14 @@ static void CheckDispatch(void)
 	CHECK(AnalyzeIsoImage("udf-fixture", 0, &options, &analysis) == ISO_SCAN_ERROR);
 	CHECK(AnalyzeIsoImage("udf-fixture", UINT64_MAX, &options, &analysis) == ISO_SCAN_ERROR);
 	CHECK(memcmp(&analysis, &empty, sizeof(empty)) == 0 && opens == 0);
-	cancelled = 1;
+	cancel_mode = CANCEL_BEFORE_OPEN;
 	CHECK(AnalyzeIsoImage("udf-fixture", 2048, &options, &analysis) == ISO_SCAN_CANCELLED);
 	CHECK(memcmp(&analysis, &empty, sizeof(empty)) == 0 && opens == 0);
-	cancelled = 0;
+	cancel_mode = CANCEL_NONE;
 	result = AnalyzeIsoImage("udf-fixture", 2048, &options, &analysis);
 	CHECK(result == ISO_SCAN_ERROR); // No ISO fallback after UDF root failure.
 	CHECK(memcmp(&analysis, &empty, sizeof(empty)) == 0 && opens == closes);
-	cancelled = 2;
+	cancel_mode = CANCEL_AFTER_OPEN;
 	opens = closes = 0;
 	CHECK(AnalyzeIsoImage("udf-fixture", 2048, &options, &analysis) == ISO_SCAN_CANCELLED);
 	CHECK(memcmp(&analysis, &empty, sizeof(empty)) == 0 && opens == 1 && closes == 1);

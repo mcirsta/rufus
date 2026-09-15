@@ -208,9 +208,12 @@ void MainWindow::refreshWrite()
     ui_->progressBar->setRange(0, waiting ? 0 : 100);
     ui_->progressBar->setValue(writer.percent());
     QString text = writer.statusText();
-    if (state == WriteState::Complete) text = tr("READY");
-    else if (state == WriteState::Cancelled) text = tr("CANCELLED");
-    else if (state == WriteState::Failed) text = tr("FAILED");
+    if (state == WriteState::Complete)
+        text = tr("READY");
+    else if (state == WriteState::Cancelled)
+        text = tr("CANCELLED");
+    else if (state == WriteState::Failed)
+        text = tr("FAILED");
     else if (state == WriteState::Writing && !waiting)
         text = writer.status().outcome.io.phase == RAW_WRITE_VERIFY ? tr("Verifying image: %p%") : tr("Writing image: %p%");
     ui_->progressBar->setFormat(text);
@@ -318,7 +321,12 @@ void MainWindow::saveLogFile(const QString& path)
 {
     const QByteArray contents = log_->toPlainText().toUtf8();
     QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly) || file.write(contents) != contents.size() || !file.commit())
+    bool saved = file.open(QIODevice::WriteOnly);
+    if (saved)
+        saved = file.write(contents) == contents.size();
+    if (saved)
+        saved = file.commit();
+    if (!saved)
     {
         const QString message = tr("Cannot save the log: %1").arg(file.errorString());
         log_->appendPlainText(message);

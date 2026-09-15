@@ -26,7 +26,9 @@ int main(int argc, char** argv)
 	struct stat info;
 	int result, handles;
 
-	if ((argc != 2 && argc != 3) || stat(argv[1], &info) != 0 || !S_ISREG(info.st_mode))
+	if (argc != 2 && argc != 3)
+		return 64;
+	if (stat(argv[1], &info) != 0 || !S_ISREG(info.st_mode))
 		return 64;
 	if (wimlib_global_init(WIMLIB_INIT_FLAG_ASSUME_UTF8) != 0)
 		return 65;

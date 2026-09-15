@@ -22,6 +22,9 @@ const QString managerInterface = QStringLiteral("org.freedesktop.DBus.ObjectMana
 const QString blockInterface = QStringLiteral("org.freedesktop.UDisks2.Block");
 const QString driveInterface = QStringLiteral("org.freedesktop.UDisks2.Drive");
 const QString partitionInterface = QStringLiteral("org.freedesktop.UDisks2.Partition");
+constexpr int requestTimeoutMs = 5000;
+constexpr int retryIntervalMs = 2000;
+constexpr int refreshDelayMs = 25;
 
 QString objectPath(const QVariant& value)
 {
@@ -43,17 +46,21 @@ bool eligible(const UDisksInterfaces& interfaces, const QVariantMap& block,
     const QVariantMap& drive)
 {
     // A conservative initial filter, not a guarantee that a target is safe to erase.
+    if (interfaces.contains(partitionInterface))
+        return false;
     const quint64 size = block.value(QStringLiteral("Size")).toULongLong();
-    return !interfaces.contains(partitionInterface)
-        && drive.value(QStringLiteral("ConnectionBus")).toString() == QStringLiteral("usb")
-        && drive.value(QStringLiteral("Removable")).toBool()
+    const bool removableUsb = drive.value(QStringLiteral("ConnectionBus")).toString() == QStringLiteral("usb")
+        && drive.value(QStringLiteral("Removable")).toBool();
+    const bool supportedSize = size > 0 && size <= quint64(std::numeric_limits<qint64>::max());
+    if (!removableUsb || !supportedSize)
+        return false;
+    const bool writableMedia = drive.value(QStringLiteral("MediaAvailable")).toBool()
         && drive.value(QStringLiteral("MediaRemovable")).toBool()
-        && drive.value(QStringLiteral("MediaAvailable")).toBool()
         && !drive.value(QStringLiteral("Optical"), true).toBool()
-        && !block.value(QStringLiteral("ReadOnly"), true).toBool()
-        && !block.value(QStringLiteral("HintSystem"), true).toBool()
-        && !block.value(QStringLiteral("HintIgnore"), true).toBool()
-        && size > 0 && size <= quint64(std::numeric_limits<qint64>::max());
+        && !block.value(QStringLiteral("ReadOnly"), true).toBool();
+    const bool excluded = block.value(QStringLiteral("HintSystem"), true).toBool()
+        || block.value(QStringLiteral("HintIgnore"), true).toBool();
+    return writableMedia && !excluded;
 }
 
 QStringList deviceIdentity(const QVariantMap& block, const QVariantMap& drive,
@@ -149,7 +156,7 @@ void UDisksClient::refresh()
     QDBusMessage request = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"),
         QStringLiteral("/org/freedesktop/DBus"), QStringLiteral("org.freedesktop.DBus"), QStringLiteral("StartServiceByName"));
     request.setArguments({service, uint(0)});
-    pending_ = new QDBusPendingCallWatcher(connection_.asyncCall(request, 5000), this);
+    pending_ = new QDBusPendingCallWatcher(connection_.asyncCall(request, requestTimeoutMs), this);
     requestedRevision_ = revision_;
     connect(pending_, &QDBusPendingCallWatcher::finished, this, &UDisksClient::activationFinished);
 }
@@ -168,7 +175,7 @@ void UDisksClient::activationFinished(QDBusPendingCallWatcher* watcher)
     QDBusMessage request = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"),
         QStringLiteral("/org/freedesktop/DBus"), QStringLiteral("org.freedesktop.DBus"), QStringLiteral("GetNameOwner"));
     request.setArguments({service});
-    pending_ = new QDBusPendingCallWatcher(connection_.asyncCall(request, 5000), this);
+    pending_ = new QDBusPendingCallWatcher(connection_.asyncCall(request, requestTimeoutMs), this);
     connect(pending_, &QDBusPendingCallWatcher::finished, this, &UDisksClient::ownerFinished);
 }
 
@@ -184,13 +191,13 @@ void UDisksClient::ownerFinished(QDBusPendingCallWatcher* watcher)
     if (reply.isError() || !reply.value().startsWith(QLatin1Char(':')))
     {
         reportFailure(tr("Cannot identify the UDisks service owner. Device discovery unavailable."));
-        refreshTimer_.start(2000);
+        refreshTimer_.start(retryIntervalMs);
         return;
     }
     serviceOwner_ = reply.value();
     const QDBusMessage request = QDBusMessage::createMethodCall(serviceOwner_, rootPath,
         managerInterface, QStringLiteral("GetManagedObjects"));
-    pending_ = new QDBusPendingCallWatcher(connection_.asyncCall(request, 5000), this);
+    pending_ = new QDBusPendingCallWatcher(connection_.asyncCall(request, requestTimeoutMs), this);
     connect(pending_, &QDBusPendingCallWatcher::finished, this, &UDisksClient::requestFinished);
 }
 
@@ -207,7 +214,7 @@ void UDisksClient::requestFinished(QDBusPendingCallWatcher* watcher)
     if (reply.isError())
     {
         reportFailure(tr("UDisks2 discovery unavailable: %1").arg(reply.error().message()));
-        refreshTimer_.start(2000);
+        refreshTimer_.start(retryIntervalMs);
         return;
     }
     objects_ = reply.value();
@@ -218,8 +225,8 @@ void UDisksClient::scheduleRefresh()
 {
     ++revision_;
     // Coalesce a service's burst of property and interface notifications.
-    if (!refreshTimer_.isActive() || refreshTimer_.remainingTime() > 25)
-        refreshTimer_.start(25);
+    if (!refreshTimer_.isActive() || refreshTimer_.remainingTime() > refreshDelayMs)
+        refreshTimer_.start(refreshDelayMs);
 }
 
 void UDisksClient::ownerChanged(const QString&, const QString& oldOwner, const QString& newOwner)

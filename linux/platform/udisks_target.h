@@ -17,11 +17,12 @@ class UDisksTarget : public QObject
 {
     Q_OBJECT
 public:
+    static constexpr int DefaultAuthorizationTimeoutMs = 120000;
     enum class State { Idle, Checking, Prepared, BeforeAuthorization, Authorizing,
                        Rechecking, Ready, Failed, Cancelled };
     Q_ENUM(State)
     UDisksTarget(const QDBusConnection& connection, const RawWritePlan& plan,
-        int authorizationTimeout = 120000, QObject* parent = nullptr);
+        int authorizationTimeout = DefaultAuthorizationTimeoutMs, QObject* parent = nullptr);
     ~UDisksTarget() override;
     State state() const { return state_; }
     const QString& problem() const { return problem_; }
