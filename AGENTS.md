@@ -30,6 +30,14 @@ The detailed decisions and checkpoints are in
 [the port plan](docs/linux-port-plan.md) and
 [the testing record](docs/testing-and-checkpoints.md).
 
+# Privilege prompts
+
+Request authorization at most once per USB creation, before any writes. Keep one
+authorized helper for the complete job, including cleanup and cancellation; do
+not prompt separately for partitioning, formatting, mounting or bootloader work.
+Keep the Qt GUI unprivileged. Do not rely on cached polkit authorization or store
+passwords to meet this requirement.
+
 # Build preferences
 
 Let Ninja choose its default parallelism. Use `cmake --build <directory>` or

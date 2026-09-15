@@ -6,10 +6,12 @@
 #include <libfdisk.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/fs.h>
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 enum {
@@ -31,18 +33,39 @@ static const char main_name[] = "Main Data Partition";
 static int CheckImageTarget(int fd, const GPT_IMAGE_OPTIONS* options)
 {
 	struct stat info;
+	uint64_t size;
+	int sector_size = 0, read_only = 1;
 	int flags = fcntl(fd, F_GETFL);
 
 	if (flags < 0 || fstat(fd, &info) != 0)
 		return errno;
-	if (!S_ISREG(info.st_mode))
+	const bool block_request = options->device != 0;
+	const bool expected_type = block_request ? S_ISBLK(info.st_mode) : S_ISREG(info.st_mode);
+	if (!expected_type)
 		return ENOTSUP;
 	const bool read_write = (flags & O_ACCMODE) == O_RDWR;
 	const bool incompatible_flags = (flags & (O_APPEND | O_DIRECT | O_PATH)) != 0;
 	if (!read_write || incompatible_flags)
 		return EINVAL;
-	const bool expected_size = info.st_size >= 0 && (uint64_t)info.st_size == options->disk_size;
-	if (!expected_size)
+	if (block_request) {
+		if ((uint64_t)info.st_rdev != options->device)
+			return ESTALE;
+		if (ioctl(fd, BLKGETSIZE64, &size) != 0)
+			return errno;
+		if (ioctl(fd, BLKSSZGET, &sector_size) != 0)
+			return errno;
+		if (ioctl(fd, BLKROGET, &read_only) != 0)
+			return errno;
+		if (read_only)
+			return EROFS;
+		if (sector_size != GPT_SECTOR_BYTES)
+			return ENOTSUP;
+	} else {
+		if (info.st_size < 0)
+			return ESTALE;
+		size = (uint64_t)info.st_size;
+	}
+	if (size != options->disk_size)
 		return ESTALE;
 	return IsRufusJobCancelled() ? ECANCELED : 0;
 }
@@ -60,7 +83,7 @@ static int PrepareGpt(struct fdisk_context* context, int fd,
 	fdisk_disable_dialogs(context, 1);
 	fdisk_enable_wipe(context, 0);
 	fdisk_enable_bootbits_protection(context, 0);
-	status = fdisk_assign_device_by_fd(context, fd, "Rufus image", 0);
+	status = fdisk_assign_device_by_fd(context, fd, "Rufus target", 0);
 	if (status != 0)
 		return status;
 	const bool expected_sector_size = fdisk_get_sector_size(context) == GPT_SECTOR_BYTES;
@@ -189,7 +212,7 @@ static int ReadBackGpt(int fd, const GPT_IMAGE_OPTIONS* options, const GPT_IMAGE
 	if (context == NULL)
 		return error;
 	fdisk_disable_dialogs(context, 1);
-	error = -fdisk_assign_device_by_fd(context, fd, "Rufus image", 1);
+	error = -fdisk_assign_device_by_fd(context, fd, "Rufus target", 1);
 	if (error == 0) {
 		// Recovery from one damaged GPT copy is useful for discovery, but cannot
 		// count as successful verification of the table we just wrote.

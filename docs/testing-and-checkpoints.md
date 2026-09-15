@@ -2861,3 +2861,184 @@ against retained descriptors for emulated USB block devices, with native
 capacity/sector checks and the existing UDisks ownership model. Keep one supported
 GPT/FAT32 layout; mount/extraction handoff follows that qualification. Do not add
 boot formats or broaden image analysis during this step.
+
+## CP10i: retained GPT block descriptors (2026-09-15)
+
+Committed the preceding extraction/name/collision checkpoints as `b3ccde49`
+(`[linux] share extraction names and qualify FAT32 collisions`).
+
+Extended the existing GPT adapter with an explicit expected device number. Zero
+still requires a regular file; a block request checks `st_rdev`, native capacity,
+512-byte logical sectors and read-only state before writes and after flushing.
+The same libfdisk operations and shared Rufus placement arithmetic do the work.
+No Windows code changes, new production subsystem, target pathname opens, kernel
+partition refresh or mount operations were needed. The caller remains responsible
+for the accepted plan, authorization and exclusive device ownership.
+
+Added a small optional VM recipe using the existing initramfs/tool-copy helpers.
+It opens only its disposable emulated USB with the same access flags as the
+UDisks handoff (`O_RDWR | O_EXCL | O_SYNC | O_CLOEXEC`). Eleven guest requests
+check missing/wrong device identity, changed expected capacity, read-only device
+state and descriptor, cancellation before preparation/before write/after write,
+failed flush, success, and an actual 4K logical-sector device. Descriptor counts,
+flags and seek survive each request; rejected requests attempt no write/flush.
+The host verifies GPT headers/tables/CRCs and every byte outside the GPT metadata.
+The 4K disk is byte-identical after rejection.
+
+**Formatter finding:** the guest proves dosfstools 4.2 cannot use this ownership
+path unchanged. With the exclusive descriptor still held, a child inheriting it
+and invoking stock mkfs.fat on `/proc/self/fd/N` receives EBUSY. The formatter
+[unconditionally opens with O_EXCL](https://github.com/dosfstools/dosfstools/blob/v4.2/src/mkfs.fat.c#L1730-L1737);
+`-I` only changes later device-layout checks. This is a real block-device
+distinction that ordinary-file tests cannot expose. FAT32 device support was not
+enabled, and no release/reopen fallback or formatter patch was introduced.
+
+Validation:
+
+- Normal CMake/Ninja build, with default parallelism; full **47/47 CTest entries
+  (46.28 seconds)**, including **28 GPT image cases** and existing FAT32 integration.
+- Full **ASan/UBSan/leak-check suite: 47/47 (85.51 seconds)**.
+- **11/11 native GPT cases pass** with both normal and sanitizer binaries in
+  512-byte/4K QEMU TCG guests, using Linux `6.18.50-3-cachyos-lts`. The stock
+  formatter conflict is reproduced in each 512-byte run; caller ownership and
+  all non-GPT bytes survive. No sanitizer diagnostics appear.
+- Rebuilt authored code has no warnings; existing wimlib warnings remain.
+  Python/shell syntax, host-refusal and whitespace checks pass.
+
+Logs are `/tmp/rufus-cp10i-tests.log` and
+`/tmp/rufus-cp10i-sanitizer-tests.log`. VM disks, manifests, reports, serial logs
+and exact commands are under `/tmp/rufus-cp10i-gpt-guest` and
+`/tmp/rufus-cp10i-gpt-sanitizers-final`. These paths are temporary. CP10i remains local
+and uncommitted; Windows runtime validation and ISO START/bootability remain
+deferred. The VM qualifies the native descriptor contract, not a new UDisks
+formatting workflow.
+
+**Next bounded decision:** first assess UDisks `Block.Format` with our explicit
+FAT32 settings and a verified partition. Its `mkfs-args` option exists, but the
+installed API documentation warns that defaults and argument ordering can change.
+Qualify geometry/readback, plan revalidation and automount exclusion around the
+ownership transfer before adopting it. Prefer a working native service to a
+formatter fork; if it cannot preserve the required Rufus choices, discuss a small
+upstream descriptor-input extension. Keep boot formats, extra layouts and further
+image analysis out of this decision.
+
+## CP10j: direct CLI handoff and one job authorization (2026-09-15)
+
+The user chose direct CLI formatting with an explicit release of our exclusive
+claim during that phase. Continuous exclusivity is not a requirement. Stock
+mkfs.fat obtains its own exclusive access; its second open is only a conflict
+while our claim remains held. Changing descriptors does not require changing
+the privileged process or asking for authorization again.
+
+Extended the existing GPT guest, without changing the production formatter:
+refresh the partition table, record both GPT copies, release the exclusive disk
+descriptor, then launch stock mkfs.fat directly on the resulting partition.
+Explicit options select FAT32, 512-byte clusters/sectors, the partition's hidden
+sector offset, label and volume ID. After formatting, a second invocation on the
+mounted partition fails with EBUSY. Exclusive disk access is reacquired and its
+device number/capacity, partition device number and both GPT copies are checked.
+All test block access and mounts remain inside the disposable guest.
+
+Validation:
+
+- Normal and sanitizer CMake builds of the guest pass without warnings, using
+  default Ninja parallelism. Both QEMU TCG runs pass all **11 GPT cases**, the
+  direct formatting handoff, mounted-volume refusal and access reacquisition.
+- Host checks independently validate GPT CRCs/layout and bytes outside the
+  metadata/partition; FAT32 fields, cluster size, label, ID, hidden sectors and
+  backup boot sector match. `fsck.fat -n` succeeds and mtools finds an empty
+  filesystem. The rejected native 4K disk remains byte-identical.
+- ASan/UBSan/leak reporting, Python/shell syntax, host-refusal and whitespace
+  checks pass. The first host assertion expected mkfs.fat's mount-table message;
+  this minimal guest instead reaches the kernel's exclusive-open EBUSY check.
+  The assertion was corrected to the observed refusal and both runs repeated.
+- Production code is unchanged in CP10j, so the CP10i full 47/47 normal and
+  sanitizer regression results remain applicable; no unrelated tests repeated.
+
+Artifacts are `/tmp/rufus-cp10j-cli-qualified` and
+`/tmp/rufus-cp10j-cli-sanitizers`, with matching `.log` files alongside. The guest
+runs as root; this proves the native formatter handoff, not the desktop privilege
+integration or hot-unplug/automount behavior during the gap. NTFS and exFAT need
+their own tool qualification. These changes remain local and uncommitted.
+
+**Required next integration:** one small helper authorized for the entire USB
+creation before writes. It retains its privileges through partitioning, native
+CLI formatting, mounting, bootloader work, verification and cleanup. At most one
+authorization request per creation, including cancellation/failure handling; do
+not rely on cached polkit credentials. Keep the GUI unprivileged and never store
+passwords. The helper accepts the concrete job, not arbitrary commands. Add tests
+that count authorization requests across all phases and failures. This replaces
+the earlier preference to try UDisks `Block.Format` first.
+
+## CP10k: one native authorization for the guest helper (2026-09-15)
+
+The existing GPT/FAT32 guest helper now runs through one real `pkexec` launch
+from an ordinary-user Qt test. This qualifies the privilege lifetime before
+adding a production helper interface. The test reuses CP10i/CP10j's CMake-built
+media fixture, package-cache desktop recipe, kernel/bootstrap and independent
+disk inspection. No production launcher, new daemon or password UI was added.
+
+The guest-only polkit action names that fixed helper and uses `auth_admin` for
+all session states, without a cached grant. A root D-Bus monitor counts actual
+`CheckAuthorization` calls. Three separate requests cover prompt dismissal,
+approval and a missing authentication agent; each causes exactly one call.
+The approved request covers all ten 512-byte GPT cases, direct CLI formatting,
+mounted-volume refusal, unmount, exclusive access reacquisition and final close.
+The Qt process stays UID/EUID 1000 and cannot directly open the USB device;
+the helper and formatter child run as UID/EUID 0. The helper receives the original
+caller ID from pkexec. No further authentication is requested during those phases.
+
+The real KDE dialog receives only the public disposable fixture password.
+`--disable-internal-agent` prevents a terminal fallback or automatic retry when
+the desktop agent is absent. Both rejected requests exit before helper entry.
+The initial test expected pkexec's dismissal code 126, but KDE's Escape action
+reported generic denial 127. The dismissal test now accepts either outcome and
+still requires no helper entry and exactly one request. Missing-agent failure
+requires 127. Production code must preserve caller cancellation state and helper
+startup state instead of treating every 127 as cancellation.
+
+Validation:
+
+- Normal and ASan/UBSan CMake builds pass without warnings, using Ninja's default
+  parallelism. Both complete native KDE/X11 VM runs pass **5/5 Qt test entries**
+  (three scenarios plus setup/cleanup), with no address, leak or undefined-behavior
+  diagnostics. Native package versions and hashes are recorded in each manifest.
+- Independent host checks pass for both runs: GPT layout/CRCs, requested FAT32
+  metadata and backup boot sector, `fsck.fat -n`, empty mtools listing and preserved
+  bytes outside the partition/GPT. Extracted monitor logs independently contain
+  exactly three action requests; the real authentication screenshot is retained.
+- The unchanged direct-root GPT guest path is rerun after extending its entry
+  guard. It still passes all eleven cases, formatter handoff and unchanged 4K
+  rejection. Python/shell syntax, host-refusal and whitespace checks also pass.
+- Production code is unchanged in this checkpoint. CP10i's full **47/47** normal
+  and sanitizer regression runs remain applicable; unrelated tests were not rerun.
+
+Reproduction:
+
+```sh
+cmake --build /tmp/rufus-linux-qt6-build
+python linux/tests/vm/helper.py --build /tmp/rufus-linux-qt6-build \
+  --kernel 6.18.50-3-cachyos-lts --accel tcg /tmp/rufus-helper-guest
+```
+
+Build with `RUFUS_BUILD_VM_TEST=ON`, use an installed matching kernel and a new
+output directory. The recipe uses locally cached packages, no downloads or host
+mounts. QEMU sees only disposable regular files and has no network or host-device
+passthrough. The guest policy and setuid mode restoration apply only inside its
+root filesystem. Neither test executable is registered as a host CTest.
+
+Artifacts: `/tmp/rufus-cp10k-auth-qualified`,
+`/tmp/rufus-cp10k-auth-sanitizers` and `/tmp/rufus-cp10k-direct-guest`, with matching
+`.log` files. Authorization runs retain `authorization.log`,
+`helper-authentication.png`, manifests, results, serial/QEMU logs and disk images.
+These paths are temporary; changes remain local and uncommitted.
+
+**Scope and next checkpoint:** this is a real native authorization test around
+the existing media fixture, not the application's production creation workflow.
+It does not qualify GUI-to-helper cancellation during an active job, caller death,
+hot-unplug/automount during handoff, other desktop agents, NTFS/exFAT or ISO boot.
+Next implement one concrete GPT/FAT32 job with a bounded request and
+progress/result/cancellation channel. Revalidate the accepted device/plan on the
+privileged side, handle caller disconnect and reap child tools there, and never
+relaunch a failed helper with another prompt. Keep additional layouts, bootloader
+support and a general service framework outside that checkpoint.

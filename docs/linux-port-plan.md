@@ -33,9 +33,13 @@ with tests formatting its actual extent. CP10f qualifies ordinary extraction on
 mounted FAT32 in a disposable Linux USB guest. CP10g shares Rufus's filename
 substitutions between Windows and Linux, including nested output directories
 and cleanup. CP10h follows Rufus's ordinary-file replacement and directory reuse
-when output names collide. Next move GPT/FAT32 preparation from regular images
-to retained guest block descriptors, then connect device-service orchestration
-and boot support. Further image-analysis variants,
+when output names collide. CP10i qualifies GPT creation on retained guest block
+descriptors. CP10j qualifies releasing our claim, running stock mkfs.fat on the
+partition, then reacquiring access and checking the result. CP10k runs those
+guest operations through one real polkit authorization from an unprivileged Qt
+caller, with approval caching disabled. Next connect one concrete GPT/FAT32 job
+to a production helper with request, progress/result and cancellation handling.
+Further image-analysis variants,
 including standalone WIM/ESD SELECT integration, stay deferred. Completion is
 measured by supported workflows.
 
@@ -54,7 +58,7 @@ measured by supported workflows.
 | Adapters | Use small Windows-to-Linux API adapters and Linux implementations of existing Rufus interfaces where the semantics map cleanly. They adapt platform operations; they do not emulate GUI dependencies. Wine/Winelib are excluded. |
 | Build | Linux is strictly CMake-based, with its entry point under `linux/` and Ninja's default parallelism. Windows retains Rufus's existing Visual Studio/MSBuild and MinGW/Autotools build paths. |
 | Execution | Keep the GUI unprivileged and responsive. Serialize jobs that use Rufus's process-global state. |
-| Privileged work | Request authorization through the desktop's system authentication agent, using UDisks2/polkit on Linux. |
+| Privileged work | At most one native authorization request per USB creation; one helper retains privileges through all phases and cleanup. The Qt GUI stays unprivileged. |
 | Coding style | Follow the direct style of `allparts_new/src`: named functions, concrete data, explicit control flow, no lambdas, and templates only where their benefit is substantial. |
 | Performance | Keep disk and image loops efficient, bound notification work, and measure representative workloads. |
 | Delivery | Implement and validate useful media paths incrementally. Do not claim full Rufus feature parity from the initial releases. |
@@ -98,8 +102,8 @@ Rufus Git operations inside that directory.
 | Shared image policy | CP3b extracts the neutral report and image policy. CP10a feeds shared boot-marker detection into that unchanged policy during SELECT, distinguishing a DD candidate from an image requiring DD. Native Windows verification pending. |
 | ISOHybrid mode dialog | CP10b shares the original ordered mode choices between Windows and Qt, with ISO as the default, conditional ISO → ESP, DD and cancellation. The Qt dialog component is tested but not opened by application START until ISO execution is ready. |
 | Native ISO/UDF extraction | CP10c shares traversal and file readers, copying ordinary trees into private empty directories. CP10g shares filename substitutions; CP10h matches ordinary-file replacement and directory reuse on collisions. Sixteen mounted-FAT32 guest cases cover names/bytes, merged directories, shorter/empty replacements, real ENOSPC and EROFS. Device services, boot support and ISO START remain. |
-| Native FAT32 preparation | CP10d formats an explicit region of a retained regular file with mkfs.fat, then flushes and checks it using Rufus's FAT reader. CP10e handles sector-aligned boundaries, including odd sector counts. Real-device formatting remains separate. |
-| GPT image preparation | CP10e shares Rufus's first/main partition placement calculations with Windows. Linux uses libfdisk to write and verify one ordinary GPT main partition. Raw-byte/CRC checks and FAT32 integration tests preserve both GPT copies and all bytes outside the formatted extent. Device services, additional layouts and boot support remain. |
+| Native FAT32 preparation | CP10d formats an explicit region of a retained regular file with mkfs.fat, then flushes and checks it using Rufus's FAT reader. CP10e handles sector-aligned boundaries, including odd sector counts. CP10j qualifies a direct CLI handoff in the USB guest; CP10k runs that guest helper through one native polkit authorization. Production helper/controller integration remains. |
+| GPT preparation | CP10e shares Rufus's first/main partition placement calculations with Windows. Linux uses libfdisk to write and verify one ordinary GPT main partition. CP10i qualifies retained block descriptors on an emulated USB, with identity/capacity/sector/read-only checks and unchanged caller ownership. Device services, additional layouts and boot support remain. |
 | Shared file classification | CP3c1 implemented: file rules separated from extraction; integrated into shared ISO9660/UDF traversal and the Qt job through CP3d/CP3e. |
 | Shared embedded EFI inspection | CP3f1/CP3f2 implemented: ISO9660 and UDF use Rufus's existing FAT reader, with bounded reads, generated FAT/fragmented-UDF fixtures and Qt functional tests. |
 | Shared WinPE options | CP3g1 implemented: bounded SIF reads, original directory priority and `/minint` decision, with explicit known/unavailable results. |
@@ -164,11 +168,40 @@ introduced. The private target must still be empty at entry. Once truncation
 succeeds, failure removes the incomplete replacement with no rollback. Processed
 file/directory and byte counts include colliding source entries.
 
-Next qualify GPT and FAT32 preparation against retained descriptors for emulated
-USB block devices, using native capacity/sector checks and the existing UDisks
-ownership model. Start with one supported GPT/FAT32 layout; keep mount/extraction
-handoff as the following checkpoint. Device-service and boot qualification still
-precede enabling ISO writing.
+CP10i qualifies the existing GPT adapter on exclusive emulated USB descriptors.
+Block requests supply the accepted device number, with capacity, 512-byte logical
+sectors and read-only state checked natively before writing and after flushing.
+Regular-file callers remain explicit: a zero device number rejects block nodes.
+The adapter keeps the original libfdisk path and shared placement arithmetic;
+it neither refreshes the kernel partition table nor handles authorization/mounts.
+
+The same guest proves a formatter constraint: dosfstools 4.2 reopens
+`/proc/self/fd/N` with `O_EXCL`, which fails with EBUSY while the retained exclusive
+descriptor exists. `-I` does not change that open. Keep the FAT32 adapter restricted
+to regular files until the production job owns the explicit handoff. Do not release the
+claim and retry by pathname as an implicit fallback.
+
+**Revised direction after discussion:** invoke native CLI formatters directly
+with the requested options. Exclusive ownership may change between job phases:
+release our descriptor for the formatter, let it obtain its own access, then
+reacquire and revalidate the target before continuing. Uninterrupted ownership
+is not a requirement. Do not automatically bypass a busy-device refusal. Keep
+mount/device-use checks and handle a changed or disconnected target explicitly.
+UDisks `Block.Format` and formatter patches are alternatives only if a specific
+need remains; argument passthrough alone does not justify another service layer.
+
+Authorize one small helper for the whole creation job. It keeps the privilege
+needed to launch each native formatter and perform the remaining protected steps;
+changing descriptors does not trigger a new authorization request. CP10j proves
+the CLI handoff on GPT/FAT32 in the guest. CP10k qualifies one `pkexec` launch
+from an ordinary-user Qt test through the real KDE authentication agent. One
+authorization covers the existing GPT/formatter/mount/readback/cleanup tests;
+the test policy uses `auth_admin`, with no cached grant. Dismissal and missing-agent
+requests never enter the helper or retry authorization. Production integration
+remains: reuse these media operations behind one concrete job request and a
+bounded progress/result/cancellation channel. Avoid adding a general RPC framework.
+Keep one layout; mount/extraction handoff and boot qualification still precede
+enabling ISO writing.
 The dialog keeps Rufus's ISO default and DD choice throughout these steps.
 
 ```text
@@ -331,9 +364,9 @@ build multiple interchangeable backends in advance.
 | Operation | Preferred starting point | Decision or gap to resolve |
 | --- | --- | --- |
 | Device discovery and hotplug | UDisks2 over QtDBus. | Device identity, transport, mount state, eligibility and service availability. |
-| Authorization and opening a target | Existing UDisks2 authorization and descriptor APIs. | Verify the access mode and lifetime needed by each write path. |
+| Authorization and opening a target | One helper authorized for the complete creation job; the existing raw path already uses one UDisks2 descriptor request. | Retain privileges across native CLI phases; revalidate device identity and use when changing ownership. |
 | Mounting and unmounting | UDisks2 filesystem services. | Coordinate active mounts, later automounts and cleanup of resources owned by the job. |
-| Partition layout | Assess UDisks2 partition APIs first. | Use libfdisk or controlled `sfdisk` execution if required layouts are not expressible. |
+| Partition layout | Shared Rufus placement arithmetic and native libfdisk. | One GPT main partition is qualified on regular files and exclusive guest block descriptors. |
 | Filesystem creation | Direct invocation of native `mkfs.fat`, `mkntfs`/`mkfs.ntfs` and `mkfs.exfat`. | Preserve Rufus's explicit options; qualify the installed tool's filesystem, label and cluster-size capabilities. Authorization remains separate. |
 | WIM inspection, splitting and updating | Linux wimlib. | Preserve the Rufus choices and parameters; verify bundled-versus-system differences. |
 | ISO/UDF access | Rufus's libcdio-based approach. | Choose bundled or system libraries after the behavioral audit. |
@@ -352,13 +385,16 @@ where they help; the C monotonic-millisecond helper can stay. Qualify
 `ntfsprogs-plus` and current NTFS-3G utilities as NTFS providers, and exfatprogs
 for exFAT, before relying on their options. Tool selection must preserve Rufus's
 media decisions and remains separate from mounting-driver selection and
-UDisks2/polkit authorization.
+job authorization through polkit.
 
 CP10e uses libfdisk (2.35+) for regular image files: its descriptor API and
 explicit partition bounds avoid loop devices or privileges in this checkpoint.
-UDisks2 remains the first option for device operations; its CreatePartition API
-may adjust requested boundaries, so device integration must check the returned
-extent before formatting. This does not authorize libfdisk to open host disks.
+CP10i extends the same adapter to a caller-owned exclusive block descriptor,
+qualified only inside a disposable USB guest. Native GPT checks do not replace
+the UDisks plan, authorization or device-use checks.
+Keep the qualified libfdisk layout and native CLI formatting in the authorized
+job helper. UDisks2 continues to supply discovery and the existing raw access
+path. CLI ownership changes must not cause repeated privilege prompts.
 
 Every destructive path must revalidate the target identity and capacity, ensure
 the source does not reside on the target being erased, and handle disconnects
@@ -369,8 +405,9 @@ the underlying operation is delegated to a system service.
 
 Some partitioning, formatting, mounting and device-access operations require
 privileges. Keep the Widgets application running as the ordinary user and
-delegate those operations to an authorized service. Start with UDisks2, which
-performs authorization checks through polkit. The session's authentication
+delegate those operations to a small helper authorized for the complete USB
+creation job. The existing raw workflow uses UDisks2 descriptor authorization;
+discovery can continue through UDisks2. The session's authentication
 agent supplies the password dialog and chooses the identity according to
 system policy. This may be the current user, an administrator or root; some
 authorized actions need no prompt. [UDisks2 authorization](https://storaged.org/doc/udisks2-api/latest/udisks-polkit-actions.html),
@@ -381,28 +418,35 @@ collect, store or log a root password, implement its own password dialog, or
 feed passwords to `sudo`/`su`. An authorization prompt is separate from the
 application's confirmation of which device will be erased.
 
+**User requirement:** at most one authorization request per USB creation, before
+any writes. One helper retains its privileged execution context through GPT,
+formatting, mounting, bootloader installation, verification and cleanup. Releasing
+device exclusivity for a CLI formatter does not release the helper's privileges.
+Do not chain individually authenticated service operations or depend on polkit's
+temporary authorization cache. The helper accepts the concrete creation plan;
+it is not an unrestricted command runner or a root GUI.
+
 ### User flow
 
 1. Analyze the source and prepare the write plan as the ordinary user.
 2. Show the target identity and planned changes; the user chooses to proceed.
-3. Enter Authorizing and request the required operation asynchronously, allowing
+3. Enter Authorizing and request the complete creation job asynchronously, allowing
    the system authentication agent to interact. Keep the window responsive.
-   UDisks2's `auth.no_user_interaction` option must not suppress interaction for
-   this user-initiated request; background discovery should not trigger prompts.
-   [UDisks2 options](https://storaged.org/doc/udisks2-api/latest/udisks-std-options.html).
+   Background discovery does not trigger prompts. The existing UDisks raw path
+   still allows interaction for its one descriptor acquisition.
 4. On success, revalidate the target after the possible authentication delay
-   and continue only the authorized work. Later protected operations still use
-   their own required service checks; do not treat one successful prompt as
-   unrestricted root access.
+   and continue only the authorized work in that helper. No subsequent job phase
+   or cleanup operation requests fresh authentication. If the helper dies, fail
+   the job and report the partial state; do not silently relaunch it with a prompt.
 5. Treat cancellation and denial as expected outcomes. Preserve selections,
    stop before the unauthorized step, and explain what happened without an
    automatic retry loop. If earlier steps changed the device, report that
    partial state accurately and perform the cleanup still permitted.
 
-Avoid unnecessary duplicate requests, but respect system policy if multiple
-actions require separate authentication. Do not install blanket authorization
-bypasses to achieve a single prompt. Set timeouts with human interaction in
-mind and distinguish an unanswered prompt from an I/O failure.
+Respect system policy through one explicit job authorization; do not install
+blanket authorization bypasses. Set timeouts with human interaction in mind and
+distinguish an unanswered prompt from an I/O failure. Denial/cancellation does
+not start another authorization attempt within the same creation request.
 
 ### Portability and missing services
 
@@ -425,9 +469,9 @@ the existing Windows elevation/UI path remains independent. Qt does not
 provide one universal root-password API, so portability comes from this small
 boundary and native system mechanisms, not a generic authentication framework.
 
-If a needed operation cannot be expressed through UDisks2, use a small,
-installed helper with narrowly defined operations and system authentication.
-Evaluate polkit-authorized D-Bus activation or `pkexec` for that specific gap.
+Use a small installed helper with narrowly defined job operations and system
+authentication. Choose the simplest suitable polkit-authorized activation or
+`pkexec` launch for the complete job; avoid a separate daemon if it adds no value.
 The privileged side must validate the request itself, including target identity
 and allowed operations. Elevate the helper only; do not provide arbitrary
 command execution or pass GUI secrets through arguments or environment values.
@@ -435,9 +479,22 @@ command execution or pass GUI secrets through arguments or environment values.
 
 Authentication behavior is part of the Phase 3 acceptance criteria and the
 packaging/dependency matrix. Tests must cover approval, denial, cancellation,
-missing agent/service, authorization expiry or a second challenge, and target
-removal while the prompt is open. Real prompts are manual integration tests;
-automated tests exercise service responses without obtaining passwords.
+missing agent/service, helper failure and target removal during authentication.
+Count authorization requests: at most one for the complete creation, including
+long-running jobs, formatter failures, cancellation and cleanup. Credential-cache
+expiry must not affect an already authorized helper. CP10k automates real KDE/X11
+prompts only inside a disposable VM, using its public fixture password in the
+separate native agent. Host automation must not obtain passwords. Other supported
+desktop/session combinations still need native qualification.
+
+The production launcher must disable `pkexec`'s internal text agent and avoid
+automatic authorization retries. KDE's Escape action in CP10k returned generic
+denial (127), not the separate dismissed status (126). Preserve whether our caller
+requested cancellation and whether the helper actually started; do not classify
+every 127 as user cancellation. The ordinary-user GUI also cannot rely on sending
+signals to terminate a root helper. Give the helper a cancellation channel and
+make it clean up after caller disconnect. Qualify both behaviors before connecting
+the production job to START.
 
 ## Coding style and performance
 

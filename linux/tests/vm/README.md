@@ -167,3 +167,106 @@ Results include `results.json`, `manifest.json` with input hashes,
 This qualifies the extraction component, shared filename substitutions and ordinary
 file/directory collision behavior on FAT32. It does not establish bootability or
 the complete ISO writing workflow. ISO START remains gated.
+
+## Retained GPT block descriptors
+
+This smaller guest qualifies the GPT adapter's borrowed block descriptor. It
+uses the same initramfs recipe, with two fresh 64 MiB regular files attached as
+USB disks: one with 512-byte logical sectors, one with 4096-byte sectors. Nothing
+is mounted or opened as a block device on the host. There is no network, desktop
+root filesystem, package download or physical USB requirement.
+
+```sh
+cmake -S linux -B /tmp/rufus-linux-qt6-build -DRUFUS_BUILD_VM_TEST=ON
+cmake --build /tmp/rufus-linux-qt6-build
+python linux/tests/vm/gpt.py \
+  --build /tmp/rufus-linux-qt6-build \
+  --kernel 6.18.50-3-cachyos-lts --accel tcg \
+  /tmp/rufus-gpt-guest
+```
+
+Use an installed kernel with its matching modules and a new output directory.
+The host needs the dependencies of the existing minimal FAT guest plus `sfdisk`.
+The CMake-built `test_gpt_guest` requires guest root, the fixture marker and either
+the direct-init DMI/PID checks or the dedicated authorization guest's DMI/caller
+checks described below. The init
+script also refuses direct host execution before any mounts. Tests are never
+registered as host CTest entries. A sanitizer build can use the same recipe;
+the guest enables address/leak and undefined-behavior failure reporting.
+
+Eleven GPT requests cover native identity/capacity/sector/read-only checks, a read-only
+descriptor, cancellation before and after writing, failed flushing and success.
+Each checks write/flush counts, retained flags and seek, and descriptor cleanup.
+The caller's `O_EXCL` claim survives libfdisk and readback. The host independently
+verifies both GPT headers/tables/CRCs, the protective MBR, Rufus placement and
+every byte outside the GPT metadata and formatted partition. The rejected 4K
+disk must be byte-identical.
+
+The 512-byte guest also executes stock `mkfs.fat` with the retained descriptor
+inherited by the child. Its second exclusive open fails with EBUSY. This is an
+expected compatibility result. The next phase explicitly refreshes the guest
+partition table, releases the exclusive descriptor, invokes stock mkfs.fat on
+`/dev/sda1` with FAT32, cluster-size, hidden-sector, volume-ID and label options,
+then reacquires exclusive access. The guest verifies device identity/capacity
+and byte-identical GPT copies. A second invocation on a read-only mounted
+partition must fail with EBUSY. The host independently checks the requested FAT
+fields and backup boot sector, runs fsck.fat and lists the empty volume with
+mtools. The production FAT adapter still rejects devices; the privileged-job
+integration is the next step.
+
+Artifacts include `manifest.json`, `results.json`, both `usb-*.raw` disks,
+`serial-*.log`, `qemu-*.log`, `volume.raw`, `fsck.log`, `mdir.log` and the exact
+`qemu-command-*.json` invocations. This guest tests the low-level adapter and CLI
+handoff as guest root. It does not integrate desktop authorization, automount
+services, hot-unplug during handoff, or ISO bootability. Authorization will cover
+the complete creation job once, including subsequent tools and cleanup.
+
+## One authorization for the helper
+
+`helper.py` runs the same GPT/FAT32 C fixture through `pkexec` from an unprivileged
+Qt test, using a real KDE authentication agent. It reuses the full desktop package
+recipe above and adds dosfstools. The host needs its installed-version package
+cache and the existing GPT inspection tools, plus `mkfs.ext4` and `debugfs` from
+e2fsprogs. Nothing is downloaded or mounted on the host.
+
+```sh
+cmake -S linux -B /tmp/rufus-linux-qt6-build -DRUFUS_BUILD_VM_TEST=ON
+cmake --build /tmp/rufus-linux-qt6-build
+python linux/tests/vm/helper.py --build /tmp/rufus-linux-qt6-build \
+  --kernel 6.18.50-3-cachyos-lts --accel tcg /tmp/rufus-helper-guest
+```
+
+Use a new output directory and allow about 3 GiB of disk space. QEMU receives a
+regular-file root disk and a fresh 64 MiB emulated USB, with no network or host
+device passthrough. The current Arch/CachyOS, KDE/X11 recipe is qualified with
+TCG and accepts KVM. VM execution has a 240-second timeout. The guest-only policy
+and restored packaged pkexec setuid mode are never installed on the host.
+The Qt and C executables refuse direct host invocation before any authorization
+request or block access; they are not host CTest entries.
+
+The policy uses `auth_admin`, not a cached authorization. An independent root
+D-Bus monitor counts one authorization request for each of three scenarios:
+native prompt dismissal; an approved complete GPT/format/mount/readback/cleanup
+run; and failure with the agent stopped. The Qt caller stays UID/EUID 1000 and
+cannot open the device; pkexec's helper and its formatter child are UID/EUID 0.
+The public fixture password is entered only into the separate KDE dialog.
+Missing-agent failure has no internal terminal-agent fallback or retry.
+
+KDE Escape can produce pkexec's generic denial code 127 rather than its distinct
+dismissal code 126. The dismissal test accepts either, requiring no helper entry.
+The three requests belong to three separate test jobs: the approved job uses one
+authorization for every media phase. Production cancellation during a running
+root job remains separate work; an ordinary-user process cannot rely on signalling
+that helper, and this fixture's supervisor stops the disposable VM on timeout.
+
+After shutdown, host checks independently inspect both GPT copies and FAT32
+metadata, run fsck/mtools, and verify surrounding bytes. `debugfs` extracts the
+authorization log and native-dialog screenshot without a host mount. Artifacts
+include `manifest.json`, `results.json`, `qemu-command.json`, `serial.log`,
+`authorization.log`, `helper-authentication.png`, `system.raw`, `usb.raw`,
+`volume.raw`, `fsck.log` and `mdir.log`. The same recipe accepts sanitizer builds
+and rejects sanitizer diagnostics in the serial log.
+
+This qualifies a single native launch of the existing media fixture. Production
+helper/controller integration, active-job cancellation, caller disconnect,
+handoff hot-unplug/automount and other desktop sessions still need checkpoints.

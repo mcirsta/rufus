@@ -189,6 +189,7 @@ def main():
         check_preserved(retained, 64*MIB, segments)
         invalid = [("readonly", {}, errno.EINVAL), ("append", {}, errno.EINVAL), ("pipe", {}, errno.ENOTSUP),
                    ("cancel-before", {}, errno.ECANCELED), ("sector-4k", {}, errno.EINVAL),
+                   ("block-request", {}, errno.ENOTSUP),
                    ("add-fail", {}, errno.ENOMEM), ("cancel-before-write", {}, errno.ECANCELED),
                    ("none", {"size": 65*MIB}, errno.ESTALE), ("none", {"size": 64*MIB+1}, errno.EINVAL),
                    ("none", {"cluster": 0}, errno.EINVAL), ("none", {"cluster": 1536}, errno.EINVAL),

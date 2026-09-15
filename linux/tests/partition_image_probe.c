@@ -97,7 +97,7 @@ static int DescriptorCount(void)
 
 int main(int argc, char** argv)
 {
-	GPT_IMAGE_OPTIONS options = { 0, SECTOR_BYTES, 63, SECTOR_BYTES };
+	GPT_IMAGE_OPTIONS options = { 0, SECTOR_BYTES, 63, SECTOR_BYTES, 0 };
 	GPT_IMAGE_RESULT result;
 	int fd, error, before, original_flags, flags;
 
@@ -109,6 +109,8 @@ int main(int argc, char** argv)
 	options.sectors_per_track = (uint32_t)strtoul(argv[4], NULL, 10);
 	if (strcmp(fault, "sector-4k") == 0)
 		options.sector_size = 4096;
+	if (strcmp(fault, "block-request") == 0)
+		options.device = 1;
 	flags = strcmp(fault, "readonly") == 0 ? O_RDONLY : O_RDWR;
 	if (strcmp(fault, "append") == 0)
 		flags |= O_APPEND;

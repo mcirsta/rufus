@@ -52,6 +52,9 @@ extern "C" {
  *
  * This does not create a partition table, erase old data, install a bootloader,
  * authorize a device or mount anything. Block devices are deliberately rejected.
+ * Stock mkfs.fat reopens /proc/self/fd/N with O_EXCL; this conflicts with a
+ * retained exclusive block descriptor. Device formatting needs a separate
+ * ownership handoff, not simply relaxing the regular-file check here.
  * Serialize with other Rufus jobs using the existing libfat sector settings. */
 int FormatFat32Image(int fd, const char* mkfs, const FAT32_FORMAT_OPTIONS* options,
 	FAT32_FORMAT_RESULT* result);

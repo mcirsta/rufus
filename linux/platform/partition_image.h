@@ -8,6 +8,7 @@ typedef struct {
 	uint32_t sector_size;
 	uint32_t sectors_per_track;
 	uint32_t cluster_size;
+	uint64_t device;  // Expected st_rdev for a block device; zero requires a regular file.
 } GPT_IMAGE_OPTIONS;
 
 typedef struct {
@@ -23,8 +24,12 @@ extern "C" {
 
 /* Create an ordinary Rufus GPT with one "Main Data Partition" of Microsoft
  * Basic Data type. Uses common Rufus placement arithmetic and libfdisk for the
- * table/CRCs/IDs. Current scope: a caller-owned, exclusively borrowed REGULAR
- * FILE, O_RDWR, exact expected size, 512-byte sectors. No devices or mounts.
+ * table/CRCs/IDs. Accepts a caller-owned, exclusively borrowed regular file or
+ * block descriptor, O_RDWR, exact expected size, 512-byte logical sectors.
+ * A block request must supply the expected device number from the accepted plan.
+ * The caller must retain exclusive device ownership (UDisks OpenDevice with
+ * O_EXCL); this function checks identity/capacity/sectors/read-only state, but
+ * does not acquire authorization or detect mounted children itself.
  * Replaces partition metadata; does not wipe old filesystem signatures or data.
  *
  * Returns 0 or errno. Recheck size before writing; flush after any attempted
@@ -34,7 +39,8 @@ extern "C" {
  * means failure can leave a partial table; there is no rollback. Offset/size
  * describe the planned main extent, valid for use only after success.
  * The caller's descriptor, flags and seek position remain owned by the caller.
- * ESP mode, extra partitions, MBR and real-device preparation remain separate. */
+ * Does not reread the kernel partition table or mount anything. ESP mode, extra
+ * partitions, MBR and the service/mount handoff remain separate. */
 int CreateGptImagePartition(int fd, const GPT_IMAGE_OPTIONS* options, GPT_IMAGE_RESULT* result);
 
 #ifdef __cplusplus

@@ -59,6 +59,11 @@ CP10g shares Rufus's filename substitutions with Windows and applies them to
 Linux output paths while preserving original names for image reads.
 CP10h replaces earlier colliding files and reuses directories as Rufus does,
 while checking target types before changing existing entries.
+CP10i qualifies the GPT adapter on retained exclusive USB descriptors in a VM.
+Stock mkfs.fat's second exclusive open conflicts with that ownership; its device
+formatting handoff is now qualified in CP10j: release, run the CLI, reacquire and
+verify. The next integration uses one authorized helper for the complete job,
+with at most one privilege prompt per creation.
 ISO START remains gated until device-service integration and boot support are ready.
 Secure Boot analysis
 remains a separate increment; see the
@@ -231,10 +236,14 @@ ctest --test-dir /tmp/rufus-linux-qt6-build -R '^rufus_fat_format$' --output-on-
 
 See [CP10d](../docs/testing-and-checkpoints.md#cp10d-native-fat32-formatting-in-image-files-2026-09-15).
 
-## Native GPT image preparation
+## Native GPT preparation
 
 `rufus_partition_image` supplies `CreateGptImagePartition` for an existing,
-exclusively borrowed regular file. Rufus's `GetPartitionStartOffset` and
+exclusively borrowed regular file or whole block device. A block request supplies
+the accepted plan's device number; zero requires a regular file. Native ioctls
+check capacity, 512-byte logical sectors and read-only state. Caller-owned
+exclusive access is required, as provided by UDisks `OpenDevice` with `O_EXCL`.
+Rufus's `GetPartitionStartOffset` and
 `GetMainPartitionSize` now live in shared `src/partition_layout.c`; the existing
 Windows `CreatePartition` calls them too. Linux delegates GPT serialization,
 CRCs and identifiers to libfdisk. The initial layout keeps Rufus's 1 MiB start,
@@ -245,7 +254,8 @@ The adapter builds the table in memory, rechecks the expected image size before
 writing, flushes even after an attempted write fails or is cancelled, and reads
 the table back through a fresh library context. Recovery from a damaged GPT copy
 is treated as failed write verification. Descriptor ownership and seek position
-remain with the caller. No block device, kernel partition refresh or mount is used.
+remain with the caller. Authorization, kernel partition refresh and mount are
+the caller's responsibility; the adapter never opens the device by pathname.
 
 Functional tests independently decode primary/backup headers, entries and CRCs,
 inspect the protective MBR and use `sfdisk` for an external table check. They
@@ -253,6 +263,17 @@ format the actual reported partition extent, verify both GPT copies are
 unchanged, then inspect FAT32 with fsck and mtools. Cancellation, failed writes,
 failed flushes, changed size, damaged table copies and descriptor cleanup are
 covered. Tests require `sfdisk` from util-linux (`fdisk` package on Debian/Ubuntu).
+The optional [GPT USB guest](tests/vm/README.md#retained-gpt-block-descriptors)
+checks native device ioctls, writes and retained exclusive ownership. It also
+confirms that dosfstools 4.2 cannot reopen that exclusive descriptor: stock
+mkfs.fat uses another `O_EXCL` open and receives EBUSY. The production FAT32
+adapter remains restricted to regular files pending explicit job integration.
+CP10j's guest now demonstrates a direct CLI handoff after releasing our claim;
+CP10k's [authorization guest](tests/vm/README.md#one-authorization-for-the-helper)
+runs those operations through one real KDE/polkit request from an unprivileged
+Qt caller. Approval caching is disabled, and dismissal/missing-agent requests
+stop before helper entry. The production job request, cancellation channel and
+controller integration remain separate; ISO START is still gated.
 
 ```sh
 ctest --test-dir /tmp/rufus-linux-qt6-build -R 'rufus_partition_layout|rufus_partition_image|rufus_fat_format' --output-on-failure

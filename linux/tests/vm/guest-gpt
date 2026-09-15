@@ -1,0 +1,33 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -eu
+[[ $$ == 1 ]] || exit 77
+export PATH=/usr/bin LC_ALL=C
+export ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1
+
+finish()
+{
+    result=$?
+    trap - EXIT
+    echo "RUFUS_GPT_EXIT $result"
+    echo o > /proc/sysrq-trigger
+    while :; do sleep 1; done
+}
+
+mount -t devtmpfs devtmpfs /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+[[ $(< /sys/class/dmi/id/product_name) == RufusGPTFixture ]]
+[[ " $(< /proc/cmdline) " == *" rufus.gpt_fixture=1 "* ]]
+trap finish EXIT
+trap 'echo "RUFUS_GPT_FAILED_AT_LINE $LINENO"' ERR
+for module in xhci_pci usb_storage sd_mod vfat nls_cp437 nls_iso8859_1; do
+    modprobe "$module"
+done
+for attempt in {1..100}; do
+    [[ -b /dev/sda ]] && break
+    sleep .1
+done
+[[ -b /dev/sda ]]
+[[ $(< /sys/block/sda/device/model) == "QEMU HARDDISK "* ]]
+test_gpt_guest
