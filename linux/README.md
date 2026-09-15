@@ -61,8 +61,8 @@ CP10h replaces earlier colliding files and reuses directories as Rufus does,
 while checking target types before changing existing entries.
 CP10i qualifies the GPT adapter on retained exclusive USB descriptors in a VM.
 Stock mkfs.fat's second exclusive open conflicts with that ownership; its device
-formatting handoff is now qualified in CP10j: release, run the CLI, reacquire and
-verify. The next integration uses one authorized helper for the complete job,
+formatting handoff is qualified in CP10j: release, run the CLI, reacquire and
+verify. CP10m integrates GPT/FAT32 preparation into one authorized helper,
 with at most one privilege prompt per creation.
 ISO START remains gated until device-service integration and boot support are ready.
 Secure Boot analysis
@@ -266,20 +266,79 @@ covered. Tests require `sfdisk` from util-linux (`fdisk` package on Debian/Ubunt
 The optional [GPT USB guest](tests/vm/README.md#retained-gpt-block-descriptors)
 checks native device ioctls, writes and retained exclusive ownership. It also
 confirms that dosfstools 4.2 cannot reopen that exclusive descriptor: stock
-mkfs.fat uses another `O_EXCL` open and receives EBUSY. The production FAT32
-adapter remains restricted to regular files pending explicit job integration.
+mkfs.fat uses another `O_EXCL` open and receives EBUSY. CP10m's production FAT32
+adapter now also accepts a validated native partition descriptor after the helper
+releases its whole-disk claim.
 CP10j's guest now demonstrates a direct CLI handoff after releasing our claim;
 CP10k's [authorization guest](tests/vm/README.md#one-authorization-for-the-helper)
 runs those operations through one real KDE/polkit request from an unprivileged
 Qt caller. Approval caching is disabled, and dismissal/missing-agent requests
-stop before helper entry. The production job request, cancellation channel and
-controller integration remain separate; ISO START is still gated.
+stop before helper entry. CP10l adds the process connection for ordinary-file
+jobs below; CP10m integrates native device preparation. ISO START is still gated.
 
 ```sh
 ctest --test-dir /tmp/rufus-linux-qt6-build -R 'rufus_partition_layout|rufus_partition_image|rufus_fat_format' --output-on-failure
 ```
 
 See [CP10e](../docs/testing-and-checkpoints.md#cp10e-shared-placement-and-native-gpt-images-2026-09-15).
+
+## GPT/FAT32 preparation helper
+
+`rufus-prepare-helper` and `PrepareImageProcess` execute one concrete preparation
+job across a process boundary. The ordinary-file operation accepts an existing regular
+image file owned by the ordinary caller. The request includes its absolute path,
+expected filesystem device/inode/size, cluster size, volume ID and label. The
+helper opens without following the final symlink, checks the retained file and
+pathname, and holds an advisory file lock until completion. This operation rejects
+elevated execution; native devices use a distinct request and launch mode.
+
+`prepare-device-v1` additionally carries the accepted UDisks object, service owner,
+identity and kernel disk sequence. `PrepareImageProcess` launches the fixed helper
+with `pkexec --disable-internal-agent` and `--device` once. The helper uses the real
+system bus to repeat eligibility, identity and device-use checks; it verifies its
+exclusive descriptor's device number, disk sequence, size, sector size and writable
+state. Mounted or layered targets are refused before writing.
+
+After GPT creation, the helper refreshes the kernel partition table and checks
+partition 1's actual extent and disk sequence. It retains a non-exclusive partition
+descriptor, releases its whole-disk exclusive claim, runs the fixed CLI, then
+reacquires the disk and verifies identity and both GPT copies. `FormatFat32Partition`
+shares the file formatter's options, cancellation, flush and Rufus FAT-reader checks;
+its descriptor starts at partition offset zero while the FAT hidden-sector field
+retains the disk offset. A busy or changed disk fails without bypass or retry.
+
+`PlanGptImagePartition` and `CheckFat32ImageRequest` expose the existing adapters'
+preflight checks without writing. Both steps must pass before GPT creation starts.
+The worker then calls the existing GPT and formatter implementations, retaining
+their geometry, child cancellation/reaping, flush and readback checks. The mkfs
+path is selected at CMake configuration; no request can replace it.
+
+The Qt controller waits for the helper's ready message, sends one JSON line and
+receives checking/partitioning/formatting phases, bounded logs and a result. Frames
+are at most 4096 bytes; 64-bit fields use decimal strings. **Stdin stays open until
+completion: closing it cancels the job.** This is not a shell filter for `cat` or
+`echo` pipelines. Caller disconnect uses the same interruption path, and the
+helper stops/reaps its child and flushes before exiting. The controller reports
+completion only after process exit. A missing or malformed result reports failure
+and possible partial changes instead of success. It never retries a launch.
+
+```sh
+cmake --build /tmp/rufus-linux-qt6-build
+ctest --test-dir /tmp/rufus-linux-qt6-build -R 'rufus_prepare_(process|helper)' --output-on-failure
+```
+
+The tests use ordinary disposable files and independent GPT/fsck/mtools inspection.
+A separately linked probe supplies formatter/flush faults; the production helper
+has no fault controls. The optional [native preparation guest](tests/vm/README.md#production-device-preparation)
+qualifies real authentication, active cancellation and caller death. CMake generates
+the `org.rufus.PrepareDevice` policy and installs it alongside the helper using
+GNUInstallDirs. The policy names the configured absolute helper path and `--device`,
+uses `auth_admin` without caching, and must be packaged into polkit's system actions
+directory (configure the distribution prefix, normally `/usr`). No policy or helper
+is installed on the development host by these tests. This component is not yet
+connected to application START; mounting, extraction and boot qualification follow.
+See [CP10l](../docs/testing-and-checkpoints.md#cp10l-one-request-preparation-process-2026-09-15)
+and [CP10m](../docs/testing-and-checkpoints.md#cp10m-authorized-native-gptfat32-preparation-2026-09-15).
 
 ## Shared ISO tree scan
 

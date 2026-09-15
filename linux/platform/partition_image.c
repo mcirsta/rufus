@@ -227,10 +227,8 @@ static int ReadBackGpt(int fd, const GPT_IMAGE_OPTIONS* options, const GPT_IMAGE
 	return error;
 }
 
-int CreateGptImagePartition(int fd, const GPT_IMAGE_OPTIONS* options, GPT_IMAGE_RESULT* result)
+int PlanGptImagePartition(int fd, const GPT_IMAGE_OPTIONS* options, GPT_IMAGE_RESULT* result)
 {
-	struct fdisk_context* context = NULL;
-	off_t position;
 	int error;
 
 	if (result == NULL)
@@ -263,6 +261,16 @@ int CreateGptImagePartition(int fd, const GPT_IMAGE_OPTIONS* options, GPT_IMAGE_
 		GPT_SECTOR_BYTES, options->sectors_per_track, options->cluster_size);
 	if (result->size == 0)
 		return ENOSPC;
+	return 0;
+}
+
+int CreateGptImagePartition(int fd, const GPT_IMAGE_OPTIONS* options, GPT_IMAGE_RESULT* result)
+{
+	struct fdisk_context* context = NULL;
+	off_t position;
+	int error = PlanGptImagePartition(fd, options, result);
+	if (error != 0)
+		return error;
 	position = lseek(fd, 0, SEEK_CUR);
 	if (position < 0)
 		return errno;

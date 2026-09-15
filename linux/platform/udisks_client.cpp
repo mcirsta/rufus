@@ -8,6 +8,7 @@
 #include <QDBusPendingReply>
 #include <QDBusServiceWatcher>
 #include <QFile>
+#include <QSet>
 
 #include <limits>
 
@@ -22,6 +23,7 @@ const QString managerInterface = QStringLiteral("org.freedesktop.DBus.ObjectMana
 const QString blockInterface = QStringLiteral("org.freedesktop.UDisks2.Block");
 const QString driveInterface = QStringLiteral("org.freedesktop.UDisks2.Drive");
 const QString partitionInterface = QStringLiteral("org.freedesktop.UDisks2.Partition");
+const QString filesystemInterface = QStringLiteral("org.freedesktop.UDisks2.Filesystem");
 constexpr int requestTimeoutMs = 5000;
 constexpr int retryIntervalMs = 2000;
 constexpr int refreshDelayMs = 25;
@@ -77,6 +79,55 @@ QStringList deviceIdentity(const QVariantMap& block, const QVariantMap& drive,
 }
 
 } // namespace
+
+QString CheckUDisksTargetUse(const UDisksObjects& objects, const Device& target, quint64 sourceDevice)
+{
+    QSet<QString> members{target.objectPath};
+    for (auto object = objects.cbegin(); object != objects.cend(); ++object)
+    {
+        const QVariantMap block = object->value(blockInterface);
+        const QVariantMap partition = object->value(partitionInterface);
+        if (objectPath(block.value(QStringLiteral("Drive"))) == target.drivePath
+            || objectPath(partition.value(QStringLiteral("Table"))) == target.objectPath)
+            members.insert(object.key().path());
+    }
+    for (auto object = objects.cbegin(); object != objects.cend(); ++object)
+    {
+        const UDisksInterfaces& interfaces = object.value();
+        const QVariantMap block = interfaces.value(blockInterface);
+        if (members.contains(objectPath(block.value(QStringLiteral("CryptoBackingDevice")))))
+            return QStringLiteral("The target has active layered storage.");
+        if (!members.contains(object.key().path()))
+            continue;
+        if (sourceDevice != 0 && block.value(QStringLiteral("DeviceNumber")).toULongLong() == sourceDevice)
+            return QStringLiteral("The source image is stored on the selected target.");
+        if (interfaces.contains(filesystemInterface))
+        {
+            const QVariant value = interfaces.value(filesystemInterface).value(QStringLiteral("MountPoints"));
+            bool valid = value.metaType() == QMetaType::fromType<QList<QByteArray>>();
+            if (value.metaType() == QMetaType::fromType<QDBusArgument>())
+                valid = value.value<QDBusArgument>().currentSignature() == QStringLiteral("aay");
+            if (!valid || !qdbus_cast<QList<QByteArray>>(value).isEmpty())
+                return QStringLiteral("Unmount the target's filesystems before preparing the write.");
+        }
+        if (interfaces.contains(QStringLiteral("org.freedesktop.UDisks2.Swapspace")))
+            return QStringLiteral("Swap targets are not supported by this first raw-writing path.");
+        const QString usage = block.value(QStringLiteral("IdUsage")).toString();
+        const bool encrypted = interfaces.contains(QStringLiteral("org.freedesktop.UDisks2.Encrypted"))
+            || usage == QStringLiteral("crypto");
+        const bool layered = interfaces.contains(QStringLiteral("org.freedesktop.UDisks2.PhysicalVolume"))
+            || usage == QStringLiteral("raid");
+        if (encrypted || layered)
+            return QStringLiteral("Encrypted and layered targets are not supported by this raw-writing path.");
+        for (const char* property : {"MDRaid", "MDRaidMember", "CryptoBackingDevice"})
+        {
+            const QString relation = objectPath(block.value(QLatin1String(property)));
+            if (!relation.isEmpty() && relation != QStringLiteral("/"))
+                return QStringLiteral("Layered targets are not supported by this raw-writing path.");
+        }
+    }
+    return {};
+}
 
 bool DescribeUDisksDevice(const UDisksObjects& objects, const QString& path, Device& device)
 {

@@ -129,7 +129,10 @@ int main(int argc, char** argv)
 	}
 	before = DescriptorCount();
 	start = Milliseconds();
-	error = FormatFat32Image(fd, argv[1], &options, &result);
+	if (strcmp(fault, "partition-file") == 0 || strcmp(fault, "partition-zero") == 0)
+		error = FormatFat32Partition(fd, strcmp(fault, "partition-zero") == 0 ? 0 : 1, argv[1], &options, &result);
+	else
+		error = FormatFat32Image(fd, argv[1], &options, &result);
 	position = lseek(fd, 0, SEEK_CUR);
 	leaks = DescriptorCount() - before;
 	child = waitpid(-1, &status, WNOHANG);

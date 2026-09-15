@@ -239,7 +239,7 @@ python linux/tests/vm/helper.py --build /tmp/rufus-linux-qt6-build \
 Use a new output directory and allow about 3 GiB of disk space. QEMU receives a
 regular-file root disk and a fresh 64 MiB emulated USB, with no network or host
 device passthrough. The current Arch/CachyOS, KDE/X11 recipe is qualified with
-TCG and accepts KVM. VM execution has a 240-second timeout. The guest-only policy
+TCG and accepts KVM. VM execution has a 360-second timeout. The guest-only policy
 and restored packaged pkexec setuid mode are never installed on the host.
 The Qt and C executables refuse direct host invocation before any authorization
 request or block access; they are not host CTest entries.
@@ -268,5 +268,37 @@ include `manifest.json`, `results.json`, `qemu-command.json`, `serial.log`,
 and rejects sanitizer diagnostics in the serial log.
 
 This qualifies a single native launch of the existing media fixture. Production
-helper/controller integration, active-job cancellation, caller disconnect,
-handoff hot-unplug/automount and other desktop sessions still need checkpoints.
+helper/controller integration and active-job cancellation are covered by the
+separate mode below. Handoff hot-unplug/automount and other desktop sessions remain.
+
+## Production device preparation
+
+`helper.py --device` runs `rufus-prepare-helper` and its actual Qt process controller
+with real authorization and root-side UDisks/kernel validation:
+
+```sh
+cmake --build /tmp/rufus-linux-qt6-build
+python linux/tests/vm/helper.py --device --build /tmp/rufus-linux-qt6-build \
+  --kernel 6.18.50-3-cachyos-lts --accel tcg /tmp/rufus-device-guest
+```
+
+The same offline guest recipe, regular-file USB and host readback tools apply.
+Allow about 3 GiB during preparation; this mode removes the unpacked package copy
+after building `system.raw`. The guest installs the generated production policy
+with its helper path adjusted to `/opt/rufus`, plus a guest-only policy for the
+separately linked cancellation probe. Both disable authorization caching.
+
+Nine independent jobs each make exactly one authorization request: cancel while
+the real dialog is open; reject changed disk sequence; reject changed identity;
+reject an ordinary-file request sent to the elevated helper; cancel an active root
+formatter; kill its ordinary-user GUI caller; complete native GPT/FAT32 preparation;
+refuse a mounted target; and fail without retry when the agent is absent. The root
+observer verifies whole-disk hashes for the initial refusals and mounted refusal.
+The slow formatter ignores TERM, so cancellation must use the existing grace-period
+KILL and reap path. No fault override is compiled into the production helper.
+
+The final disk is independently checked for GPT/FAT32 metadata, backup copies,
+fsck/mtools results and preserved surrounding bytes. The artifacts listed above
+are retained for normal and sanitizer runs. The changed-sequence test modifies
+the expected identity; it does not simulate physical removal during the ownership
+handoff. This is the preparation component, not application START or ISO boot.

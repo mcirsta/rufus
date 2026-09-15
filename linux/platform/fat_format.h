@@ -30,6 +30,12 @@ typedef struct {
 extern "C" {
 #endif
 
+/* Run the formatter's existing geometry/label/descriptor checks without
+ * starting a child or writing. Formatting repeats these checks. */
+int CheckFat32ImageRequest(int fd, const char* mkfs, const FAT32_FORMAT_OPTIONS* options);
+/* Geometry/label-only preflight, usable before the native partition exists. */
+int CheckFat32FormatOptions(const FAT32_FORMAT_OPTIONS* options);
+
 /* Quick-format one region of an existing, exclusively borrowed REGULAR FILE.
  * The caller owns the O_RDWR descriptor, its offset and all media decisions.
  * No path is reopened in the parent; the child receives the retained descriptor.
@@ -57,6 +63,17 @@ extern "C" {
  * ownership handoff, not simply relaxing the regular-file check here.
  * Serialize with other Rufus jobs using the existing libfat sector settings. */
 int FormatFat32Image(int fd, const char* mkfs, const FAT32_FORMAT_OPTIONS* options,
+	FAT32_FORMAT_RESULT* result);
+
+/* Format an already validated, non-exclusive partition descriptor. Its expected
+ * st_rdev and exact capacity must match. options.offset is the partition's disk
+ * offset (FAT hidden sectors); reads/writes start at byte zero of this descriptor.
+ * The caller must release its exclusive disk claim before this call: mkfs.fat
+ * reopens the inherited /proc descriptor and acquires its own exclusive claim.
+ * Reuses the image formatter's options, supervision, flush and libfat readback.
+ * The caller owns authorization, partition identity/extent checks and exclusive
+ * reacquisition afterward. Neither function opens an arbitrary device pathname. */
+int FormatFat32Partition(int fd, uint64_t device, const char* mkfs, const FAT32_FORMAT_OPTIONS* options,
 	FAT32_FORMAT_RESULT* result);
 
 #ifdef __cplusplus

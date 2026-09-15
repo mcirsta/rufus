@@ -145,6 +145,7 @@ def main():
         inspect(args, root, Path(str(image) + ".held"), MIB, 64*MIB, 512, "RUFUS TEST", report)
         image = make_target(root, "invalid.img", MIB, 64*MIB)
         invalid = [("readonly", {}, errno.EINVAL), ("append", {}, errno.EINVAL), ("pipe", {}, errno.ENOTSUP),
+                   ("partition-file", {}, errno.ENOTSUP), ("partition-zero", {}, errno.EINVAL),
                    ("cancel-before", {}, errno.ECANCELED), ("none", {"offset": 513}, errno.EINVAL),
                    ("none", {"size": 64*MIB+1}, errno.EINVAL), ("none", {"size": 0}, errno.ENOTSUP),
                    ("none", {"size": 128*MIB}, errno.ENOSPC), ("none", {"cluster": 0}, errno.EINVAL),

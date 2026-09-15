@@ -37,8 +37,12 @@ when output names collide. CP10i qualifies GPT creation on retained guest block
 descriptors. CP10j qualifies releasing our claim, running stock mkfs.fat on the
 partition, then reacquiring access and checking the result. CP10k runs those
 guest operations through one real polkit authorization from an unprivileged Qt
-caller, with approval caching disabled. Next connect one concrete GPT/FAT32 job
-to a production helper with request, progress/result and cancellation handling.
+caller, with approval caching disabled. CP10l adds the helper process and Qt
+controller for one GPT/FAT32 image-file job, including preflight, phase/results,
+EOF cancellation and child cleanup. CP10m adds the explicit native-device request,
+root-side target revalidation and one polkit launch to that connection. The next
+step is mounting and tree extraction within that same authorized job, followed
+by a narrow UEFI boot checkpoint before enabling ISO START.
 Further image-analysis variants,
 including standalone WIM/ESD SELECT integration, stay deferred. Completion is
 measured by supported workflows.
@@ -102,8 +106,9 @@ Rufus Git operations inside that directory.
 | Shared image policy | CP3b extracts the neutral report and image policy. CP10a feeds shared boot-marker detection into that unchanged policy during SELECT, distinguishing a DD candidate from an image requiring DD. Native Windows verification pending. |
 | ISOHybrid mode dialog | CP10b shares the original ordered mode choices between Windows and Qt, with ISO as the default, conditional ISO → ESP, DD and cancellation. The Qt dialog component is tested but not opened by application START until ISO execution is ready. |
 | Native ISO/UDF extraction | CP10c shares traversal and file readers, copying ordinary trees into private empty directories. CP10g shares filename substitutions; CP10h matches ordinary-file replacement and directory reuse on collisions. Sixteen mounted-FAT32 guest cases cover names/bytes, merged directories, shorter/empty replacements, real ENOSPC and EROFS. Device services, boot support and ISO START remain. |
-| Native FAT32 preparation | CP10d formats an explicit region of a retained regular file with mkfs.fat, then flushes and checks it using Rufus's FAT reader. CP10e handles sector-aligned boundaries, including odd sector counts. CP10j qualifies a direct CLI handoff in the USB guest; CP10k runs that guest helper through one native polkit authorization. Production helper/controller integration remains. |
+| Native FAT32 preparation | CP10d formats an explicit region of a retained regular file with mkfs.fat, then flushes and checks it using Rufus's FAT reader. CP10e handles sector-aligned boundaries, including odd sector counts. CP10m reuses that implementation on the native partition descriptor, with explicit disk-claim release and reacquisition inside one authorized helper. ISO execution remains. |
 | GPT preparation | CP10e shares Rufus's first/main partition placement calculations with Windows. Linux uses libfdisk to write and verify one ordinary GPT main partition. CP10i qualifies retained block descriptors on an emulated USB, with identity/capacity/sector/read-only checks and unchanged caller ownership. Device services, additional layouts and boot support remain. |
+| Preparation helper | CP10l executes one GPT/FAT32 ordinary-file request through a Qt process controller. CP10m adds a separate device operation with one polkit launch, fresh privileged identity/use checks and formatter handoff. EOF cancels and reaps the formatter, including on caller death. File requests cannot run elevated. Mount/extraction and application ISO START integration remain. |
 | Shared file classification | CP3c1 implemented: file rules separated from extraction; integrated into shared ISO9660/UDF traversal and the Qt job through CP3d/CP3e. |
 | Shared embedded EFI inspection | CP3f1/CP3f2 implemented: ISO9660 and UDF use Rufus's existing FAT reader, with bounded reads, generated FAT/fragmented-UDF fixtures and Qt functional tests. |
 | Shared WinPE options | CP3g1 implemented: bounded SIF reads, original directory priority and `/minint` decision, with explicit known/unavailable results. |
@@ -198,8 +203,16 @@ from an ordinary-user Qt test through the real KDE authentication agent. One
 authorization covers the existing GPT/formatter/mount/readback/cleanup tests;
 the test policy uses `auth_admin`, with no cached grant. Dismissal and missing-agent
 requests never enter the helper or retry authorization. Production integration
-remains: reuse these media operations behind one concrete job request and a
-bounded progress/result/cancellation channel. Avoid adding a general RPC framework.
+continues in CP10l: one bounded JSON request and phase/result messages use stdin
+and stdout; EOF cancels the worker, including on caller disconnect. The first
+operation uses the existing ordinary-file adapters and refuses elevated execution.
+CP10m adds a distinct native operation through the same connection. The helper
+checks fresh UDisks identity/use and the kernel disk sequence before writes and
+around the formatter handoff. It retains a non-exclusive partition descriptor,
+releases the disk claim for the CLI, then reacquires and verifies both GPT copies.
+Cancellation before authorization stops pkexec; after elevation, pipe EOF reaches
+the helper's cleanup path. There is no second launch or authorization retry.
+Extend this concrete job with mount/extraction next; avoid a general RPC framework.
 Keep one layout; mount/extraction handoff and boot qualification still precede
 enabling ISO writing.
 The dialog keeps Rufus's ISO default and DD choice throughout these steps.

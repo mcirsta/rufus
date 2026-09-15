@@ -22,6 +22,11 @@ typedef struct {
 extern "C" {
 #endif
 
+/* Validate geometry/descriptor and calculate the main extent without writing
+ * or changing the descriptor position. CreateGptImagePartition repeats this
+ * check; a successful preflight is not a promise that later writes can proceed. */
+int PlanGptImagePartition(int fd, const GPT_IMAGE_OPTIONS* options, GPT_IMAGE_RESULT* result);
+
 /* Create an ordinary Rufus GPT with one "Main Data Partition" of Microsoft
  * Basic Data type. Uses common Rufus placement arithmetic and libfdisk for the
  * table/CRCs/IDs. Accepts a caller-owned, exclusively borrowed regular file or

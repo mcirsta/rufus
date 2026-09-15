@@ -3042,3 +3042,191 @@ progress/result/cancellation channel. Revalidate the accepted device/plan on the
 privileged side, handle caller disconnect and reap child tools there, and never
 relaunch a failed helper with another prompt. Keep additional layouts, bootloader
 support and a general service framework outside that checkpoint.
+
+## CP10l: one-request preparation process (2026-09-15)
+
+Committed CP10i through CP10k as `00fa641f`
+(`[linux] qualify GPT block access and single helper authorization`).
+
+Added the production `rufus-prepare-helper` executable and Qt
+`PrepareImageProcess` component. This step deliberately starts with an existing
+ordinary-user image file, so request handling, cancellation and process lifetime
+can be checked before enabling privileged device writes. Application START and
+the existing raw-writing path are unchanged. No production polkit policy or
+installation rule was added.
+
+One request carries the path, accepted filesystem device/inode/size, cluster size,
+label and volume ID. The helper rejects elevated execution, unsupported operations,
+unexpected fields, invalid types, symlinks, non-regular/shared-link targets, changed
+identity/size and conflicting advisory locks. A fixed CMake-selected mkfs path
+cannot be overridden by the request. Existing FAT32 validation and GPT placement
+checks now have public read-only preflight entry points; both succeed before the
+first GPT write. Creation and formatting repeat their checks. The original C
+algorithms, formatter process supervision, flush and readback are reused.
+
+The protocol uses bounded JSON lines over ordinary pipes, with a ready message,
+three phase messages, bounded logs and one result. Decimal strings preserve 64-bit
+identity/size values. Closing stdin requests cancellation, also covering caller
+disconnect. The helper forwards interruption to its worker; the existing formatter
+code sends TERM, then KILL after its grace period if necessary, and reaps the child.
+The helper joins the worker and closes its target before reporting its result.
+The Qt controller finalizes only after the process exits. Invalid/missing results
+fail with possible partial writes, and flush failure is reported explicitly.
+Controller destruction closes stdin and waits for this cleanup rather than killing
+the helper. The prototype's cooperative cancellation remains subject to a blocked
+kernel I/O call returning; it does not promise a hard deadline for such failures.
+
+Validation:
+
+- The full normal suite passes across the initial run and a targeted rerun of
+  the three private D-Bus fixtures: **49/49 entries covered**. The sandbox initially
+  blocked their Unix sockets; the ordinary-user rerun passed **3/3 (22.42 s)**.
+- Full **ASan/UBSan/leak suite: 49/49 (92.19 s)** outside the tracing sandbox,
+  with no sanitizer diagnostics. The initial sandbox run could not perform
+  LeakSanitizer thread inspection. Leak checking remained enabled for the rerun.
+- The new Qt and Python process suites pass. Cases include native completion and
+  reuse, cancellation before sending a request, changed target, failed launch,
+  malformed/oversized/incomplete helper responses, active cancellation, controller
+  destruction, and explicit partial-image/flush failure reporting.
+- Independent file checks validate GPT headers/CRCs/layout, FAT32 metadata and
+  backup boot sector, `fsck.fat -n`, empty mtools output and surrounding-byte
+  preservation. Bad geometry/labels and invalid protocol requests leave the image
+  byte-identical. Partial input followed by EOF also leaves it unchanged.
+- An actual child process that ignores TERM is cancelled through EOF, killed by
+  the existing formatter after its grace period and reaped before completion.
+  A later normal preparation succeeds. Fault controls exist only in the separately
+  linked `prepare_helper_probe`; no production override was introduced.
+- The direct GPT USB guest is rerun after exposing the preflight function; all
+  eleven native requests and the formatter handoff pass, including byte-identical
+  4K rejection. This is regression evidence for the adapter, not device integration
+  of the new helper.
+- Authored code builds without warnings. Existing upstream wimlib warnings remain.
+  Python syntax, no-lambda and whitespace checks pass. The final logging/flush-message
+  adjustment is covered by focused normal and sanitizer process-suite reruns.
+
+Reproduction uses the existing normal/sanitizer CMake build directories:
+
+```sh
+cmake --build /tmp/rufus-linux-qt6-build
+LD_LIBRARY_PATH=/tmp/rufus-test-deps/usr/lib ctest --test-dir /tmp/rufus-linux-qt6-build --output-on-failure
+ctest --test-dir /tmp/rufus-linux-qt6-build -R 'rufus_prepare_(process|helper)' --output-on-failure
+```
+
+Logs: `/tmp/rufus-cp10l-tests.log`, `/tmp/rufus-cp10l-dbus-tests.log`,
+`/tmp/rufus-cp10l-sanitizer-tests-final.log`, `/tmp/rufus-cp10l-focused-final.log`
+and `/tmp/rufus-cp10l-sanitizer-focused-final.log`. The GPT guest artifacts are
+under `/tmp/rufus-cp10l-gpt-guest`. These are temporary paths. CP10l changes remain
+local and uncommitted after the requested preceding checkpoint commit.
+
+**Next checkpoint:** add a distinct native GPT/FAT32 device operation using this
+process connection and one polkit launch. Validate the accepted target and its
+current use on the privileged side, integrate the explicit formatter ownership
+handoff, and qualify active cancellation/caller disconnect under real authorization
+in the disposable guest. Do not elevate the current ordinary-file operation or
+accept arbitrary tool paths. Mount/extraction, ISO boot support and application
+START integration still follow; NTFS/exFAT and other desktop sessions remain separate.
+
+
+## CP10m: authorized native GPT/FAT32 preparation (2026-09-15)
+
+Added a separate native-device operation to the production preparation helper and
+Qt process controller. One `pkexec --disable-internal-agent` launch authorizes the
+whole GPT/FAT32 job. The helper stays privileged through formatter cleanup; it does
+not call separately authenticated UDisks operations or retry authorization. The GUI
+stays an ordinary user. CMake generates an `auth_admin` policy restricted to the
+configured helper path and `--device`, and supplies helper/policy installation rules.
+Nothing is installed on the development host. Windows sources are unchanged.
+
+The request captures the accepted UDisks service owner, object, identity and device
+facts, plus the kernel disk sequence. Before writing, the root helper reads a fresh
+snapshot from the real system bus, repeats the existing USB eligibility/use checks,
+and validates its exclusive block descriptor against size, device number, sequence,
+512-byte sectors and writable state. Raw writing and preparation now share the
+existing UDisks use checks instead of maintaining two copies. The ordinary-file
+operation remains unprivileged and is rejected in native launch mode.
+
+After GPT creation, the helper refreshes the kernel partition table and checks the
+kernel's partition-1 extent and disk sequence. It holds a non-exclusive partition
+FD, releases the whole-disk exclusive claim, then calls stock mkfs.fat through the
+inherited `/proc/self/fd/3`. The formatter's existing command construction, process
+supervision, flush and Rufus FAT-reader verification serve both regular files and
+native partitions. Partition I/O starts at zero; FAT hidden sectors still describe
+the partition's disk offset. The helper closes the partition FD, reacquires the
+whole disk and verifies its identity and both GPT copies, also attempting this
+cleanup after formatter cancellation/failure. Busy or replaced targets are not
+bypassed or retried. GPT placement and FAT32 preflight still precede any writes.
+
+The kernel sequence provides an additional check against reusing a device number;
+see the [kernel stable ABI](https://www.kernel.org/doc/html/v6.12/admin-guide/abi-stable.html)
+and [block ioctl implementation](https://github.com/torvalds/linux/blob/master/block/ioctl.c).
+The current native path requires that facility and fails if it cannot obtain it.
+The ownership handoff is explicit, not continuous exclusivity. These identity checks
+are not evidence of physical hot-unplug or automount qualification during the gap.
+
+Cancellation while the authentication dialog is open stops the still-unprivileged
+pkexec process before a job request is sent. After elevation, cancellation uses
+stdin EOF because the ordinary caller cannot signal a root helper. EOF also covers
+actual caller death. The root worker uses the existing TERM/grace-period/KILL/reap
+path and reports completion only after cleanup. No process relaunch or second prompt
+is used. Cooperative cleanup still depends on blocked kernel I/O eventually returning.
+
+Validation:
+
+- Full normal CTest suite: **49/49 (52.78 s)**. Full ASan/UBSan suite with leak
+  checking enabled: **49/49 (94.23 s)**. These ordinary-user runs use disposable
+  files/private D-Bus fixtures outside the tracing/socket sandbox.
+- Both normal and ASan/UBSan native KDE/X11 guests pass **11/11 Qt entries**:
+  nine jobs plus setup/cleanup (123.58 s and 167.66 s of Qt tests respectively).
+  Each independent root D-Bus monitor records exactly nine authorization
+  requests, one per job, with approval caching disabled. Neither run reports
+  address, leak or undefined-behavior diagnostics.
+- Guest jobs cover cancellation while the real dialog is open, changed expected
+  disk sequence, changed UDisks identity, refusal of an elevated file request,
+  active formatter cancellation, actual GUI caller death, native preparation,
+  mounted-target refusal, and absent-agent failure without retry. The root observer
+  verifies the initial refusals and mounted refusal leave the whole disk unchanged.
+- The active/caller-death tests use a separately linked probe and a guest-owned slow
+  formatter that ignores TERM. The ordinary GUI cannot signal that root child;
+  EOF causes the helper to stop and reap it before completion. A later job using
+  the production helper and stock mkfs.fat completes successfully.
+- Host readback independently validates both GPT copies/CRCs, the FAT32 metadata
+  and backup boot sector, `fsck.fat -n`, empty mtools listing and surrounding bytes.
+  The qualified partition starts at 1 MiB and occupies 66,028,032 bytes of the
+  64 MiB fixture, with the requested label, volume ID and 512-byte clusters.
+- Normal and sanitizer builds have no authored-code warnings. Existing upstream
+  wimlib/libcdio warnings remain. New partition-entry rejection cases pass in the
+  regular-file FAT suite. Python/shell syntax, no-lambda, whitespace and direct
+  host/unelevated-device refusal checks pass.
+- A rootless `DESTDIR` install under `/tmp/rufus-cp10m-install` verifies that the
+  generated policy targets the installed helper, requires `--device` and uses
+  uncached `auth_admin` for each session state.
+
+Reproduction:
+
+```sh
+cmake --build /tmp/rufus-linux-qt6-build
+LD_LIBRARY_PATH=/tmp/rufus-test-deps/usr/lib ctest --test-dir /tmp/rufus-linux-qt6-build --output-on-failure
+python linux/tests/vm/helper.py --device --build /tmp/rufus-linux-qt6-build \
+  --kernel 6.18.50-3-cachyos-lts --accel tcg /tmp/rufus-device-guest
+```
+
+The VM build requires `RUFUS_BUILD_VM_TEST=ON`, cached matching guest packages
+and a new output directory. It uses regular-file disks without host mounts, host
+block-device access, network or device passthrough. The same recipe accepts the
+sanitizer build. The fixture uses Linux 6.18.50, Qt 6.11.2, KDE's 6.7.5 agent,
+polkit 127 and dosfstools 4.2; manifests retain exact package versions and hashes.
+
+Artifacts: `/tmp/rufus-cp10m-device-qualified` and
+`/tmp/rufus-cp10m-device-sanitizers`, with matching `.log` files, manifests,
+serial/authorization logs, a real authentication screenshot, disk images and
+independent readback results. Host regression/build logs use
+`/tmp/rufus-cp10m-tests.log`, `/tmp/rufus-cp10m-sanitizer-tests.log`,
+`/tmp/rufus-cp10m-build-final.log` and `/tmp/rufus-cp10m-sanitizer-build.log`.
+These are temporary artifacts. CP10l/CP10m changes remain local and uncommitted.
+
+**Next checkpoint:** extend this same concrete authorized job with mounting and
+existing ISO-tree extraction, including unmount/flush cleanup on cancellation.
+Qualify one ordinary UEFI image through that path before wiring ISO mode to START.
+Additional layouts, NTFS/exFAT, bootloader installation, real hot-unplug during
+handoff and other desktop agents remain separate work. The current application
+raw-writing workflow and ISO-mode gating are unchanged.

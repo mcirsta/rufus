@@ -7,12 +7,14 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <linux/fs.h>
 #include <poll.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -44,16 +46,15 @@ enum {
 	DIAGNOSTIC_READS_PER_POLL = 16
 };
 
-static int CheckFormatRequest(int fd, const char* mkfs, const FAT32_FORMAT_OPTIONS* options,
-	struct stat* info)
+int CheckFat32FormatOptions(const FAT32_FORMAT_OPTIONS* options)
 {
+	if (options == NULL)
+		return EINVAL;
 	uint64_t sectors, clusters, fat_sectors, reserved_sectors, overhead_sectors;
 	uint32_t cluster_bytes = options->cluster_size;
 	uint32_t cluster_sectors;
 	size_t length;
-	int flags;
 
-	const bool absolute_tool_path = mkfs != NULL && mkfs[0] == '/';
 	const bool sector_aligned = options->offset % FAT_SECTOR_BYTES == 0 &&
 		options->size % FAT_SECTOR_BYTES == 0;
 	const bool fits_fat_sector_fields = options->offset / FAT_SECTOR_BYTES <= UINT32_MAX &&
@@ -63,7 +64,7 @@ static int CheckFormatRequest(int fd, const char* mkfs, const FAT32_FORMAT_OPTIO
 	const bool cluster_is_power_of_two = cluster_bytes != 0 &&
 		(cluster_bytes & (cluster_bytes - 1)) == 0;
 
-	if (!absolute_tool_path || !sector_aligned || !fits_fat_sector_fields)
+	if (!sector_aligned || !fits_fat_sector_fields)
 		return EINVAL;
 	if (!cluster_in_range || !cluster_is_power_of_two)
 		return EINVAL;
@@ -99,15 +100,45 @@ static int CheckFormatRequest(int fd, const char* mkfs, const FAT32_FORMAT_OPTIO
 	const bool too_many_clusters = clusters > FAT32_MAX_CLUSTERS;
 	if (!enough_clusters || too_many_clusters)
 		return ENOTSUP;
-	flags = fcntl(fd, F_GETFL);
+	return 0;
+}
+
+static int CheckFormatRequest(int fd, const char* mkfs, const FAT32_FORMAT_OPTIONS* options,
+	uint64_t device, struct stat* info)
+{
+	int error = CheckFat32FormatOptions(options);
+	if (error != 0)
+		return error;
+	if (mkfs == NULL || mkfs[0] != '/')
+		return EINVAL;
+	int flags = fcntl(fd, F_GETFL);
 	if (flags < 0 || fstat(fd, info) != 0)
 		return errno;
-	if (!S_ISREG(info->st_mode))
+	const bool partition = device != 0;
+	const bool expected_type = partition ? S_ISBLK(info->st_mode) : S_ISREG(info->st_mode);
+	if (!expected_type)
 		return ENOTSUP;
 	const bool read_write = (flags & O_ACCMODE) == O_RDWR;
 	const bool incompatible_flags = (flags & (O_APPEND | O_DIRECT | O_PATH)) != 0;
 	if (!read_write || incompatible_flags)
 		return EINVAL;
+	if (partition) {
+		uint64_t size = 0;
+		int sector_size = 0, read_only = 1;
+		if ((uint64_t)info->st_rdev != device)
+			return ESTALE;
+		if (ioctl(fd, BLKGETSIZE64, &size) != 0 || ioctl(fd, BLKSSZGET, &sector_size) != 0)
+			return errno;
+		if (ioctl(fd, BLKROGET, &read_only) != 0)
+			return errno;
+		if (read_only)
+			return EROFS;
+		if (sector_size != FAT_SECTOR_BYTES)
+			return ENOTSUP;
+		if (size != options->size)
+			return ESTALE;
+		return IsRufusJobCancelled() ? ECANCELED : 0;
+	}
 	const bool offset_in_file = info->st_size >= 0 && options->offset <= (uint64_t)info->st_size;
 	if (!offset_in_file)
 		return ENOSPC;
@@ -115,6 +146,14 @@ static int CheckFormatRequest(int fd, const char* mkfs, const FAT32_FORMAT_OPTIO
 	if (options->size > available_bytes)
 		return ENOSPC;
 	return IsRufusJobCancelled() ? ECANCELED : 0;
+}
+
+int CheckFat32ImageRequest(int fd, const char* mkfs, const FAT32_FORMAT_OPTIONS* options)
+{
+	struct stat info;
+	if (options == NULL)
+		return EINVAL;
+	return CheckFormatRequest(fd, mkfs, options, 0, &info);
 }
 
 static int StartFormatter(int fd, char* const* arguments, pid_t* child, int* output)
@@ -259,6 +298,7 @@ static int WaitForFormatter(pid_t child, int output, FAT32_FORMAT_RESULT* result
 typedef struct {
 	int fd;
 	const FAT32_FORMAT_OPTIONS* options;
+	uint64_t data_offset;
 } FAT_FORMAT_READER;
 
 static int ReadFatSector(intptr_t data, void* buffer, size_t size, libfat_sector_t sector)
@@ -269,14 +309,15 @@ static int ReadFatSector(intptr_t data, void* buffer, size_t size, libfat_sector
 	if (size != FAT_SECTOR_BYTES || !sector_in_range)
 		return 0;
 	do {
-		count = pread(reader->fd, buffer, size, (off_t)(reader->options->offset + sector * FAT_SECTOR_BYTES));
+		count = pread(reader->fd, buffer, size, (off_t)(reader->data_offset + sector * FAT_SECTOR_BYTES));
 	} while (count < 0 && errno == EINTR);
 	return count < 0 ? 0 : (int)count;
 }
 
-static int CheckFormattedImage(int fd, const FAT32_FORMAT_OPTIONS* options, FAT32_FORMAT_RESULT* result)
+static int CheckFormattedImage(int fd, const FAT32_FORMAT_OPTIONS* options, uint64_t data_offset,
+	FAT32_FORMAT_RESULT* result)
 {
-	FAT_FORMAT_READER reader = { fd, options };
+	FAT_FORMAT_READER reader = { fd, options, data_offset };
 	struct fat_bootsect boot;
 	struct libfat_filesystem* fs;
 	char label[FAT32_LABEL_LENGTH];
@@ -341,11 +382,11 @@ static int CheckFormattedImage(int fd, const FAT32_FORMAT_OPTIONS* options, FAT3
 	return error;
 }
 
-int FormatFat32Image(int fd, const char* mkfs, const FAT32_FORMAT_OPTIONS* options,
+static int FormatFat32(int fd, uint64_t device, const char* mkfs, const FAT32_FORMAT_OPTIONS* options,
 	FAT32_FORMAT_RESULT* result)
 {
 	struct stat before, after;
-	char offset[FORMAT_ARGUMENT_BYTES], blocks[FORMAT_ARGUMENT_BYTES];
+	char offset[FORMAT_ARGUMENT_BYTES], hidden[FORMAT_ARGUMENT_BYTES], blocks[FORMAT_ARGUMENT_BYTES];
 	char cluster[FORMAT_ARGUMENT_BYTES], serial[FORMAT_ARGUMENT_BYTES];
 	char sector_bytes[FORMAT_ARGUMENT_BYTES], fat_copies[FORMAT_ARGUMENT_BYTES];
 	char reserved[FORMAT_ARGUMENT_BYTES], geometry[FORMAT_ARGUMENT_BYTES], target[FORMAT_ARGUMENT_BYTES];
@@ -358,10 +399,12 @@ int FormatFat32Image(int fd, const char* mkfs, const FAT32_FORMAT_OPTIONS* optio
 	result->exit_code = -1;
 	if (options == NULL)
 		return EINVAL;
-	error = CheckFormatRequest(fd, mkfs, options, &before);
+	error = CheckFormatRequest(fd, mkfs, options, device, &before);
 	if (error != 0)
 		return error;
-	snprintf(offset, sizeof(offset), "%" PRIu64, options->offset / FAT_SECTOR_BYTES);
+	const uint64_t data_offset = device != 0 ? 0 : options->offset;
+	snprintf(offset, sizeof(offset), "%" PRIu64, data_offset / FAT_SECTOR_BYTES);
+	snprintf(hidden, sizeof(hidden), "%" PRIu64, options->offset / FAT_SECTOR_BYTES);
 	snprintf(blocks, sizeof(blocks), "%" PRIu64, options->size / MKFS_BLOCK_BYTES);
 	snprintf(cluster, sizeof(cluster), "%u", options->cluster_size / FAT_SECTOR_BYTES);
 	snprintf(serial, sizeof(serial), "%08" PRIx32, options->volume_id);
@@ -377,7 +420,7 @@ int FormatFat32Image(int fd, const char* mkfs, const FAT32_FORMAT_OPTIONS* optio
 		"-b", "6",                          // Backup boot sector at sector 6.
 		"-g", geometry,
 		"-D", "128", "-M", "248",           // BIOS hard disk (0x80), fixed-disk media (0xf8).
-		"-h", offset, "-i", serial, "-n", (char*)options->label,
+		"-h", hidden, "-i", serial, "-n", (char*)options->label,
 		"--mbr=n", "--variant=standard", "--offset", offset, target, blocks, NULL, NULL };
 	const bool partial_mkfs_block = options->size % MKFS_BLOCK_BYTES != 0;
 	if (partial_mkfs_block) {
@@ -416,6 +459,26 @@ int FormatFat32Image(int fd, const char* mkfs, const FAT32_FORMAT_OPTIONS* optio
 			error = ESTALE;
 	}
 	if (error == 0)
-		error = CheckFormattedImage(fd, options, result);
+		error = CheckFormatRequest(fd, mkfs, options, device, &after);
+	if (error == 0)
+		error = CheckFormattedImage(fd, options, data_offset, result);
 	return error;
+}
+
+int FormatFat32Image(int fd, const char* mkfs, const FAT32_FORMAT_OPTIONS* options, FAT32_FORMAT_RESULT* result)
+{
+	return FormatFat32(fd, 0, mkfs, options, result);
+}
+
+int FormatFat32Partition(int fd, uint64_t device, const char* mkfs, const FAT32_FORMAT_OPTIONS* options,
+	FAT32_FORMAT_RESULT* result)
+{
+	if (device == 0) {
+		if (result != NULL) {
+			memset(result, 0, sizeof(*result));
+			result->exit_code = -1;
+		}
+		return EINVAL;
+	}
+	return FormatFat32(fd, device, mkfs, options, result);
 }

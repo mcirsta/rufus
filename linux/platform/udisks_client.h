@@ -24,6 +24,9 @@ using UDisksObjects = QMap<QDBusObjectPath, UDisksInterfaces>;
 // Decode the same conservative device eligibility and identity for discovery
 // and fresh write-plan snapshots. Does not assign a selection ID/service owner.
 bool DescribeUDisksDevice(const UDisksObjects& objects, const QString& path, Device& device);
+// Shared current-use checks for raw writing and preparation. Zero sourceDevice
+// means this operation has no source image; mounted/layered targets still fail.
+QString CheckUDisksTargetUse(const UDisksObjects& objects, const Device& target, quint64 sourceDevice);
 
 // Read-only discovery. The caller must explicitly supply the bus connection.
 class UDisksClient : public QObject
