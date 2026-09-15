@@ -1,6 +1,6 @@
 /*
  * Rufus: The Reliable USB Formatting Utility
- * ISO file classification, shared by scanning and extraction
+ * ISO file rules, shared by scanning and extraction
  * Copyright © 2011-2026 Pete Batard <pete@akeo.ie>
  * Based on libcdio's iso & udf samples:
  * Copyright © 2003-2014 Rocky Bernstein <rocky@gnu.org>
@@ -47,6 +47,23 @@ bool IsBootImageSignature(const void* data, size_t size)
 	const uint8_t* sector = data;
 
 	return sector != NULL && size >= 512 && sector[510] == 0x55 && sector[511] == 0xaa;
+}
+
+bool SanitizeImagePath(char* path)
+{
+	size_t i, j;
+	bool changed = false;
+	char unauthorized[] = { '*', '?', '<', '>', ':', '|' };
+
+	for (i = 0; path[i] != 0; i++) {
+		for (j = 0; j < sizeof(unauthorized); j++) {
+			if (path[i] == unauthorized[j]) {
+				path[i] = '_';
+				changed = true;
+			}
+		}
+	}
+	return changed;
 }
 
 // Same bounded, terminating copy as Rufus's safe_strcp, for image report paths.

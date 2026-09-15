@@ -2698,3 +2698,166 @@ Full test logs are `/tmp/rufus-style-tests.log` and
 No new VM boot, physical USB or Windows validation was performed. Changes remain
 local and uncommitted. The next implementation checkpoint remains the FAT32
 extraction qualification described above.
+
+## CP10f: mounted FAT32 extraction qualification (2026-09-15)
+
+Recorded the previously uncommitted implementation as `db2b4ae6`, followed by
+the separate coding-preference refactor `b70bba1b`. Both commits are local.
+
+Added an optional [FAT32 guest recipe](../linux/tests/vm/README.md#mounted-fat32-extraction)
+that reuses the CMake extraction, GPT and formatting probes and the existing
+kernel/bootstrap recipe. The host creates a fresh 64 MiB regular-file disk,
+partitions it through the shared Rufus layout/native libfdisk component, and
+formats the returned extent through the native mkfs.fat adapter. QEMU exposes
+that file as USB. The minimal guest mounts it through Linux vfat; the host uses
+no mounts, root privileges, network or physical devices.
+
+**11/11 cases pass** with Linux `6.18.50-3-cachyos-lts` and QEMU TCG software
+emulation. The guest uses `utf8=1,shortname=mixed`. The successful trees cover
+Rock Ridge, Joliet and UDF, Unicode/mixed-case/long filenames, nested and empty
+directories, zero-length files, multi-buffer contents, and shared root
+`ldlinux.sys` exclusion. The copied initramfs includes glibc's runtime character
+converters, which UDF needs in addition to the libraries reported by `ldd`.
+
+Failure cases exercise real FAT case collisions and invalid characters, injected
+write and sync errors, cancellation with an immediate successful retry, a real
+full filesystem, and a read-only mount. Filling the filesystem leaves 512 KiB
+free before extraction: the kernel accepts exactly that much of the larger file,
+then returns ENOSPC. The partial file is removed. The read-only mount returns
+EROFS. Failed operations retain no descriptors and do not overwrite earlier
+entries. A final successful tree after unmount/remount demonstrates recovery.
+
+The host independently reads the unmounted partition with mtools and compares
+every filename and byte, including the preserved first colliding file and empty
+failure directories. `fsck.fat -n` reports a clean volume. Both GPT copies and
+every byte outside the partition remain unchanged. Read/write requests stay
+within the existing 1 MiB buffer bound. All source images remain unchanged.
+
+The extractor, original Rufus code, CMake targets and Widgets require no changes
+for this checkpoint. The prior 47/47 normal and sanitizer results still cover
+the committed production code; this new VM run uses the normal test probes.
+It is not a new sanitizer, Windows, native authentication or boot qualification.
+The application ISO START gate remains unchanged.
+
+Artifacts are in `/tmp/rufus-fat-extract-qualified`, including manifests, the
+QEMU command, per-case JSON, serial log, filesystem check, disk image and complete
+readback tree. Temporary artifact paths are not durable records; the checked-in
+recipe reproduces them. This checkpoint's test/docs changes remain uncommitted.
+
+**Next bounded checkpoint:** share Rufus's invalid-character substitution rule
+from `src/iso.c`, keeping Windows drive-prefix semantics and separate original
+source paths on Linux. The FAT test currently proves that `bad:name.txt` fails;
+Windows Rufus changes it to `bad_name.txt`. Add tests for files and nested
+directories when sharing that rule. Review overwrite/collision parity explicitly
+before choosing final ISO writer behavior: Windows creates with `CREATE_ALWAYS`,
+whereas this component deliberately uses `O_EXCL`. No general filesystem-policy
+framework or additional boot work is required for that next step.
+
+## CP10g: shared extraction filename substitutions (2026-09-15)
+
+Moved the original six-character replacement loop from `src/iso.c` into
+`SanitizeImagePath` in the existing shared `image_file` module. Both Windows and
+Linux already build that module, so no build target, platform conditional or
+compatibility layer was added. The helper modifies a caller-owned string in
+place, preserves its length, and reports whether any byte changed. It does not
+allocate or add normalization beyond Rufus's existing `* ? < > : |` → `_` rule.
+
+Windows retains its allocation/logging wrapper, unchanged-name flag and skip of
+the first two drive-prefix bytes. Linux retains each original source path for
+classification, image reads and failure reporting, and converts a bounded copy
+for output creation, parent traversal, directory flushes and failed-file removal.
+The caller's target directory path is never converted. Files such as
+`MiX:dir/sub?dir/ș-é.txt` now extract as `MiX_dir/sub_dir/ș-é.txt`.
+
+Tests cover all byte values, protected Windows prefixes, unchanged-name flags,
+UTF-8 preservation and exact substitutions. Generated ISO/UDF cases verify file
+contents under renamed parents, empty renamed directories, cancellation/retry,
+failed write/sync/close cleanup and resulting name collisions. UDF fixtures
+restore original names in valid file identifier records, including CRC/tag
+repair, because mkisofs otherwise performs its own substitutions before Rufus
+ever sees the names.
+
+Validation:
+
+- Full normal suite: **47/47 CTest entries (46.11 seconds)**.
+- Full **ASan/UBSan/leak-check suite: 47/47 (85.34 seconds)**.
+- These include **1,501 shared image-rule assertions** and **71 ISO/UDF
+  extraction cases**, using the existing test targets.
+- The mounted FAT32 guest passes **13/13 cases** on Linux
+  `6.18.50-3-cachyos-lts` with QEMU TCG. Independent mtools readback verifies
+  converted names and every byte; `fsck.fat -n` succeeds and both GPT copies and
+  all bytes outside the partition remain unchanged. Real ENOSPC, read-only and
+  injected failure/cancellation cases now use a name requiring conversion.
+- Rebuilt authored code has no warnings; existing libcdio header warnings remain.
+  Python/shell syntax, the guest's host refusal and whitespace checks pass.
+
+Logs are `/tmp/rufus-cp10g-tests.log` and
+`/tmp/rufus-cp10g-sanitizer-tests.log`. The guest's manifests, serial log, JSON
+results, filesystem check, disk and readback are in `/tmp/rufus-cp10g-fat-guest`.
+These paths are temporary. Windows build/runtime validation remains deferred;
+the portable shared rule was tested, not the full Windows executable. ISO START
+and bootability remain unchanged. Changes remain local and uncommitted.
+
+**Next bounded decision:** compare Windows's file replacement and existing-
+directory behavior with Linux's current exclusive creation. Distinct source
+names may map to the same output name. The current component still returns
+EEXIST and preserves the first entry; this checkpoint does not decide the final
+ISO writer's replacement/merge policy. Resolve that contract before adding
+device-service orchestration or broadening filesystem handling.
+
+## CP10h: file replacement and directory reuse (2026-09-15)
+
+Reviewed both extraction branches in `src/iso.c` and `CreatePreallocatedFile`
+in `src/stdio.c`. Windows uses `CREATE_ALWAYS`, mapped to `FILE_OVERWRITE_IF`,
+and continues into existing directories after `_mkdirU`. For ordinary entries,
+the last source file at an output path supplies its contents; colliding source
+directories contribute children to the same output directory. This applies to
+collisions produced by substitutions as well as native filesystem aliases.
+
+Linux now follows that behavior through two small local output helpers. New
+files retain the existing exclusive-creation path. On a collision, the helper
+opens without following symlinks or truncating, checks for a singly linked
+regular file, checks cancellation, then truncates the retained descriptor.
+Nonblocking open avoids waiting on an unexpected FIFO. Directory reuse verifies
+an actual directory without following links, including empty directories.
+The private output root must still be empty when extraction starts. No custom
+case-folding index, entry manifest or Windows compatibility framework was added.
+The shared reader/traversal and Windows source are unchanged in this checkpoint.
+
+Shorter and empty replacements remove the old tail. Once a file is created or
+truncated, copy/flush failure removes the incomplete output; there is no rollback
+of replaced data. Type rejection and cancellation before truncation leave the
+existing entry untouched. Other completed entries remain after a failure. File,
+directory and byte counts describe processed source entries, including those
+whose outputs are later replaced, rather than unique final filesystem contents.
+
+Validation:
+
+- Full normal suite: **47/47 CTest entries (46.14 seconds)**.
+- Full **ASan/UBSan/leak-check suite: 47/47 (85.27 seconds)**.
+- The extraction suite now covers **91 ISO/UDF cases**, including converted-name
+  collisions, shorter/empty replacements, merged directories and failures before
+  and after truncation. Target symlinks, hard links, FIFOs and file/directory type
+  conflicts fail without modifying the outside sentinel or leaking descriptors.
+- **16/16 mounted-FAT32 guest cases pass** with Linux
+  `6.18.50-3-cachyos-lts` and QEMU TCG. mtools verifies every output byte and name,
+  including the shorter last file, a zero-byte replacement and merged ISO/UDF
+  directories. FAT retains the first entry's spelling in the case-collision
+  fixture while the later file supplies its data. `fsck.fat -n` succeeds; both
+  GPT copies and every byte outside the partition remain unchanged.
+- The normal and sanitizer CMake/Ninja builds use default parallelism. Rebuilt
+  authored code has no warnings; existing libcdio/wimlib warnings remain.
+  Python/shell syntax, guest host-refusal and whitespace checks pass.
+
+Logs are `/tmp/rufus-cp10h-tests.log` and
+`/tmp/rufus-cp10h-sanitizer-tests.log`. Guest artifacts are in
+`/tmp/rufus-cp10h-fat-qualified`; the checkpoint-only diff is
+`/tmp/rufus-cp10h.diff`. These are temporary paths. Windows runtime qualification
+remains deferred, and ISO START and bootability remain gated. Changes are local
+and uncommitted, together with the preceding filename/guest checkpoints.
+
+**Next bounded checkpoint:** qualify the existing GPT/FAT32 preparation adapters
+against retained descriptors for emulated USB block devices, with native
+capacity/sector checks and the existing UDisks ownership model. Keep one supported
+GPT/FAT32 layout; mount/extraction handoff follows that qualification. Do not add
+boot formats or broaden image analysis during this step.

@@ -43,6 +43,13 @@ bool IsWimImageSignature(const void* data, size_t size);
  * is required; this does not validate partitions, boot code or ISO-mode support. */
 bool IsBootImageSignature(const void* data, size_t size);
 
+/* Rufus's extraction substitutions, originally in iso.c: replace * ? < > : |
+ * with '_' in a writable, terminated path. Returns true if any byte changed.
+ * No allocation, length change or other normalization. The caller omits any
+ * protected prefix (e.g. Windows's drive specifier) and retains the source path.
+ * This is not a complete filesystem-name validator or collision policy. */
+bool SanitizeImagePath(char* path);
+
 /* Classify a file, with no I/O or report mutation. All flags are populated for
  * both scanning and extraction. dirname is "" for the root; NULL is accepted
  * for callers that do not have a directory. basename is non-NULL and terminated. */

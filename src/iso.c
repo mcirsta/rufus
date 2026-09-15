@@ -107,9 +107,8 @@ static char symlinked_syslinux[MAX_PATH], *md5sum_data = NULL, *md5sum_pos = NUL
 // Ensure filenames do not contain invalid FAT32 or NTFS characters
 static __inline char* sanitize_filename(char* filename, BOOL* is_identical)
 {
-	size_t i, j;
+	const size_t drive_prefix_length = 2;
 	char* ret = NULL;
-	char unauthorized[] = { '*', '?', '<', '>', ':', '|' };
 
 	*is_identical = TRUE;
 	ret = safe_strdup(filename);
@@ -118,15 +117,9 @@ static __inline char* sanitize_filename(char* filename, BOOL* is_identical)
 		return NULL;
 	}
 
-	// Must start after the drive part (D:\...) so that we don't eliminate the first column
-	for (i = 2; i<safe_strlen(ret); i++) {
-		for (j = 0; j<sizeof(unauthorized); j++) {
-			if (ret[i] == unauthorized[j]) {
-				ret[i] = '_';
-				*is_identical = FALSE;
-			}
-		}
-	}
+	// Must start after the drive part (D:\...) so that we don't eliminate its colon.
+	if (strlen(ret) > drive_prefix_length)
+		*is_identical = !SanitizeImagePath(ret + drive_prefix_length);
 	return ret;
 }
 

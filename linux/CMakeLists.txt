@@ -230,6 +230,7 @@ if(BUILD_TESTING)
     target_compile_options(iso_extract_probe PRIVATE -Wall -Wextra -Wpedantic)
     target_link_libraries(iso_extract_probe PRIVATE rufus_iso_extract)
     target_link_options(iso_extract_probe PRIVATE -Wl,--wrap=openat -Wl,--wrap=openat64
+        -Wl,--wrap=ftruncate -Wl,--wrap=ftruncate64
         -Wl,--wrap=mkdirat -Wl,--wrap=write -Wl,--wrap=close -Wl,--wrap=fsync
         -Wl,--wrap=ReadIsoFileRange -Wl,--wrap=AnalyzeIsoImageWithSource)
     add_test(NAME rufus_iso_extract COMMAND "${Python3_EXECUTABLE}"

@@ -29,8 +29,13 @@ path in small tested steps, keeping Rufus's ISO default and selectable DD mode.
 CP10c supplies ordinary-file extraction into disposable directories; CP10d
 formats a FAT32 region in disposable image files using native tools. CP10e adds
 a GPT main partition using common Rufus placement arithmetic and native libfdisk,
-with tests formatting its actual extent. Device-service integration and boot
-support remain. Further image-analysis variants,
+with tests formatting its actual extent. CP10f qualifies ordinary extraction on
+mounted FAT32 in a disposable Linux USB guest. CP10g shares Rufus's filename
+substitutions between Windows and Linux, including nested output directories
+and cleanup. CP10h follows Rufus's ordinary-file replacement and directory reuse
+when output names collide. Next move GPT/FAT32 preparation from regular images
+to retained guest block descriptors, then connect device-service orchestration
+and boot support. Further image-analysis variants,
 including standalone WIM/ESD SELECT integration, stay deferred. Completion is
 measured by supported workflows.
 
@@ -92,7 +97,7 @@ Rufus Git operations inside that directory.
 | Linux device discovery | CP2 implemented: asynchronous read-only UDisks2 reader, hotplug and failure handling, private-bus tests. |
 | Shared image policy | CP3b extracts the neutral report and image policy. CP10a feeds shared boot-marker detection into that unchanged policy during SELECT, distinguishing a DD candidate from an image requiring DD. Native Windows verification pending. |
 | ISOHybrid mode dialog | CP10b shares the original ordered mode choices between Windows and Qt, with ISO as the default, conditional ISO → ESP, DD and cancellation. The Qt dialog component is tested but not opened by application START until ISO execution is ready. |
-| Native ISO/UDF extraction | CP10c shares traversal between scanning and extraction, reuses the existing file readers, and copies ordinary trees into private empty directories. Generated-image tests cover exact output, cancellation, source changes and I/O failures. Filesystem integration, boot support and ISO START remain. |
+| Native ISO/UDF extraction | CP10c shares traversal and file readers, copying ordinary trees into private empty directories. CP10g shares filename substitutions; CP10h matches ordinary-file replacement and directory reuse on collisions. Sixteen mounted-FAT32 guest cases cover names/bytes, merged directories, shorter/empty replacements, real ENOSPC and EROFS. Device services, boot support and ISO START remain. |
 | Native FAT32 preparation | CP10d formats an explicit region of a retained regular file with mkfs.fat, then flushes and checks it using Rufus's FAT reader. CP10e handles sector-aligned boundaries, including odd sector counts. Real-device formatting remains separate. |
 | GPT image preparation | CP10e shares Rufus's first/main partition placement calculations with Windows. Linux uses libfdisk to write and verify one ordinary GPT main partition. Raw-byte/CRC checks and FAT32 integration tests preserve both GPT copies and all bytes outside the formatted extent. Device services, additional layouts and boot support remain. |
 | Shared file classification | CP3c1 implemented: file rules separated from extraction; integrated into shared ISO9660/UDF traversal and the Qt job through CP3d/CP3e. |
@@ -136,10 +141,34 @@ region with cancellation and independent filesystem checks. It accepts explicit
 settings; it does not select different cluster sizes or silently normalize labels.
 CP10e creates one ordinary GPT main partition and formats its exact recorded
 extent. It shares placement arithmetic with Windows; table creation uses
-libfdisk on Linux and the existing Windows disk APIs. Next qualify the existing
-tree extractor on a mounted FAT32 volume inside the disposable USB guest,
-checking real filesystem names/content and cleanup. Device-service and boot
-qualification still precede enabling ISO writing.
+libfdisk on Linux and the existing Windows disk APIs. CP10f qualifies the existing
+tree extractor on mounted FAT32 inside a small disposable USB guest, checking
+real filesystem names/content and cleanup with independent mtools/fsck readback.
+No production-code change was needed for this qualification.
+
+CP10g moves the filename substitution rule from `src/iso.c` into the existing
+shared `image_file` module. Windows retains allocation, its unchanged-name flag
+and drive-prefix handling. Linux converts only its output-path copy, including
+parent directories and failed-file cleanup; readers retain original source names.
+The exact six substitutions remain unchanged, with no additional filename policy
+or per-entry allocation. Component, ISO/UDF and mounted-FAT32 tests cover the rule.
+
+CP10h follows the Windows `CREATE_ALWAYS`/`FILE_OVERWRITE_IF` behavior for ordinary
+files: the later source entry supplies the final bytes. Existing directories are
+reused, including when substitutions make two source names identical. Linux first
+tries exclusive creation; a collision opens the existing inode without following
+symlinks and verifies a singly linked regular file before truncating it. Directory
+reuse verifies a real directory. Filesystem-native aliases, such as FAT case
+folding, determine collisions; no Linux filename index or custom case table is
+introduced. The private target must still be empty at entry. Once truncation
+succeeds, failure removes the incomplete replacement with no rollback. Processed
+file/directory and byte counts include colliding source entries.
+
+Next qualify GPT and FAT32 preparation against retained descriptors for emulated
+USB block devices, using native capacity/sector checks and the existing UDisks
+ownership model. Start with one supported GPT/FAT32 layout; keep mount/extraction
+handoff as the following checkpoint. Device-service and boot qualification still
+precede enabling ISO writing.
 The dialog keeps Rufus's ISO default and DD choice throughout these steps.
 
 ```text

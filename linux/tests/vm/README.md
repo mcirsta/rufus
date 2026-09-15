@@ -109,3 +109,61 @@ Firmware copies, hashes, QEMU commands and serial logs accompany both disk
 snapshots. This establishes userspace boot for these two images and firmware
 configurations. Secure Boot, other distributions and OS installation remain
 separate qualification work.
+
+## Mounted FAT32 extraction
+
+`fat_extract.py` is a separate, smaller guest for the ISO/UDF extractor. It
+reuses the existing CMake test probes, generated-image helpers and kernel/module
+recipe. It needs no desktop packages, package cache, system disk or authentication
+agent. The current recipe uses an Arch/CachyOS kernel and glibc layout, including
+the `gconv` modules used for UDF names. Host requirements are Python 3.11+, Bash,
+coreutils, kmod, cpio, QEMU x86, mkisofs, mkfs.fat, fsck.fat and mtools.
+
+Build the normal CMake test targets first (`BUILD_TESTING=ON`).
+`RUFUS_BUILD_VM_TEST=ON` is not needed for this guest.
+
+```sh
+cmake --build /tmp/rufus-linux-qt6-build
+python3 linux/tests/vm/fat_extract.py --build /tmp/rufus-linux-qt6-build \
+    --kernel 6.18.50-3-cachyos-lts --mkisofs /usr/bin/mkisofs \
+    --accel tcg /tmp/rufus-fat-extract
+```
+
+Use a new output directory and the actual installed mkisofs path. Allow about
+200 MiB. This focused recipe is qualified with TCG software emulation; it also
+accepts `--accel kvm`. It has a 180-second guest timeout and kills/reaps QEMU on
+timeout. It never downloads dependencies or mounts anything on the host.
+
+The existing GPT and FAT32 components prepare a fresh 64 MiB regular-file disk.
+QEMU exposes only that disk as emulated USB, with no network, host filesystem
+sharing or device passthrough. The guest checks PID 1, DMI and command-line
+markers before running the tests. It mounts the partition through Linux vfat
+with `utf8=1,shortname=mixed`.
+
+Sixteen cases cover Rock Ridge, Joliet and UDF names/content; empty and long-name
+entries; root-loader exclusion; shared filename substitutions in files and nested
+directories; file replacement and directory merging after name/case collisions;
+shorter and empty replacements; a character outside Rufus's substitution rule;
+injected write/flush failures and cancellation/retry; a genuinely full filesystem;
+a read-only mount; and recovery after unmount/remount. The fault wrappers belong
+to the existing test probe. Successful extraction, collision handling, invalid-name rejection, ENOSPC
+from a filled filesystem and EROFS from the read-only mount use real kernel I/O.
+Failure/cancellation fixtures use a name requiring conversion, checking cleanup
+of the resulting `bad_name.txt`. The UDF name fixture restores original characters
+in valid directory records so it tests Rufus's conversion, not mkisofs's own
+substitutions.
+
+After clean unmount and guest shutdown, the host copies the partition extent,
+runs `fsck.fat -n`, and reads every output through mtools. It checks exact names,
+file bytes, empty failure directories and the final contents of colliding files
+and merged directories. A FAT case collision keeps the first entry's spelling
+while the later source supplies its bytes. Counts include every processed source
+entry, even if its output is later replaced. Both GPT copies and all bytes outside
+the partition must remain unchanged.
+Results include `results.json`, `manifest.json` with input hashes,
+`qemu-command.json`, `serial.log`, `format.log`, `fsck.log`, `usb.raw`,
+`volume.raw` and the independent `readback` tree.
+
+This qualifies the extraction component, shared filename substitutions and ordinary
+file/directory collision behavior on FAT32. It does not establish bootability or
+the complete ISO writing workflow. ISO START remains gated.

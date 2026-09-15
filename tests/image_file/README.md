@@ -12,11 +12,17 @@ On native Windows use `-A x64` or `-A Win32` instead of `-G Ninja`, build with
 `--config Debug` and pass `-C Debug` to CTest. The shared-rules workflow covers
 both architectures. Linux CTest includes this directory automatically.
 
-The 152 checks cover file-property reset, config names, old `.c32` thresholds,
+The checks cover file-property reset, config names, old `.c32` thresholds,
 EFI bootloader types and architectures, case preservation, the small-EFI-file
 workaround, installer path limits, WIM/ESD/SWM size flags, counter saturation,
 WinPE masks, distribution directory markers and path truncation. Large-file
 tests pass synthetic sizes to the classifier; they allocate no multi-GB files.
+
+`SanitizeImagePath` shares the original extraction replacements for `* ? < > : |`.
+Tests cover all byte values, exact replacements, UTF-8 preservation, nested paths,
+Windows drive prefixes and unchanged-name reporting. Only the caller's writable
+output string is changed, with no allocation or normalization beyond those six
+characters. This helper does not validate paths or decide collision behavior.
 
 `GetIsoFileProps` supplies file facts for both scan and extraction callers.
 `CheckIsoScanFile` accumulates report findings without I/O. It does not complete

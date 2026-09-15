@@ -53,6 +53,12 @@ classification and mode choices and test the original dialog in Qt. CP10c adds
 ordinary ISO/UDF tree extraction into disposable directories. CP10d adds native
 FAT32 formatting of a region in a disposable image. CP10e creates a GPT main
 partition with shared Rufus placement arithmetic and formats that actual extent.
+CP10f qualifies the extractor on mounted FAT32 in a disposable Linux USB guest,
+including real filesystem failures and independent readback.
+CP10g shares Rufus's filename substitutions with Windows and applies them to
+Linux output paths while preserving original names for image reads.
+CP10h replaces earlier colliding files and reuses directories as Rufus does,
+while checking target types before changing existing entries.
 ISO START remains gated until device-service integration and boot support are ready.
 Secure Boot analysis
 remains a separate increment; see the
@@ -160,17 +166,25 @@ readers with Rufus's UDF-first and Rock Ridge/Joliet selection. The existing
 root `ldlinux.sys` exclusion is shared with Windows; a nested loader is preserved.
 
 The component retains and rechecks the source, validates the tree before writing,
-creates output relative to the retained directory without overwriting entries,
-and flushes files and directories. Data copying uses a fixed 1 MiB buffer plus
-the reader's existing 32 KiB cache. On a file failure it removes the current
-incomplete file; earlier completed entries remain and the whole output must be
-treated as incomplete. Links, special entries and incomplete/deep trees are
-currently rejected. Filesystem-specific names, timestamps, config patching,
+creates output relative to the retained directory, and flushes files and
+directories. Later colliding files replace earlier bytes; colliding directories
+are reused. Existing files are checked as singly linked regular files before
+truncation, and existing directories must open without following symlinks. Data
+copying uses a fixed 1 MiB buffer plus the reader's existing 32 KiB cache. On a
+file failure it removes the current created/truncated file; there is no rollback
+of a replaced file. Other entries remain and the whole output must be treated
+as incomplete. Links, special entries and incomplete/deep trees are
+currently rejected. Output paths use Rufus's shared replacements for `* ? < > : |`,
+including parent directories and failed-file cleanup. Source paths keep their
+original names. Native filesystem lookup determines aliases such as FAT case
+collisions. Counts describe processed source entries and bytes, including those
+later replaced. Remaining filesystem restrictions, timestamps, config patching,
 payload replacement and bootloader installation remain separate work.
 
 The functional test generates real images and independently compares names,
 directories and complete contents. It also exercises cancellation/retry, source
-changes, short I/O, failed reads/writes/flushes/closes and descriptor cleanup.
+changes, shorter/empty replacements, directory merging, target-type conflicts,
+short I/O, failed reads/writes/truncation/flushes/closes and descriptor cleanup.
 No device, mount, root access or GUI writer is involved.
 
 ```sh
@@ -178,6 +192,9 @@ ctest --test-dir /tmp/rufus-linux-qt6-build -R '^rufus_iso_extract$' --output-on
 ```
 
 See [CP10c](../docs/testing-and-checkpoints.md#cp10c-native-isoudf-tree-extraction-2026-09-15).
+The optional [FAT32 guest recipe](tests/vm/README.md#mounted-fat32-extraction)
+also checks the component on an actual kernel-mounted filesystem. It uses the
+same CMake probes and a disposable regular-file USB disk, without host mounts.
 
 ## Native FAT32 formatting component
 

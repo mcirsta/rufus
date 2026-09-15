@@ -171,7 +171,56 @@ static int CopyFileData(ISO_EXTRACT_CONTEXT* context, ISO_FILE_READER* reader, i
 	return error != 0 ? error : CheckImageFileSource(&context->source, context->image);
 }
 
-static int ExtractFile(ISO_EXTRACT_CONTEXT* context, const ISO_TREE_ENTRY* entry, int parent)
+/* Match Rufus's CREATE_ALWAYS for ordinary output files. Delay truncation of
+ * an existing inode until it is checked, so a link or special entry is untouched. */
+static int OpenOutputFile(int parent, const char* name)
+{
+	const int flags = O_WRONLY | O_NOFOLLOW | O_CLOEXEC;
+	struct stat info;
+	int error = 0;
+	int fd = openat(parent, name, flags | O_CREAT | O_EXCL, 0644);
+
+	if (fd >= 0 || errno != EEXIST)
+		return fd;
+	fd = openat(parent, name, flags | O_NONBLOCK);
+	if (fd < 0)
+		return -1;
+	if (fstat(fd, &info) != 0)
+		error = errno;
+	else if (!S_ISREG(info.st_mode))
+		error = ENOTSUP;
+	else if (info.st_nlink != 1)
+		error = EMLINK;
+	else if (IsIsoScanCancelled())
+		error = ECANCELED;
+	else if (ftruncate(fd, 0) != 0)
+		error = errno;
+	if (error != 0) {
+		close(fd);
+		errno = error;
+		return -1;
+	}
+	return fd;
+}
+
+static int PrepareOutputDirectory(int parent, const char* name)
+{
+	int directory;
+
+	if (mkdirat(parent, name, 0755) == 0)
+		return 0;
+	if (errno != EEXIST)
+		return errno;
+	// Windows reuses an existing directory. Verify that it is a directory here,
+	// including for an empty source directory with no child that would open it.
+	directory = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+	if (directory < 0)
+		return errno;
+	return close(directory) == 0 ? 0 : errno;
+}
+
+static int ExtractFile(ISO_EXTRACT_CONTEXT* context, const ISO_TREE_ENTRY* entry,
+	int parent, const char* output_name)
 {
 	ISO_FILE_READER reader;
 	uint64_t size = entry->iso != NULL ? entry->iso->total_size : udf_get_file_length(entry->udf);
@@ -186,7 +235,7 @@ static int ExtractFile(ISO_EXTRACT_CONTEXT* context, const ISO_TREE_ENTRY* entry
 			error = EIO;
 	}
 	if (error == 0) {
-		output = openat(parent, entry->name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0644);
+		output = OpenOutputFile(parent, output_name);
 		if (output < 0)
 			error = errno;
 	}
@@ -198,7 +247,7 @@ static int ExtractFile(ISO_EXTRACT_CONTEXT* context, const ISO_TREE_ENTRY* entry
 	if (output >= 0) {
 		if (close(output) != 0 && error == 0)
 			error = errno;
-		if (error != 0 && unlinkat(parent, entry->name, 0) != 0)
+		if (error != 0 && unlinkat(parent, output_name, 0) != 0)
 			uprintf("Could not remove incomplete file %s: %s", entry->path, strerror(errno));
 	}
 	if (error == 0)
@@ -249,6 +298,8 @@ static int CheckEntry(ISO_EXTRACT_CONTEXT* context, const ISO_TREE_ENTRY* entry,
 static int VisitExtractEntry(const ISO_TREE_ENTRY* entry, void* data)
 {
 	ISO_EXTRACT_CONTEXT* context = data;
+	char output_path[ISO_SCAN_PATH_MAX];
+	const char* output_name;
 	int parent, directory, error;
 	bool skip;
 
@@ -264,23 +315,29 @@ static int VisitExtractEntry(const ISO_TREE_ENTRY* entry, void* data)
 	error = CheckImageFileSource(&context->source, context->image);
 	if (error != 0)
 		goto out;
-	parent = OpenOutputParent(context->root, entry->path);
+	// CheckEntry validated the length. Only the output copy is renamed; image
+	// readers and file classification continue to use the original source path.
+	strcpy(output_path, entry->path);
+	bool renamed = SanitizeImagePath(output_path);
+	output_name = strrchr(output_path, '/') + 1;
+	if (renamed && entry->kind != ISO_TREE_DIRECTORY_END)
+		uprintf("  File name sanitized to '%s'", output_path);
+	parent = OpenOutputParent(context->root, output_path);
 	if (parent < 0) {
 		error = errno;
 		goto out;
 	}
 	if (entry->kind == ISO_TREE_DIRECTORY) {
-		if (mkdirat(parent, entry->name, 0755) != 0)
-			error = errno;
-		else
+		error = PrepareOutputDirectory(parent, output_name);
+		if (error == 0)
 			context->result->directories++;
 	} else if (entry->kind == ISO_TREE_DIRECTORY_END) {
-		directory = openat(parent, entry->name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+		directory = openat(parent, output_name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
 		error = directory < 0 ? errno : SyncOutput(directory);
 		if (directory >= 0 && close(directory) != 0 && error == 0)
 			error = errno;
 	} else
-		error = ExtractFile(context, entry, parent);
+		error = ExtractFile(context, entry, parent, output_name);
 	if (close(parent) != 0 && error == 0)
 		error = errno;
 out:

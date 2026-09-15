@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 
@@ -49,8 +50,13 @@ def extract(probe, image, target, view="rr", fault="none", error=0):
     assert values["WRITTEN"] == values["ACTUAL"], (fault, values)
     assert values["MAX_READ"] <= MIB and values["MAX_WRITE"] <= MIB, values
     if values["FLAGS"]:
-        assert values["FLAGS"] & os.O_EXCL and values["FLAGS"] & os.O_NOFOLLOW, values
+        assert values["FLAGS"] & os.O_NOFOLLOW, values
         assert values["FLAGS"] & os.O_CLOEXEC, values
+        assert not values["FLAGS"] & os.O_TRUNC, values
+        if values["FLAGS"] & os.O_CREAT:
+            assert values["FLAGS"] & os.O_EXCL, values
+        else:
+            assert values["FLAGS"] & os.O_NONBLOCK, values
     return values
 
 
@@ -160,8 +166,165 @@ def check_failures(args, root, udf):
     check_tree(target, entries)  # Completed files remain, but the operation failed.
     target = root / "collision"
     target.mkdir()
-    extract(args.probe, original_image, target, fault="collision", error=errno.EEXIST)
-    check_tree(target, {"data.bin": b"existing"})
+    report = extract(args.probe, original_image, target, fault="collision")
+    assert report["REPLACEMENTS"] == report["TRUNCATIONS"] == 1, report
+    check_tree(target, entries)
+
+
+def make_named_image(root, name, mkisofs, udf=False):
+    data = bytes(range(256)) * (MIB // 128) + b"tail"
+    entries = {"*root?<>:|.txt": b"all six characters", "MiX:dir/sub?dir/ș-é.txt": data,
+               "MiX:dir/sub?dir/ldlinux.sys": b"nested loader keeps its role"}
+    expected = {"_root_____.txt": b"all six characters", "MiX_dir/sub_dir/ș-é.txt": data,
+                "MiX_dir/sub_dir/ldlinux.sys": b"nested loader keeps its role"}
+    empty_dirs = ["empty_dir/nested_empty"]
+    if udf:
+        # mkisofs rewrites these characters in UDF names itself. Restore the
+        # original names in valid FIDs, retaining their CRCs and placement.
+        image = make_image(root, name, expected, mkisofs, True, empty_dirs)
+        for old, new in [("_root_____.txt", "*root?<>:|.txt"), ("MiX_dir", "MiX:dir"),
+                         ("sub_dir", "sub?dir"), ("empty_dir", "empty:dir"),
+                         ("nested_empty", "nested?empty")]:
+            rename_udf_entry(image, old, new)
+    else:
+        image = make_image(root, name, entries, mkisofs, directories=["empty:dir/nested?empty"])
+    return image, expected, empty_dirs
+
+
+def check_sanitized_names(args, root, udf):
+    image, expected, empty_dirs = make_named_image(root, "NAMES", args.mkisofs, udf)
+    original = image.read_bytes()
+    target = root / "renamed-output"
+    target.mkdir()
+    report = extract(args.probe, image, target)
+    check_tree(target, expected, empty_dirs)
+    assert report["FILES"] == len(expected) and report["DIRECTORIES"] == 4, report
+    assert image.read_bytes() == original
+
+    # Fail after creating the sanitized name, then verify that exact file was
+    # removed. A caller-owned output path containing ':' must stay untouched.
+    data = bytes(range(256)) * (MIB // 128) + b"tail"
+    source_name = "bad_name.txt" if udf else "bad:name.txt"
+    image = make_image(root, "RENAMEDFAULT", {source_name: data}, args.mkisofs, udf)
+    if udf:
+        rename_udf_entry(image, source_name, "bad:name.txt")
+    original = image.read_bytes()
+    cases = [("write-fail", errno.ENOSPC), ("sync-fail", errno.EIO),
+             ("close-fail", errno.EIO), ("write-cancel", errno.ECANCELED),
+             ("collision", 0)]
+    for fault, error in cases:
+        target = root / ("output:" + fault)
+        target.mkdir()
+        report = extract(args.probe, image, target, fault=fault, error=error)
+        if fault == "write-cancel":
+            assert report["RETRY"] == report["RETRY_FDS"] == 0, report
+            check_tree(target, {"bad_name.txt": data})
+        elif fault == "collision":
+            check_tree(target, {"bad_name.txt": data})
+        else:
+            check_tree(target, {})
+        assert image.read_bytes() == original
+
+    # Distinct image names can map to one output name even on a case-sensitive
+    # host filesystem. The later source entry replaces the earlier one.
+    if udf:
+        collision_entries = {"first000.txt": b"first", "second00.txt": b"second"}
+    else:
+        collision_entries = {"bad:name.txt": b"first", "bad?name.txt": b"second"}
+    image = make_image(root, "NAMECLASH", collision_entries, args.mkisofs, udf)
+    if udf:
+        rename_udf_entry(image, "first000.txt", "bad:name.txt")
+        rename_udf_entry(image, "second00.txt", "bad?name.txt")
+    target = root / "name-clash"
+    target.mkdir()
+    report = extract(args.probe, image, target)
+    assert report["FILES"] == 2 and report["WRITTEN"] == len(b"firstsecond"), report
+    assert report["REPLACEMENTS"] == report["TRUNCATIONS"] == 1, report
+    check_tree(target, {"bad_name.txt": b"second"})
+
+
+def make_merged_image(root, name, mkisofs, udf=False):
+    entries = {"part:dir/only-a.txt": b"keep a", "part:dir/same.txt": b"old content with a tail",
+               "part?dir/only-b.txt": b"keep b", "part?dir/same.txt": b"new"}
+    directories = ["part:dir/empty", "part?dir/empty"]
+    if udf:
+        # Avoid mkisofs merging the UDF names before the test sees them.
+        entries = {path.replace("part:dir", "part0dir").replace("part?dir", "part1dir"): data
+                   for path, data in entries.items()}
+        directories = ["part0dir/empty", "part1dir/empty"]
+    image = make_image(root, name, entries, mkisofs, udf, directories)
+    if udf:
+        rename_udf_entry(image, "part0dir", "part:dir")
+        rename_udf_entry(image, "part1dir", "part?dir")
+    expected = {"part_dir/only-a.txt": b"keep a", "part_dir/only-b.txt": b"keep b",
+                "part_dir/same.txt": b"new"}
+    return image, expected
+
+
+def check_replacements(args, root, udf):
+    for name, content in (("SHORT", b"x"), ("ZERO", b"")):
+        image = make_image(root, name, {"data.bin": content}, args.mkisofs, udf)
+        target = root / (name + "-output")
+        target.mkdir()
+        report = extract(args.probe, image, target, fault="collision")
+        assert report["REPLACEMENTS"] == report["TRUNCATIONS"] == 1, report
+        check_tree(target, {"data.bin": content})
+    image, expected = make_merged_image(root, "MERGED", args.mkisofs, udf)
+    original = image.read_bytes()
+    target = root / "merged-output"
+    target.mkdir()
+    report = extract(args.probe, image, target)
+    assert report["FILES"] == 4 and report["DIRECTORIES"] == 4, report
+    assert report["REPLACEMENTS"] == report["TRUNCATIONS"] == 1, report
+    check_tree(target, expected, ["part_dir/empty"])
+    assert image.read_bytes() == original
+
+    image = make_image(root, "REPLACEFAIL", {"data.bin": bytes(MIB)}, args.mkisofs, udf)
+    cases = [("replace-truncate-fail", errno.EIO, True), ("replace-cancel", errno.ECANCELED, True),
+             ("replace-write-fail", errno.ENOSPC, False), ("replace-sync-fail", errno.EIO, False)]
+    for fault, error, preserved in cases:
+        target = root / fault
+        target.mkdir()
+        report = extract(args.probe, image, target, fault=fault, error=error)
+        assert report["FILES"] == 0, report
+        assert report["TRUNCATIONS"] == (0 if fault == "replace-cancel" else 1), report
+        check_tree(target, {"data.bin": b"existing"} if preserved else {})
+
+
+def check_target_types(args, root):
+    outside = root / "outside"
+    outside.mkdir()
+    sentinel = outside / "sentinel"
+    sentinel.write_bytes(b"outside output tree")
+    image = make_image(root, "TARGETTYPE", {"data.bin": b"new"}, args.mkisofs)
+    cases = [("target-symlink", errno.ELOOP), ("target-hardlink", errno.EMLINK),
+             ("target-fifo", errno.ENXIO), ("target-directory", errno.EISDIR)]
+    for fault, error in cases:
+        target = root / fault
+        target.mkdir()
+        report = extract(args.probe, image, target, fault=fault, error=error)
+        assert report["TRUNCATIONS"] == report["WRITTEN"] == 0, report
+        assert sentinel.read_bytes() == b"outside output tree"
+        output = target / "data.bin"
+        if fault == "target-symlink":
+            assert output.is_symlink()
+        elif fault == "target-hardlink":
+            assert output.samefile(sentinel)
+        elif fault == "target-fifo":
+            assert stat.S_ISFIFO(output.lstat().st_mode)
+        else:
+            assert output.is_dir() and not list(output.iterdir())
+    image = make_image(root, "DIRECTORYTYPE", {}, args.mkisofs, directories=["node"])
+    for fault in ("directory-file", "directory-link"):
+        target = root / fault
+        target.mkdir()
+        report = extract(args.probe, image, target, fault=fault, error=errno.ENOTDIR)
+        assert report["DIRECTORIES"] == report["WRITTEN"] == 0, report
+        if fault == "directory-file":
+            check_tree(target, {"node": b"existing"})
+        else:
+            assert (target / "node").is_symlink()
+        check_tree(outside, {"sentinel": b"outside output tree"})
 
 
 def check_preflight(args, root):
@@ -226,6 +389,13 @@ def main():
             faults = root / ("faults-udf" if udf else "faults-iso")
             faults.mkdir()
             check_failures(args, faults, udf)
+            names = root / ("names-udf" if udf else "names-iso")
+            names.mkdir()
+            check_sanitized_names(args, names, udf)
+            check_replacements(args, names, udf)
+        types = root / "target-types"
+        types.mkdir()
+        check_target_types(args, types)
         check_preflight(args, root)
     print(f"{runs} native ISO/UDF extraction cases passed; disposable directories only.")
 

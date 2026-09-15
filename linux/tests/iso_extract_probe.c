@@ -19,6 +19,7 @@ static const char* fault;
 static const char* image_path;
 static const char* target_path;
 static int cancelled, output_fd = -1, writes, reads, syncs, closes, fired;
+static int replacements, truncations;
 static uint64_t written;
 static size_t max_read, max_write;
 static int output_flags;
@@ -31,12 +32,17 @@ enum {
 #if defined(__GLIBC__) && defined(__USE_FILE_OFFSET64)
 #define WrappedOpenat __wrap_openat64
 #define RealOpenat __real_openat64
+#define WrappedTruncate __wrap_ftruncate64
+#define RealTruncate __real_ftruncate64
 #else
 #define WrappedOpenat __wrap_openat
 #define RealOpenat __real_openat
+#define WrappedTruncate __wrap_ftruncate
+#define RealTruncate __real_ftruncate
 #endif
 
 int RealOpenat(int, const char*, int, ...);
+int RealTruncate(int, off_t);
 int __real_close(int);
 int __real_fsync(int);
 int __real_mkdirat(int, const char*, mode_t);
@@ -104,6 +110,31 @@ static void ChangeSource(void)
 	__real_close(fd);
 }
 
+static void InsertTargetEntry(int parent, const char* path)
+{
+	char outside[4096];
+	int fd, status;
+
+	snprintf(outside, sizeof(outside), "%s/../outside/sentinel", target_path);
+	if (Fault("target-symlink"))
+		status = symlinkat(outside, parent, path);
+	else if (Fault("target-hardlink"))
+		status = linkat(AT_FDCWD, outside, parent, path, 0);
+	else if (Fault("target-fifo"))
+		status = mkfifoat(parent, path, 0600);
+	else if (Fault("target-directory"))
+		status = __real_mkdirat(parent, path, 0700);
+	else {
+		fd = RealOpenat(parent, path, O_WRONLY | O_CREAT | O_EXCL, 0600);
+		if (fd < 0 || __real_write(fd, "existing", 8) != 8)
+			abort();
+		status = __real_close(fd);
+	}
+	if (status != 0)
+		abort();
+	fired = 1;
+}
+
 int WrappedOpenat(int parent, const char* path, int flags, ...)
 {
 	mode_t mode = 0;
@@ -118,20 +149,35 @@ int WrappedOpenat(int parent, const char* path, int flags, ...)
 			errno = EACCES;
 			return -1;
 		}
-		// An entry appearing after the empty-directory check must not be overwritten.
-		if (Fault("collision") && !fired++) {
-			fd = RealOpenat(parent, path, O_WRONLY | O_CREAT | O_EXCL, 0600);
-			if (fd < 0 || __real_write(fd, "existing", 8) != 8)
-				abort();
-			__real_close(fd);
-		}
+		bool replacement = Fault("collision") || strstr(fault, "replace-") == fault;
+		bool invalid_target = strstr(fault, "target-") == fault;
+		if (!fired && (replacement || invalid_target))
+			InsertTargetEntry(parent, path);
 	}
 	fd = RealOpenat(parent, path, flags, mode);
-	if (fd >= 0 && (flags & O_CREAT)) {
+	bool writable = (flags & O_ACCMODE) == O_WRONLY;
+	if (fd >= 0 && writable) {
 		output_fd = fd;
 		output_flags = flags;
+		if (!(flags & O_CREAT)) {
+			replacements++;
+			if (Fault("replace-cancel"))
+				cancelled = 1;
+		}
 	}
 	return fd;
+}
+
+int WrappedTruncate(int fd, off_t size)
+{
+	if (fd == output_fd) {
+		truncations++;
+		if (Fault("replace-truncate-fail")) {
+			errno = EIO;
+			return -1;
+		}
+	}
+	return RealTruncate(fd, size);
 }
 
 int __wrap_mkdirat(int parent, const char* name, mode_t mode)
@@ -141,6 +187,13 @@ int __wrap_mkdirat(int parent, const char* name, mode_t mode)
 	if (Fault("mkdir-fail")) {
 		errno = EACCES;
 		return -1;
+	}
+	if (Fault("directory-file") && !fired)
+		InsertTargetEntry(parent, name);
+	if (Fault("directory-link") && !fired++) {
+		snprintf(outside, sizeof(outside), "%s/../outside", target_path);
+		if (symlinkat(outside, parent, name) != 0)
+			abort();
 	}
 	result = __real_mkdirat(parent, name, mode);
 	if (result == 0 && Fault("parent-link") && !fired++) {
@@ -166,12 +219,13 @@ ssize_t __wrap_write(int fd, const void* buffer, size_t size)
 		errno = EINTR;
 		return -1;
 	}
-	if (Fault("write-fail") && writes > 1) {
+	bool write_failure = Fault("write-fail") || Fault("replace-write-fail");
+	if (write_failure && writes > 1) {
 		errno = ENOSPC;
 		return -1;
 	}
 	bool short_write = Fault("short") && writes <= SHORT_WRITE_CALLS;
-	bool stop_after_write = Fault("write-fail") || Fault("write-cancel");
+	bool stop_after_write = write_failure || Fault("write-cancel");
 	if ((short_write || stop_after_write) && size > SHORT_WRITE_BYTES)
 		size = SHORT_WRITE_BYTES;
 	count = __real_write(fd, buffer, size);
@@ -210,7 +264,8 @@ int __wrap_fsync(int fd)
 		errno = EINTR;
 		return -1;
 	}
-	if (Fault("sync-fail") && fd == output_fd) {
+	bool sync_failure = Fault("sync-fail") || Fault("replace-sync-fail");
+	if (sync_failure && fd == output_fd) {
 		errno = EIO;
 		return -1;
 	}
@@ -277,9 +332,10 @@ int main(int argc, char** argv)
 	after = DescriptorCount();
 	printf("ERROR=%d FILES=%" PRIu64 " DIRECTORIES=%" PRIu64 " SKIPPED=%" PRIu64
 		" WRITTEN=%" PRIu64 " ACTUAL=%" PRIu64 " FDS=%d READS=%d WRITES=%d SYNCS=%d CLOSES=%d"
-		" MAX_READ=%zu MAX_WRITE=%zu FLAGS=%d\n",
+		" MAX_READ=%zu MAX_WRITE=%zu FLAGS=%d REPLACEMENTS=%d TRUNCATIONS=%d\n",
 		error, result.files, result.directories, result.skipped, result.bytes_written, written,
-		after - before, reads, writes, syncs, closes, max_read, max_write, output_flags);
+		after - before, reads, writes, syncs, closes, max_read, max_write, output_flags,
+		replacements, truncations);
 	fprintf(stderr, "Last image path: %s\n", result.path);
 	if (Fault("write-cancel")) {
 		// Recover within this process: no stale cancellation, source or iterator.

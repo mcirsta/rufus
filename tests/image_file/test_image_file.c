@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "image_file.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -9,6 +10,46 @@
 	fprintf(stderr, "%s:%d: %s\n", __func__, __LINE__, #condition); failures++; } } while (0)
 
 static unsigned int checks, failures;
+
+static void TestPathSubstitutions(void)
+{
+	static const struct {
+		const char* source;
+		const char* expected;
+		size_t protected_prefix;
+	} cases[] = {
+		{ "", "", 0 },
+		{ "D:", "D:", 2 },
+		{ "D:/boot/grub.cfg", "D:/boot/grub.cfg", 2 },
+		{ "D:/bad:name/*?<>|.txt", "D:/bad_name/_____.txt", 2 },
+		{ "?:/dir:one/file?", "?:/dir_one/file_", 2 },
+		{ "D:\\dir:one\\file?", "D:\\dir_one\\file_", 2 },
+		{ "bad:name.txt", "bad_name.txt", 0 },
+		{ "*?<>:|", "______", 0 },
+		{ "/one:two/three?four/file|", "/one_two/three_four/file_", 0 },
+		{ "/MiXeD/\xc8\x99-\xc3\xa9: name.txt", "/MiXeD/\xc8\x99-\xc3\xa9_ name.txt", 0 },
+		// Preserve the exact legacy rule, including names it does not validate.
+		{ "../CON/quote\"/trailing. /back\\slash", "../CON/quote\"/trailing. /back\\slash", 0 }
+	};
+	char path[128];
+
+	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+		strcpy(path, cases[i].source);
+		bool changed = SanitizeImagePath(path + cases[i].protected_prefix);
+		bool expected_change = strcmp(cases[i].source, cases[i].expected) != 0;
+		CHECK(changed == expected_change);
+		CHECK(strcmp(path, cases[i].expected) == 0);
+		CHECK(!SanitizeImagePath(path + cases[i].protected_prefix));
+	}
+	// Every other byte, including UTF-8 continuation bytes, must be preserved.
+	for (unsigned int byte = 1; byte <= UCHAR_MAX; byte++) {
+		char single[] = { (char)byte, 0 };
+		bool replaced = strchr("*?<>:|", (int)byte) != NULL;
+		CHECK(SanitizeImagePath(single) == replaced);
+		CHECK((unsigned char)single[0] == (replaced ? '_' : byte));
+		CHECK(single[1] == 0);
+	}
+}
 
 enum {
 	CFG = 1, CONF = 2, SYSLINUX = 4, GRUB = 8, MENU = 16,
@@ -264,6 +305,7 @@ static void TestBootSignature(void)
 
 int main(void)
 {
+	TestPathSubstitutions();
 	TestWimSignature();
 	TestBootSignature();
 	TestFileProperties();
