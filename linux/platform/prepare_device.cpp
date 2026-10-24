@@ -20,7 +20,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <linux/fs.h>
-#include <linux/magic.h>
+#include "filesystem_magic.h"
 #include <linux/mount.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>

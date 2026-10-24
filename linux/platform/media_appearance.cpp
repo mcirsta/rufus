@@ -10,7 +10,7 @@
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
-#include <linux/magic.h>
+#include "filesystem_magic.h"
 #include <sys/stat.h>
 #include <sys/statfs.h>
 #include <sys/statvfs.h>

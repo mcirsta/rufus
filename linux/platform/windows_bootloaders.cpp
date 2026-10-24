@@ -21,7 +21,7 @@
 #include <sys/statfs.h>
 #include <sys/xattr.h>
 #include <sys/ioctl.h>
-#include <linux/magic.h>
+#include "filesystem_magic.h"
 #include <linux/msdos_fs.h>
 #include <unistd.h>
 #include <limits>

@@ -9,7 +9,7 @@
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
-#include <linux/magic.h>
+#include "filesystem_magic.h"
 #include <linux/msdos_fs.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>

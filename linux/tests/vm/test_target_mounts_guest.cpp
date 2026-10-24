@@ -13,7 +13,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <libmount/libmount.h>
-#include <linux/magic.h>
+#include "platform/filesystem_magic.h"
 #include <sched.h>
 #include <spawn.h>
 #include <sys/mount.h>

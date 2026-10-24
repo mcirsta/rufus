@@ -41,7 +41,7 @@
 #include <fcntl.h>
 #include <grp.h>
 #include <linux/fs.h>
-#include <linux/magic.h>
+#include "platform/filesystem_magic.h"
 #include <linux/msdos_fs.h>
 #include <sched.h>
 #include <sys/ioctl.h>

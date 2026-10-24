@@ -9,7 +9,7 @@
 #include <cstdarg>
 #include <cstring>
 #include <fcntl.h>
-#include <linux/magic.h>
+#include "platform/filesystem_magic.h"
 #include <sys/statfs.h>
 #include <sys/statvfs.h>
 #include <unistd.h>
