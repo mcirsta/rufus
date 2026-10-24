@@ -86,7 +86,7 @@ int scanTree(int fd, const QByteArray& parent, int depth, Tree& tree, bool conte
                 const ssize_t count = pread(child, buffer.data(), size_t(qMin(quint64(bufferBytes), value.size - offset)), off_t(offset));
                 if (count < 0 && errno == EINTR) continue;
                 if (count <= 0) { error = count == 0 ? EIO : errno; break; }
-                hash.addData(QByteArrayView(buffer.constData(), count));
+                hash.addData(buffer.constData(), int(count));
                 offset += quint64(count); tree.done += quint64(count); tree.report();
             }
             value.hash = hash.result();
@@ -181,7 +181,7 @@ int verifyDirectory(udf_t* image, udf_dirent_t* directory, const QByteArray& par
                 const size_t count = size_t(qMin(quint64(bufferBytes), value.size - offset));
                 const int status = ReadIsoFileRange(&reader, offset, buffer.data(), count);
                 if (status != ISO_SCAN_OK) error = IsRufusJobCancelled() ? ECANCELED : EBADMSG;
-                else { hash.addData(QByteArrayView(buffer.constData(), qsizetype(count))); actual.done += count; actual.report(); }
+                else { hash.addData(buffer.constData(), int(count)); actual.done += count; actual.report(); }
             }
             CloseIsoFileReader(&reader);
             value.hash = hash.result();

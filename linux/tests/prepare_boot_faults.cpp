@@ -35,7 +35,7 @@ QByteArray outsideDigest(int fd, uint64_t offset, uint64_t payloadBytes)
                 continue;
             if (read <= 0)
                 qFatal("Cannot hash bytes outside the boot payload");
-            hash.addData(QByteArrayView(buffer.constData(), read));
+            hash.addData(buffer.constData(), int(read));
             position += uint64_t(read);
         }
     }

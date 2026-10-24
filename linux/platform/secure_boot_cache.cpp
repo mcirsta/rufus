@@ -90,7 +90,7 @@ quint64 DbxCommitTimestamp(const QByteArray& bytes)
     const QString text = array.first().toObject().value(QStringLiteral("commit")).toObject()
         .value(QStringLiteral("author")).toObject().value(QStringLiteral("date")).toString();
     QDateTime date = QDateTime::fromString(text, Qt::ISODate);
-    date.setTimeZone(QTimeZone::UTC);
+    date.setTimeZone(QTimeZone(QByteArrayLiteral("UTC")));
     if (!date.isValid() || date.toString(QStringLiteral("yyyy-MM-dd'T'HH:mm:ss'Z'")) != text || date.toSecsSinceEpoch() <= 0) return 0;
     return quint64(date.toSecsSinceEpoch());
 }

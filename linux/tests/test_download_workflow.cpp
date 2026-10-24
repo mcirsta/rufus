@@ -333,7 +333,7 @@ private slots:
         while (!file.atEnd()) { const QByteArray chunk=file.read(1024*1024); QVERIFY(!chunk.isEmpty()); actual.addData(chunk); }
         QCOMPARE(file.error(),QFileDevice::NoError);
         quint64 remaining=LargeDownloadServer::imageBytes;
-        while (remaining>0) { const qsizetype count=qsizetype(qMin(remaining,quint64(server.pattern.size()))); expected.addData(QByteArrayView(server.pattern).first(count)); remaining-=quint64(count); }
+        while (remaining>0) { const qsizetype count=qsizetype(qMin(remaining,quint64(server.pattern.size()))); expected.addData(server.pattern.constData(), int(count)); remaining-=quint64(count); }
         QCOMPARE(actual.result(),expected.result()); QCOMPARE(download.result().sha256,actual.result());
         file.close(); QVERIFY(QFile::remove(path));
     }

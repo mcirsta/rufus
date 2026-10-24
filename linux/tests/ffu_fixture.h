@@ -21,7 +21,7 @@ inline QByteArray FfuMultiStoreFixture(const QList<QByteArray>& disks)
     PutVtsiFixtureValue(metadata, 16, quint64(manifest.size()), 4);
     PutVtsiFixtureValue(metadata, 20, 128, 4);
     metadata += manifest;
-    metadata.resize((metadata.size() + block - 1) / block * block, '\0');
+    metadata.append((block - metadata.size() % block) % block, '\0');
     for (qsizetype i = 0; i < disks.size(); i++)
     {
         const QByteArray& disk = disks[i];
@@ -42,15 +42,15 @@ inline QByteArray FfuMultiStoreFixture(const QList<QByteArray>& disks)
         PutVtsiFixtureValue(descriptor, 0, 1, 4);
         PutVtsiFixtureValue(descriptor, 4, quint64(disk.size() / block), 4);
         store += descriptor;
-        store.resize((store.size() + block - 1) / block * block, '\0');
+        store.append((block - store.size() % block) % block, '\0');
         metadata += store;
     }
     QByteArray hashes;
     for (qsizetype position = 0; position < metadata.size(); position += block)
-        hashes += QCryptographicHash::hash(QByteArrayView(metadata.constData() + position, block), QCryptographicHash::Sha256);
+        hashes += QCryptographicHash::hash(QByteArray::fromRawData(metadata.constData() + position, int(block)), QCryptographicHash::Sha256);
     for (const QByteArray& disk : disks)
         for (qsizetype position = 0; position < disk.size(); position += block)
-            hashes += QCryptographicHash::hash(QByteArrayView(disk.constData() + position, block), QCryptographicHash::Sha256);
+            hashes += QCryptographicHash::hash(QByteArray::fromRawData(disk.constData() + position, int(block)), QCryptographicHash::Sha256);
     QByteArray security(32, '\0');
     PutVtsiFixtureValue(security, 0, 32, 4);
     security.replace(4, 12, "SignedImage ");
@@ -58,7 +58,7 @@ inline QByteArray FfuMultiStoreFixture(const QList<QByteArray>& disks)
     PutVtsiFixtureValue(security, 20, 0x800c, 4);
     PutVtsiFixtureValue(security, 28, quint64(hashes.size()), 4);
     security += hashes;
-    security.resize((security.size() + block - 1) / block * block, '\0');
+    security.append((block - security.size() % block) % block, '\0');
     QByteArray packed = security + metadata;
     for (const QByteArray& disk : disks) packed += disk;
     return packed;

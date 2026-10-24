@@ -63,7 +63,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build g++ qt6-base-dev qt6-base-dev-tools dbus-daemon pkg-config libcdio-dev libiso9660-dev libudf-dev libwim-dev libfdisk-dev libblkid-dev libmount-dev libext2fs-dev libhivex-dev libssl-dev openssl fdisk libarchive-tools genisoimage dosfstools mtools ntfs-3g ntfs-3g-dev python3 curl patch desktop-file-utils zstd
+          sudo apt-get install -y cmake ninja-build g++ qt6-base-dev qt6-base-dev-tools dbus-daemon pkg-config libgl-dev libcdio-dev libiso9660-dev libudf-dev libwim-dev libfdisk-dev libblkid-dev libmount-dev libext2fs-dev libhivex-dev libssl-dev openssl zlib1g-dev e2fsprogs fdisk libarchive-tools genisoimage dosfstools mtools ntfs-3g ntfs-3g-dev python3 curl patch desktop-file-utils zstd
       - name: Fetch upstream wimlib 1.14.5 release
         run: |
           curl -fL --retry 2 https://wimlib.net/downloads/wimlib-1.14.5.tar.gz -o "$RUNNER_TEMP/wimlib.tar.gz"
@@ -80,7 +80,7 @@ jobs:
           desktop-file-validate "$RUNNER_TEMP/rufus-package/usr/share/applications/org.rufus.Rufus.desktop"
           test -x "$RUNNER_TEMP/rufus-package/usr/bin/rufus-linux"
       - name: Test without hardware
-        run: ctest --test-dir build/linux --output-on-failure --no-tests=error -L no-hardware
+        run: ctest --test-dir build/linux --parallel "$(nproc)" --output-on-failure --no-tests=error -L no-hardware
       - name: Build generated-image fixture probe
         run: |
           cmake -S linux/probes/libcdio -B build/image-fixture -G Ninja -DCMAKE_BUILD_TYPE=Debug
