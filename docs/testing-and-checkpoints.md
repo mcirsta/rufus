@@ -49,6 +49,32 @@ update-list selection/handoff and final asset hashes are recorded afterward in
 the attached CP78 delivery receipt. The user will submit generated AUR files
 manually. Compact evidence is under `../../.rufus-test-artifacts/cp78/`.
 
+### Post-publication native CI follow-up
+
+MinGW CI is disabled, with automatic triggers removed. Native Ubuntu 22.04/24.04
+CI now installs the required development libraries and filesystem/image tools.
+Source compatibility fixes support Qt 6.2 and older Linux headers; filesystem
+identifiers prefer platform definitions, with `#ifndef` fallbacks only when
+missing. Shared fixtures account for older Python and native-tool behavior,
+use deterministic timing/device data, and retain independent readback and
+prewrite-refusal checks. The standalone ISO probes use each reader's native ABI.
+Focused normal and sanitizer checks qualify the affected paths before CI.
+
+These source follow-ups also preserve standalone GRUB4DOS bootloader selection:
+ISO-derived secondary-boot selection is applied only to jobs with an ISO path.
+The published `linux-preview.47` tag remains at `a5987163`; its binaries predate
+this helper repair, which requires a future binary release. The production-file
+identity statement above describes the frozen Preview47 candidate.
+
+[Final CI run 40087395293](https://github.com/mcirsta/rufus/actions/runs/40087395293)
+passes both Ubuntu jobs at source commit `db82f6b5`. Each job builds the app,
+validates staged desktop integration, passes 252 regression suites with one
+optional exFAT provider-capability skip and zero failures, builds all three ISO
+probe targets, and passes the separate generated-image classification fixture.
+No further source repair or repeated local matrix was needed after this result.
+Compact logs, hashes and receipts are under `cp78/github-ci/` in the checkpoint
+evidence directory.
+
 ## CP77 — supported-UDF metadata policy, Preview46 (2026-10-24)
 
 The user explicitly deferred Dev Drive detection after the provider audit, in
