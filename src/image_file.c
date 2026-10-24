@@ -66,6 +66,28 @@ bool SanitizeImagePath(char* path)
 	return changed;
 }
 
+void GetIsoSyslinuxConfig(const RUFUS_IMG_REPORT* report, bool exists, ISO_SYSLINUX_CONFIG* config)
+{
+	const char* directory_end;
+	size_t length;
+
+	memset(config, 0, sizeof(*config));
+	if (!HAS_SYSLINUX((*report)))
+		return;
+	if (exists && !report->needs_syslinux_overwrite)
+		return;
+	config->create = true;
+	config->backup = exists;
+	snprintf(config->text, sizeof(config->text),
+		"DEFAULT loadconfig\n\nLABEL loadconfig\n  CONFIG %s\n", report->cfg_path);
+	directory_end = strrchr(report->cfg_path, '/');
+	if (directory_end != NULL && directory_end != report->cfg_path) {
+		length = strlen(config->text);
+		snprintf(config->text + length, sizeof(config->text) - length,
+			"  APPEND %.*s/\n", (int)(directory_end - report->cfg_path), report->cfg_path);
+	}
+}
+
 // Same bounded, terminating copy as Rufus's safe_strcp, for image report paths.
 static void CopyIsoPath(char* dst, size_t capacity, const char* src)
 {
@@ -105,6 +127,21 @@ static const char* manjaro_marker = ".miso";
 static const char* pop_os_name = "pop-os";
 const char* old_c32_name[NB_OLD_C32] = OLD_C32_NAMES;
 static const int64_t old_c32_threshold[NB_OLD_C32] = OLD_C32_THRESHOLD;
+
+bool GetEfiSyslinuxConfigName(const RUFUS_IMG_REPORT* report, const ISO_FILE_PROPS* props,
+	const char* dirname, const char* basename, char name[ISO_SYSLINUX_CONFIG_NAME_CAPACITY])
+{
+	name[0] = 0;
+	if (!props->is_syslinux_cfg || report->has_efi_syslinux)
+		return false;
+	bool efi_directory = safe_stricmp(dirname, efi_dirname) == 0;
+	bool isolinux_config = safe_stricmp(basename, syslinux_cfg[0]) == 0;
+	if (!efi_directory || !isolinux_config)
+		return false;
+	strcpy(name, basename);
+	memcpy(name, "sys", 3);
+	return true;
+}
 
 void GetIsoFileProps(const char* dirname, int64_t file_length, const char* basename,
 	ISO_FILE_PROPS* props)

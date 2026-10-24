@@ -34,9 +34,12 @@
 #include <fcntl.h>
 
 #include "rufus.h"
+#include "drive_label.h"
+#include "locale_text.h"
 #include "missing.h"
 #include "msapi_utf8.h"
 #include "localization.h"
+#include "config_text.h"
 
 static const char space[] = " \t";
 static const wchar_t wspace[] = L" \t";
@@ -73,6 +76,7 @@ static loc_cmd* get_loc_cmd(char c, char* line) {
 	lcmd->ctrl_id = (lcmd->command <= LC_TEXT)?-1:0;
 	lcmd->line_nr = (uint16_t)loc_line_nr;
 
+	const size_t line_capacity = strlen(line) + 1;
 	i = 0;
 	for (k = 0; parse_cmd[j].arg_type[k] != 0; k++) {
 		// Skip leading spaces
@@ -84,25 +88,10 @@ static loc_cmd* get_loc_cmd(char c, char* line) {
 		}
 		switch(parse_cmd[j].arg_type[k]) {
 		case 's':	// quoted string
-			// search leading quote
-			if (line[i++] != '"') {
-				luprint("no start quote");
+			if (!ReadLocaleQuoted(line, line_capacity, &i, &r)) {
+				luprint("invalid quoted string");
 				goto err;
 			}
-			r = i;
-			// locate ending quote
-			while ((line[i] != 0) && ((line[i] != '"') || ((line[i] == '"') && (line[i-1] == '\\')))) {
-				if ((line[i] == '"') && (line[i-1] == '\\')) {
-					memmove(&line[i-1], &line[i], strlen(&line[i]) + 1);
-				} else {
-					i++;
-				}
-			}
-			if (line[i] == 0) {
-				luprint("no end quote");
-				goto err;
-			}
-			line[i++] = 0;
 			lcmd->txt[ti++] = safe_strdup(&line[r]);
 			break;
 		case 'c':	// control ID (single word)
@@ -579,6 +568,14 @@ static wchar_t* get_token_data_line(const wchar_t* wtoken, wchar_t* wline)
 	if ((wtoken == NULL) || (wline == NULL) || (wline[0] == 0))
 		return NULL;
 
+	if (_wcsnicmp(wtoken, L"label", 6) == 0) {
+		size_t start, length;
+		if (!FindDriveLabel16((const uint16_t*)wline, wcslen(wline), &start, &length))
+			return NULL;
+		wline[start + length] = 0;
+		return &wline[start];
+	}
+
 	i = 0;
 
 	// Skip leading spaces and opening '<'
@@ -971,7 +968,7 @@ char* insert_section_data(const char* filename, const char* section, const char*
 	wchar_t *wsection = NULL, *wfilename = NULL, *wtmpname = NULL, *wdata = NULL, bom = 0;
 	wchar_t buf[1024];
 	FILE *fd_in = NULL, *fd_out = NULL;
-	size_t i, size;
+	size_t size;
 	int mode = 0;
 	char *ret = NULL, tmp[2];
 
@@ -1038,13 +1035,8 @@ char* insert_section_data(const char* filename, const char* section, const char*
 	// Process individual lines. NUL is always appended.
 	while (fgetws(buf, ARRAYSIZE(buf), fd_in) != NULL) {
 
-		i = 0;
-
-		// Skip leading spaces
-		i += wcsspn(&buf[i], wspace);
-
 		// Our token should begin a line
-		if (_wcsnicmp(&buf[i], wsection, wcslen(wsection)) != 0) {
+		if (!IsConfigSection(buf, wsection)) {
 			fputws(buf, fd_out);
 			continue;
 		}
@@ -1099,14 +1091,13 @@ out:
  * Returns a pointer to rep if replacement occurred, NULL otherwise
  * TODO: We might have to end up with a regexp engine, so that we can do stuff like: "foo*" -> "bar\1"
  */
-#define MAX_OCCURRENCES 4
 char* replace_in_token_data(const char* filename, const char* token, const char* src, const char* rep, BOOL dos2unix)
 {
 	const wchar_t* outmode[] = { L"w", L"w, ccs=UTF-8", L"w, ccs=UTF-16LE" };
 	wchar_t *wtoken = NULL, *wfilename = NULL, *wtmpname = NULL, *wsrc = NULL, *wrep = NULL, bom = 0;
-	wchar_t buf[1024], *torep[MAX_OCCURRENCES + 1] = { NULL };
+	wchar_t buf[CONFIG_TEXT_LINE_CAPACITY];
 	FILE *fd_in = NULL, *fd_out = NULL;
-	size_t i, j, p[MAX_OCCURRENCES + 1] = { 0 }, ns, size;
+	size_t j, count, p[CONFIG_TEXT_MAX_REPLACEMENTS + 1], size;
 	int mode = 0;
 	char *ret = NULL, tmp[2];
 
@@ -1181,49 +1172,14 @@ char* replace_in_token_data(const char* filename, const char* token, const char*
 	// Process individual lines. NUL is always appended.
 	while (fgetws(buf, ARRAYSIZE(buf), fd_in) != NULL) {
 
-		i = 0;
-
-		// Skip leading spaces
-		i += wcsspn(&buf[i], wspace);
-
-		// Our token should begin a line
-		if (_wcsnicmp(&buf[i], wtoken, wcslen(wtoken)) != 0) {
-			fputws(buf, fd_out);
-			continue;
-		}
-
-		// Token was found, move past token
-		i += wcslen(wtoken);
-
-		// Skip whitespaces after token (while making sure there's at least one)
-		ns = wcsspn(&buf[i], wspace);
-		if (ns == 0) {
-			fputws(buf, fd_out);
-			continue;
-		}
-		i += ns;
-
-		// p[x] = starting position of the fragment with the replaceable string
-		p[0] = 0;
-		for (j = 0; j < MAX_OCCURRENCES; j++) {
-			torep[j] = wcsstr(&buf[i], wsrc);
-			if (torep[j] == NULL)
-				break;
-			// Next fragment will start after current + replaced string
-			i = (torep[j] - buf) + wcslen(wsrc);
-			p[j + 1] = i;
-			// Truncate each fragment to before the replaced string
-			*torep[j] = 0;
-		}
-
-		// No replaceable string found => output as is
-		if (torep[0] == NULL) {
+		count = SplitConfigToken(buf, wtoken, wsrc, p);
+		if (count == 0) {
 			fputws(buf, fd_out);
 			continue;
 		}
 
 		// Output all the truncated fragments + replaced strings
-		for (j = 0; torep[j] != NULL; j++)
+		for (j = 0; j < count; j++)
 			// coverity[invalid_type]
 			fwprintf_s(fd_out, L"%s%s", &buf[p[j]], wrep);
 
@@ -1268,40 +1224,6 @@ out:
 	safe_free(wrep);
 
 	return ret;
-}
-
-/*
- * Replace all 'c' characters in string 'src' with the substring 'rep'.
- * The returned string is allocated and must be freed by the caller.
- */
-char* replace_char(const char* src, const char c, const char* rep)
-{
-	size_t i, j, k, count=0, str_len = safe_strlen(src), rep_len = safe_strlen(rep);
-	char* res;
-
-	if ((src == NULL) || (rep == NULL))
-		return NULL;
-	for (i=0; i<str_len; i++) {
-		if (src[i] == c)
-			count++;
-	}
-	res = (char*)malloc(str_len + count*rep_len + 1);
-	if (res == NULL)
-		return NULL;
-	for (i=0,j=0; i<str_len; i++) {
-		if (src[i] == c) {
-			for(k=0; k<rep_len; k++)
-				res[j++] = rep[k];
-		} else {
-// Since the VS Code Analysis tool is dumb...
-#if defined(_MSC_VER)
-#pragma warning(suppress: 6386)
-#endif
-			res[j++] = src[i];
-		}
-	}
-	res[j] = 0;
-	return res;
 }
 
 /*

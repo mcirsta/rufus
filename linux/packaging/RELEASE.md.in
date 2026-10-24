@@ -1,0 +1,221 @@
+# Rufus Linux preview @RUFUS_PREVIEW_REVISION@
+
+This is Linux preview @RUFUS_PREVIEW_REVISION@, based on Rufus @RUFUS_UPSTREAM_VERSION@. It is a
+development port with a working Qt6 desktop interface and native Linux media
+operations. Complete Windows Rufus feature parity remains in development.
+
+CP78 / Preview47 prepares the useful x86-64 release: original Rufus translations
+are reused across 38 languages; Linux-specific text may remain English. Native
+Debian/Fedora packages and an Arch AUR source recipe join Arch/CachyOS and generic
+install trees. See the [release evidence](docs/linux-release-evidence.md) and
+[package instructions](linux/packaging/README.md).
+
+Existing UDF1.02–2.01 remains supported. UDF2.50/2.60, ReFS formatting and Dev
+Drive detection are user-deferred. The actual Windows UDF indexing attribute is
+unavailable. Full native translations, additional application host architectures,
+non-x64 To Go and unavailable physical USB/4Kn checks remain follow-ups; complete
+Windows parity is not claimed.
+
+CP76 / Preview45 delivered the [sector and filesystem geometry batch](docs/linux-sector-geometry.md):
+512/512e/4Kn discovery/request/layout/formatter geometry, FAT32 64 KiB clusters,
+UDF logical blocks and exact provider limits.
+
+CP75 / Preview44 delivered the [legacy ISO routes batch](docs/linux-legacy-iso-routes.md).
+
+CP74 / Preview43 delivered the [ISO/EFI resource batch](docs/linux-iso-efi-resources.md):
+all eight source fallback architectures, embedded EFI/repair, Windows NTFS and FAT/UDF
+link rules, image-matched Syslinux resources/old modules, Slax/mastering recovery,
+portable native accessors and local cached issuer metadata. The current completion
+register records the remaining work.
+
+CP73 / Preview42 delivered the [device/source operations batch](docs/linux-device-source-operations.md):
+raw optical ISO capture, USB reset/ESP toggling, exclusion settings, file-backed
+virtual devices, source/home backing resolution, session locking override and
+explicit parent-image relocation. The completion register records current progress. See the [completion plan](docs/linux-release-plan.md).
+
+Earlier previews added running-application disk exclusion and mounted extended USB
+labels, including Multiple Volumes captions. Discovery stays unprivileged and
+uses existing mounts; see [native device discovery](docs/linux-device-discovery.md).
+
+SELECT/DOWNLOAD now includes the native Windows/UEFI Shell chooser, browser
+handoff or streamed image saving and automatic selection after cleanup. See
+[native image downloads](docs/linux-image-downloads.md) for the signed provider,
+cancellation and native filesystem publication/recovery behavior.
+
+The language button now offers all 38 original catalog languages with saved
+explicit selection, `-l` / `--locale`, live relabeling and right-to-left layout.
+The initial choice is English; native-only text without a matching original
+translation still appears in English. See [application languages](docs/linux-localization.md).
+
+Settings now checks native application releases alongside Secure Boot policies.
+Existing Secure Boot consent stays narrow; automatic application checks require
+an explicit choice. The beta preference and Alt+Y forced check are available.
+Updates open the publisher's release page for package-manager installation. See
+[native application updates](docs/linux-application-updates.md), including the
+preview channel and package-manager installation. Enable beta releases to see this preview.
+
+
+
+## CP70 — NTFS compression and indexing (Preview 39)
+
+The [NTFS options batch](docs/linux-ntfs-options.md) groups session Alt+N compression,
+saved Alt+Q indexing, frozen NTFS-only options, native formatter defaults and
+boot-file compression exceptions. Larger clusters continue uncompressed with
+a diagnostic. Compressed file creation preselects the qualified NTFS-3G provider
+before writes; ordinary NTFS creation keeps the kernel provider. No write or
+corruption error switches drivers. The guide records native directory-default
+restoration, provider evidence and remaining UDF/ReFS indexing-hint work.
+
+## Install and start
+
+On Arch or CachyOS, install the generated native package with the package manager:
+
+```sh
+sudo pacman -U rufus-linux-preview-@RUFUS_UPSTREAM_VERSION@.preview@RUFUS_PREVIEW_REVISION@-1-@CMAKE_SYSTEM_PROCESSOR@.pkg.tar.zst
+rufus-linux
+```
+
+The native package is built against the Arch/CachyOS runtime on the build host.
+The separate `.tar.gz` contains an install tree for packagers and uses system
+libraries; it is not a self-contained portable application.
+
+Run the GUI as your desktop user. Select an image and device, review the target
+confirmation, then approve the normal desktop authorization prompt. The same
+helper completes the job and cleanup. Successful READY means writes,
+verification, sync, cleanup and helper exit have finished.
+
+Raw DD needs the application, UDisks2 and polkit. Other modes use optional
+filesystem tools listed by the native package. A working desktop polkit agent
+is required. The package includes matching native Syslinux 4.07 and 6.04-pre1
+installers when those sources were selected at build time.
+
+Parent images use caller-owned, owner-readable files and portable relative
+locators. VHDX log replay uses an immutable in-memory overlay. See the support
+guide for parent relocation and replay limits.
+
+Full single-store FFU reading includes LZNT1 and Huffman-XPRESS, grouped
+compressed buffers and multi-block end-relative runs. Full FFU captures retain
+all GPT names in the original GPT payload. FFU saving uses desktop-compatible plain XPRESS
+compression with bounded literal expansion and explicit zero-region restoration. Optimized
+FFUs fit smaller/larger targets with NTFS growth and recovery-location updates.
+V2 store selection and desktop catalog signature policy are supported. CP56
+closes the [FFU feature audit](docs/linux-ffu-parity.md).
+Partial single-store updates compare every declared base range before any
+writes, preserve omitted bytes and apply their metadata as declared.
+
+Hold **Ctrl** while pressing **SELECT** to attach a supplementary ZIP after
+selecting the image. It is extracted after file-based creation/formatting in the
+same authorized job, with source protection, CRC checks and sync before READY.
+The confirmation shows the archive. DD and ext modes omit it. See the
+[supplementary ZIP guide](docs/linux-supplementary-zip.md).
+
+Use SELECT, drop a local image onto the window, or start with
+`rufus-linux -i /path/to/image` (`--iso` or one positional path also works).
+Alt+M saves an explicit boot-marker override for the next image selection.
+It retains all source identity, geometry, target and readback checks; a marker
+or an override does not establish that an image will boot.
+
+Full/quick formatting is now selectable for eligible native filesystems.
+Full FAT clears and verifies the volume; NTFS/exFAT use native full modes;
+ext3/ext4 fully initialize journals, including persistence. Large FAT32 stays
+quick-only. Long full jobs remain cancelable and wait for cleanup/helper exit.
+See the support guide for filesystem differences and qualification limits.
+
+Enable **Runtime UEFI media validation** for eligible ISO copies to validate
+checksums at boot before starting the original EFI loader. Existing lists retain
+unchanged source digests; Rufus repairs entries it modifies and includes split
+WIM parts. The bundled validators are installed in the same authorized job.
+See the [runtime validation guide](docs/linux-runtime-validation.md). This does
+not authenticate the image publisher or replace Secure Boot trust checks.
+
+The image reader identifies Secure Boot issuers and checks reported EFI
+loaders against Rufus's bundled DBX/SBAT/SVN and certificate policies. A revoked
+loader produces the original START-time warning before authorization, including
+for hybrid DD creation. See the [Secure Boot guide](docs/linux-secure-boot.md)
+for the distinction between metadata classification and firmware trust. Settings now supplies opt-in
+policy checks, session list refresh, scheduled DBX checks and confirmed atomic
+DBX caching. Select the image again to use updated policy; see the
+[policy update guide](docs/linux-policy-updates.md).
+
+MS-DOS is available on MBR/FAT16/FAT32 with explicit keyboard/code-page choices
+and a consented, hash-checked Microsoft resource download/cache. The resource
+is read as data; Microsoft files are not bundled in these packages. Advanced
+ReactOS prepares its original boot records for separately supplied system files.
+See the [legacy boot guide](docs/linux-legacy-boot.md).
+
+## Available workflows
+
+- Raw disk images and gzip, XZ, BZIP2, LZMA, LZW, ZIP, Zstd, VTSI and fixed or
+  dynamic VHD/VHDX disk images, with readback before successful completion.
+- Full FFU images, including explicit V2 store selection, with uncompressed, LZNT1, plain XPRESS or
+  Huffman-XPRESS payloads, deployed to an equal or larger disk with GPT relocation.
+  Partial FFUs update a matching existing disk after all selected-store base comparisons pass.
+  V2 containers authenticate every store and deploy only the explicitly selected store.
+  Optimized full FFUs resize the designated NTFS partition and repair recovery locations
+  before successful READY; ntfsresize is required and dirty/corrupt captures are refused.
+- Live USB persistence for compatible Syslinux/GRUB images, with ext2/ext3/ext4,
+  size controls and Debian/Casper boot configuration. See the support guide for
+  tested examples and distribution limits.
+- Save a device to fixed VHD, dynamic VHDX or full XPRESS-compressed FFU,
+  with automatic source unmount, verified readback, source consistency checks
+  and atomic output publication. FFU capture supports empty GPT disks,
+  multi-chunk manifests and GPT entry tables up to 4 MiB.
+- Export filesystem files as UDF-only ISO images with optional cdrtools, preserving
+  hidden/Unicode files and verifying the complete tree before publication.
+- Windows To Go from Windows ISO or standalone WIM/ESD, with native NTFS metadata,
+  archive/edition selection, GPT or MBR boot setup and installed policy. See the
+  [To Go guide](docs/linux-windows-to-go.md) for qualification limits.
+- Supported Windows installation media, WIM splitting and implemented Windows
+  customization options.
+- Supported Linux ISO creation with EFI, Syslinux, GRUB2 and GRUB4DOS routes.
+- ISO → ESP for eligible small regular-EFI images on GPT/FAT16 or GPT/FAT32,
+  including compatible persistence and the original formatter-default rules.
+- FAT16/FAT32, NTFS, exFAT, UDF and advanced ext2/ext3 data formatting on MBR,
+  GPT and eligible SFD layouts. UDF requires udftools and supports revisions
+  1.02/1.50/2.00/2.01. See the [formatting guide](docs/linux-filesystem-formatting.md)
+  for provider and geometry limits; later UDF revisions and ReFS remain open.
+- The original old-BIOS alignment and compatibility-partition option for
+  eligible MBR/BIOS media, with UEFI:NTFS and persistence priority preserved.
+- Full device zeroing with Alt+Z and Windows-compatible fast clearing with
+  Ctrl+Alt+Z, one helper and readback before completion. No filesystem is created.
+- Implemented standalone boot loaders, checksums, logs and device filtering.
+
+Read the [supported media guide](docs/linux-support.md) in the installed
+documentation for exact image,
+filesystem, geometry and provider boundaries. The
+[parity backlog](docs/linux-feature-parity.md) lists unfinished features,
+including localization, native updates/download selection,
+Windows-specific parent relocation and other
+advanced and legacy functions. Representative guest tests do not establish
+compatibility with every physical USB controller, firmware or operating system.
+
+`rufus-linux --version` and `rufus-linux --help` work without a display. The
+About button includes the original GPL license and upstream credits. The log
+can be saved from its dialog for troubleshooting. CP59 adds adjacent portable
+INI storage, startup preferences, remembered advanced panels, automatic/persistent
+logs and Ctrl+L/P, Alt+R/U. See the [desktop guide](docs/linux-desktop-settings.md).
+
+Read-only USB devices are listed for image saving with write/format actions
+disabled. Saving preserves kernel write protection and the existing source,
+verification, transactional publication and cleanup checks.
+
+
+## CP69 — ISO read options and timestamps (Preview 38)
+
+The [ISO controls batch](docs/linux-iso-options.md) groups Alt+I/J/K/S/T: session
+ISO/Joliet/Rock Ridge and size checks, saved timestamp preservation, coherent
+selected-source analysis/preflight/extraction and the explicit MS-DOS 64 KiB
+cluster override. Physical capacity and actual filesystem bounds remain enforced.
+Ordinary ISO9660/UDF copies preserve access/modification times when enabled;
+creation time uses native filesystem behavior. Directory times are applied after
+children so copying cannot immediately overwrite them. See the guide for the
+Windows behavior, Linux differences and qualification limits.
+
+
+## CP71 — advanced device selectors (Preview 40)
+
+Alt+G/Alt+W and Ctrl+Alt+F now control recognized native virtual, VMware and
+non-USB removable disks; native MMC cards share the existing card filter.
+Selected classes are frozen and independently revalidated by the helper.
+See [native discovery](docs/linux-device-discovery.md) for exact provider scope,
+protection and grouped qualification. The complete parity goal remains active.

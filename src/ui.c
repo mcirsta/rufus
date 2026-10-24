@@ -68,9 +68,7 @@ static IAccPropServices* pfaps = NULL;
  *    bars. E.g. if 80 slots remain and the sum of all negative entries
  *    is 10, -4 will allocate 4/10*80 = 32 bars (32%) for OP progress
  */
-static int nb_slots[OP_MAX];
-static float slot_end[OP_MAX+1];	// shifted +1 so that we can subtract 1 to OP indexes
-static float previous_end;
+static RUFUS_PROGRESS progress;
 
 void SetAccessibleName(HWND hCtrl, const char* name)
 {
@@ -1171,126 +1169,31 @@ void CreateAdditionalControls(HWND hDlg)
 // Set up progress bar real estate allocation
 void InitProgress(BOOL bOnlyFormat)
 {
-	int i;
-	float last_end = 0.0f, slots_discrete = 0.0f, slots_analog = 0.0f;
-
-	memset(nb_slots, 0, sizeof(nb_slots));
-	memset(slot_end, 0, sizeof(slot_end));
-	previous_end = 0.0f;
-
-	if (bOnlyFormat) {
-		nb_slots[OP_FORMAT] = -1;
-	} else {
-		nb_slots[OP_ANALYZE_MBR] = 1;
-		if (IsChecked(IDC_BAD_BLOCKS)) {
-			nb_slots[OP_BADBLOCKS] = -1;
-		}
-		if (boot_type != BT_NON_BOOTABLE) {
-			// 1 extra slot for PBR writing
-			switch (selection_default) {
-			case BT_MSDOS:
-				nb_slots[OP_FILE_COPY] = 3 + 1;
-				break;
-			case BT_FREEDOS:
-				nb_slots[OP_FILE_COPY] = 5 + 1;
-				break;
-			case BT_IMAGE:
-				nb_slots[OP_FILE_COPY] = (img_report.is_iso || img_report.is_windows_img) ? -1 : 0;
-				if (HAS_WINDOWS(img_report) && (unattend_xml_path != NULL) &&
-					(ComboBox_GetCurItemData(hImageOption) != IMOP_WIN_TO_GO))
-					nb_slots[OP_PATCH] = -1;
-				break;
-			default:
-				nb_slots[OP_FILE_COPY] = 2 + 1;
-				break;
-			}
-		}
-		if (selection_default == BT_IMAGE && !(img_report.is_iso || img_report.is_windows_img)) {
-			nb_slots[OP_FORMAT] = -1;
-		} else {
-			nb_slots[OP_ZERO_MBR] = 1;
-			nb_slots[OP_PARTITION] = 1;
-			nb_slots[OP_FIX_MBR] = 1;
-			nb_slots[OP_CREATE_FS] = (use_vds) ? 2 :
-				nb_steps[ComboBox_GetCurItemData(hFileSystem)];
-			// So, yeah, if you're doing slow format, or using Large FAT32, and have persistence, you'll see
-			// the progress bar revert during format on account that we reuse the same operation for both
-			// partitions. Maybe one day I'll be bothered to handle two separate OP_FORMAT ops...
-			if ((!IsChecked(IDC_QUICK_FORMAT)) || (persistence_size != 0) || IS_EXT(fs_type) ||
-				((fs_type == FS_FAT32) && ((SelectedDrive.DiskSize >= LARGE_FAT32_SIZE) || (force_large_fat32)))) {
-				nb_slots[OP_FORMAT] = -1;
-				nb_slots[OP_CREATE_FS] = 0;
-			}
-			nb_slots[OP_FINALIZE] = ((selection_default == BT_IMAGE) && (fs_type == FS_NTFS)) ? 3 : 2;
-		}
-	}
-	if (archive_path != NULL) {
-		nb_slots[OP_EXTRACT_ZIP] = -1;
-	}
-
-	for (i = 0; i < OP_MAX; i++) {
-		if (nb_slots[i] > 0) {
-			slots_discrete += nb_slots[i] * 1.0f;
-		}
-		if (nb_slots[i] < 0) {
-			slots_analog += nb_slots[i] * 1.0f;
-		}
-	}
-
-	for (i = 0; i < OP_MAX; i++) {
-		if (nb_slots[i] == 0) {
-			slot_end[i + 1] = last_end;
-		} else if (nb_slots[i] > 0) {
-			slot_end[i + 1] = last_end + (1.0f * nb_slots[i]);
-		} else if (nb_slots[i] < 0) {
-			slot_end[i + 1] = last_end + (((100.0f - slots_discrete) * nb_slots[i]) / slots_analog);
-		}
-		last_end = slot_end[i + 1];
-	}
-
-	// If there's no analog, adjust our discrete ends to fill the whole bar
-	if (slots_analog == 0.0f) {
-		for (i = 0; i < OP_MAX; i++) {
-			slot_end[i + 1] *= 100.0f / slots_discrete;
-		}
-	}
+	RUFUS_PROGRESS_OPTIONS options = { 0 };
+	options.only_format = bOnlyFormat;
+	options.bad_blocks = IsChecked(IDC_BAD_BLOCKS);
+	options.bootable = boot_type != BT_NON_BOOTABLE;
+	options.selection = selection_default;
+	options.image = img_report.is_iso || img_report.is_windows_img;
+	options.windows_customization = HAS_WINDOWS(img_report) && (unattend_xml_path != NULL) &&
+		(ComboBox_GetCurItemData(hImageOption) != IMOP_WIN_TO_GO);
+	const BOOL partitioned = !bOnlyFormat && !(selection_default == BT_IMAGE && !options.image);
+	if (partitioned)
+		options.filesystem_steps = use_vds ? 2 : nb_steps[ComboBox_GetCurItemData(hFileSystem)];
+	options.format_progress = (!IsChecked(IDC_QUICK_FORMAT)) || (persistence_size != 0) || IS_EXT(fs_type) ||
+		((fs_type == FS_FAT32) && ((SelectedDrive.DiskSize >= LARGE_FAT32_SIZE) || force_large_fat32));
+	options.ntfs_image = selection_default == BT_IMAGE && fs_type == FS_NTFS;
+	options.extra_archive = archive_path != NULL;
+	InitProgressState(&progress, &options);
 }
 
 // Position the progress bar within each operation range
 void UpdateProgress(int op, float percent)
 {
-	int pos;
+	const int pos = UpdateProgressState(&progress, op, percent);
 	static uint64_t LastRefresh = 0;
-
-	if ((op < 0) || (op >= OP_MAX)) {
-		duprintf("UpdateProgress: invalid op %d\n", op);
+	if (pos < 0)
 		return;
-	}
-	if (percent > 100.1f) {
-		// duprintf("UpdateProgress(%d): invalid percentage %0.2f\n", op, percent);
-		return;
-	}
-	if ((percent < 0.0f) && (nb_slots[op] <= 0)) {
-		duprintf("UpdateProgress(%d): error negative percentage sent for negative slot value\n", op);
-		return;
-	}
-	if (nb_slots[op] == 0)
-		return;
-	if (previous_end < slot_end[op]) {
-		previous_end = slot_end[op];
-	}
-
-	if (percent < 0.0f) {
-		// Negative means advance one slot (1.0%) - requires a positive slot allocation
-		previous_end += (slot_end[op + 1] - slot_end[op]) / (1.0f * nb_slots[op]);
-		pos = (int)(previous_end / 100.0f * MAX_PROGRESS);
-	} else {
-		pos = (int)((previous_end + ((slot_end[op + 1] - previous_end) * (percent / 100.0f))) / 100.0f * MAX_PROGRESS);
-	}
-	if (pos > MAX_PROGRESS) {
-		duprintf("UpdateProgress(%d): rounding error - pos %d is greater than %d", op, pos, MAX_PROGRESS);
-		pos = MAX_PROGRESS;
-	}
 
 	// Reduce the refresh rate, to avoid weird effects on the sliding part of progress bar
 	if (GetTickCount64() > LastRefresh + (2 * MAX_REFRESH)) {
@@ -1447,10 +1350,7 @@ void _UpdateProgressWithInfo(int op, int msg, uint64_t processed, uint64_t total
 		bp.total_length = total;
 		if (bp.count > bp.total_length)
 			bp.total_length = bp.count;
-		if (bp.total_length > 0)
-			percent = (100.0f * bp.count) / (1.0f * bp.total_length);
-		else
-			percent = 0.0f;
+		percent = ProgressPercent(bp.count, bp.total_length);
 
 		if ((bp.hist.total_time > 999) && (bp.hist.total_bytes != 0)) {
 			// Calculate the download speed using the history ring and

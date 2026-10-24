@@ -16,6 +16,7 @@
 #define SYSLXINT_H
 
 #include "syslinux.h"
+#include <string.h>
 
 #if defined(__386__) || defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
 # define X86_MEM 1		/* Littleendian and unaligned safe */
@@ -50,8 +51,10 @@ static inline uint8_t get_8(const uint8_t * p)
 static inline uint16_t get_16(const uint16_t * p)
 {
 #if X86_MEM
-    /* Littleendian and unaligned-capable */
-    return *p;
+    /* The CPU permits unaligned access; memcpy also makes it valid C. */
+    uint16_t v;
+    memcpy(&v, p, sizeof v);
+    return v;
 #else
     const uint8_t *pp = (const uint8_t *)p;
     return pp[0] + ((uint16_t)pp[1] << 8);
@@ -61,8 +64,9 @@ static inline uint16_t get_16(const uint16_t * p)
 static inline uint32_t get_32(const uint32_t * p)
 {
 #if X86_MEM
-    /* Littleendian and unaligned-capable */
-    return *p;
+    uint32_t v;
+    memcpy(&v, p, sizeof v);
+    return v;
 #else
     const uint16_t *pp = (const uint16_t *)p;
     return get_16(&pp[0]) + ((uint32_t)get_16(&pp[1]) << 16);
@@ -72,8 +76,9 @@ static inline uint32_t get_32(const uint32_t * p)
 static inline uint64_t get_64(const uint64_t * p)
 {
 #if X86_MEM
-    /* Littleendian and unaligned-capable */
-    return *p;
+    uint64_t v;
+    memcpy(&v, p, sizeof v);
+    return v;
 #else
     const uint32_t *pp = (const uint32_t *)p;
     return get_32(&pp[0]) + ((uint64_t)get_32(&pp[1]) << 32);
@@ -88,8 +93,7 @@ static inline void set_8(uint8_t *p, uint8_t v)
 static inline void set_16(uint16_t *p, uint16_t v)
 {
 #if X86_MEM
-    /* Littleendian and unaligned-capable */
-    *p = v;
+    memcpy(p, &v, sizeof v);
 #else
     uint8_t *pp = (uint8_t *) p;
     pp[0] = v;
@@ -100,8 +104,7 @@ static inline void set_16(uint16_t *p, uint16_t v)
 static inline void set_32(uint32_t *p, uint32_t v)
 {
 #if X86_MEM
-    /* Littleendian and unaligned-capable */
-    *p = v;
+    memcpy(p, &v, sizeof v);
 #else
     uint16_t *pp = (uint16_t *) p;
     set_16(&pp[0], v);
@@ -112,8 +115,7 @@ static inline void set_32(uint32_t *p, uint32_t v)
 static inline void set_64(uint64_t *p, uint64_t v)
 {
 #if X86_MEM
-    /* Littleendian and unaligned-capable */
-    *p = v;
+    memcpy(p, &v, sizeof v);
 #else
     uint32_t *pp = (uint32_t *) p;
     set_32(&pp[0], v);

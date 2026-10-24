@@ -1,0 +1,13 @@
+uefi-md5sum — MD5 checksum validation for UEFI
+Copyright © 2023–2026 Pete Batard <pete@akeo.ie> (upstream source notice)
+GNU General Public License version 2 or, at your option, any later version.
+The accompanying LICENSE.uefi-md5sum contains the license text.
+
+Project and corresponding source: https://github.com/pbatard/uefi-md5sum
+The Linux port embeds the unchanged standalone EFI applications already
+distributed with this Rufus source tree in res/md5: ia32, x64, arm, aa64,
+riscv64 and loongarch64. They are installed on the selected media only when
+runtime UEFI validation is requested. The Linux application does not execute
+these EFI applications on its host.
+
+The original Rufus application license remains in LICENSE.txt.

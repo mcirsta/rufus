@@ -39,6 +39,21 @@
     <ClCompile Include="..\src\dos_locale.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\dos_locale_policy.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\freedos_files.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\msdos_files.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\drive_label.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\locale_text.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\syslinux.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -46,6 +61,21 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\icon.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\config_text.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\format_policy.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\progress_policy.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\hdd_score.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\unattend.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\image_file.c">
@@ -79,6 +109,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\winpe_scan.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\winpe_setup.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\wim_metadata.c">
@@ -158,6 +191,15 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\src\download_key.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\download_urls.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\hash_core.h" />
+    <ClInclude Include="..\src\hash_core.inc" />
+    <ClInclude Include="..\src\image_compression.h" />
     <ClInclude Include="..\src\rufus.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -174,6 +216,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\badblocks.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\badblocks_policy.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\resource.h">
@@ -201,6 +246,42 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\hdd_vs_ufd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\config_text.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\dos_locale_policy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\freedos_files.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\msdos_files.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\drive_label.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\locale_text.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\freedos_files.inc">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\format_policy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\progress_policy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\hdd_score.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\hdd_score_strings.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\unattend.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\image_file.h">
@@ -234,6 +315,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\winpe_scan.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\winpe_setup.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\wim_metadata.h">
@@ -273,6 +357,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\db.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\secure_boot_db.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\ntdll.h">

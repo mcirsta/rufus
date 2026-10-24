@@ -20,6 +20,7 @@ enum {
 };
 int __real_fdisk_write_disklabel(struct fdisk_context*);
 int __real_fdisk_add_partition(struct fdisk_context*, struct fdisk_partition*, size_t*);
+int __real_fdisk_gpt_set_partition_attrs(struct fdisk_context*, size_t, uint64_t);
 int __real_fsync(int);
 
 int IsRufusJobCancelled(void) { return cancelled; }
@@ -35,6 +36,11 @@ int __wrap_fdisk_add_partition(struct fdisk_context* context, struct fdisk_parti
 {
 	if (strcmp(fault, "add-fail") == 0)
 		return -ENOMEM;
+	const bool extra_partition = fdisk_partition_get_partno(partition) == 1;
+	if (extra_partition && strcmp(fault, "extra-add-fail") == 0)
+		return -ENOMEM;
+	if (extra_partition && strcmp(fault, "extra-offset-mismatch") == 0)
+		fdisk_partition_set_start(partition, fdisk_partition_get_start(partition) + 1);
 	int status = __real_fdisk_add_partition(context, partition, number);
 	if (strcmp(fault, "cancel-before-write") == 0)
 		cancelled = 1;
@@ -45,6 +51,17 @@ int __wrap_fdisk_add_partition(struct fdisk_context* context, struct fdisk_parti
 			abort();
 	}
 	return status;
+}
+
+int __wrap_fdisk_gpt_set_partition_attrs(struct fdisk_context* context, size_t number, uint64_t attrs)
+{
+	if (number == 1) {
+		if (strcmp(fault, "extra-attrs-fail") == 0)
+			return -EIO;
+		if (strcmp(fault, "extra-attrs-mismatch") == 0)
+			return 0;
+	}
+	return __real_fdisk_gpt_set_partition_attrs(context, number, attrs);
 }
 
 int __wrap_fdisk_write_disklabel(struct fdisk_context* context)
@@ -97,16 +114,21 @@ static int DescriptorCount(void)
 
 int main(int argc, char** argv)
 {
-	GPT_IMAGE_OPTIONS options = { 0, SECTOR_BYTES, 63, SECTOR_BYTES, 0 };
+	GPT_IMAGE_OPTIONS options = { 0, SECTOR_BYTES, 63, SECTOR_BYTES, 0, 0 };
 	GPT_IMAGE_RESULT result;
 	int fd, error, before, original_flags, flags;
 
-	if (argc != 6)
+	if (argc < 6 || argc > 9)
 		return 64;
 	fault = argv[5];
 	options.disk_size = strtoull(argv[2], NULL, 10);
 	options.cluster_size = (uint32_t)strtoul(argv[3], NULL, 10);
 	options.sectors_per_track = (uint32_t)strtoul(argv[4], NULL, 10);
+	if (argc >= 7)
+		options.uefi_ntfs_size = strtoull(argv[6], NULL, 10);
+	if (argc >= 8) options.efi_system = strcmp(argv[7], "esp") == 0;
+	if (argc >= 8) options.windows_to_go = strcmp(argv[7], "togo") == 0;
+	if (argc == 9) options.persistence_size = strtoull(argv[8], NULL, 10);
 	if (strcmp(fault, "sector-4k") == 0)
 		options.sector_size = 4096;
 	if (strcmp(fault, "block-request") == 0)
@@ -141,8 +163,12 @@ int main(int argc, char** argv)
 	cancelled = strcmp(fault, "cancel-before") == 0;
 	error = CreateGptImagePartition(fd, &options, &result);
 	printf("ERROR=%d STARTED=%d OFFSET=%" PRIu64 " SIZE=%" PRIu64
+		" UEFI_OFFSET=%" PRIu64 " UEFI_SIZE=%" PRIu64
+		" ESP_OFFSET=%" PRIu64 " ESP_SIZE=%" PRIu64 " MSR_OFFSET=%" PRIu64 " MSR_SIZE=%" PRIu64
 		" SYNCS=%d SYNC_ERROR=%d WRITES=%d FDS=%d POSITION=%jd FLAGS=%d\n",
-		error, result.started, result.offset, result.size, syncs, result.sync_error, writes,
+		error, result.started, result.offset, result.size, result.uefi_ntfs_offset, result.uefi_ntfs_size,
+		result.esp_offset, result.esp_size, result.msr_offset, result.msr_size,
+		syncs, result.sync_error, writes,
 		DescriptorCount() - before, (intmax_t)lseek(fd, 0, SEEK_CUR), fcntl(fd, F_GETFD) == original_flags);
 	close(fd);
 	return 0;

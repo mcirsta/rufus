@@ -33,14 +33,15 @@ def read_file(executable, image, path, expected, mode="rr"):
     assert result.stdout == (b"" if expected is None else expected), (path, result.stderr)
 
 
-def rename_udf_entry(image, old, new):
+def rename_udf_entry(image, old, new, scan_bytes=-1):
     # Rename one generated FID, leaving the ISO/RR/Joliet views unchanged.
     # Equal encoded lengths preserve placement; repair its CRC and tag checksum
     # so this remains an ordinary valid UDF fixture, not malformed input.
     old = b"\x08" + old.encode("ascii")
     new = b"\x08" + new.encode("ascii")
     assert len(old) == len(new)
-    data = bytearray(image.read_bytes())
+    with image.open('rb') as source:
+        data = bytearray(source.read(scan_bytes))
     renamed = 0
     for offset in range(0, len(data) - 38, 4):
         if data[offset:offset + 2] != b"\x01\x01":  # File Identifier Descriptor
@@ -59,7 +60,8 @@ def rename_udf_entry(image, old, new):
         data[offset + 4] = sum(data[offset:offset + 16]) & 255
         renamed += 1
     assert renamed == 1, (image, old, renamed)
-    image.write_bytes(data)
+    with image.open('r+b') as output:
+        output.write(data)
 
 
 def check_combined(scanner, reader, directory, mkisofs):

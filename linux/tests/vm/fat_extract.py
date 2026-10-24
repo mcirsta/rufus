@@ -16,7 +16,8 @@ import prepare
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from test_fat_format import copy_volume
-from test_iso_extract import make_image, make_named_image, make_merged_image, check_tree
+from test_iso_extract import make_image, make_named_image, make_merged_image, check_tree, label_fixture, freenas_fixture
+from test_iso_extract import EFI_CONFIG_SOURCE, EFI_CONFIG_PATCHED, EFI_CONFIG_ROOT
 
 MIB = 1024 * 1024
 DISK_BYTES = 64 * MIB
@@ -26,6 +27,19 @@ TOOL_TIMEOUT_SECONDS = 20
 SUCCESS_CASES = ('rr', 'joliet', 'udf', 'recovery')
 NAME_CASES = ('names-rr', 'names-udf')
 MERGE_CASES = ('merge-rr', 'merge-udf')
+CONFIG_CASES = ('config-keep', 'config-backup', 'config-conflict')
+FIXUP_CASES = ('freenas', 'efi-copy', 'efi-keep', 'efi-failed-copy')
+CONFIG_SOURCE = {'SYSLINUX.CFG': b'original\r\n', 'boot/x86_64/loader/isolinux.cfg': b'default linux\n'}
+CONFIG_BACKUP = b'existing backup\n'
+CONFIG_TEXT = (b'DEFAULT loadconfig\n\nLABEL loadconfig\n'
+               b'  CONFIG /boot/x86_64/loader/isolinux.cfg\n  APPEND /boot/x86_64/loader/\n')
+PATCH_SOURCE = {
+    'boot.cfg': b'\xef\xbb\xbfappend OLD\\x20LABEL\r\n',
+    'unicode.cfg': b'\xff\xfe' + 'append čș🚀 OLD\r\n'.encode('utf-16le'),
+    'keep.cfg': b'# append OLD\r\n',
+    'invalid.cfg': b'append OLD\r\n\xff',
+    'boot.cfg~': b'preserve existing source file\n',
+}
 EMPTY_CASES = ('invalid', 'write-fail', 'sync-fail', 'full', 'readonly')
 
 
@@ -83,6 +97,25 @@ def make_fixtures(base, mkisofs):
     make_merged_image(fixtures, 'MERGEDRR', mkisofs)
     make_merged_image(fixtures, 'MERGEDUDF', mkisofs, True)
     make_image(fixtures, 'ZERO', {'zero.bin': b''}, mkisofs)
+    make_image(fixtures, 'CONFIGKEEP', {'SYSLINUX.CFG': CONFIG_SOURCE['SYSLINUX.CFG']}, mkisofs)
+    make_image(fixtures, 'CONFIGBACKUP', CONFIG_SOURCE, mkisofs)
+    make_image(fixtures, 'CONFIGCONFLICT', dict(CONFIG_SOURCE, **{'SYSLINUX.ORG': CONFIG_BACKUP}), mkisofs)
+    make_image(fixtures, 'CONFIGPATCH', PATCH_SOURCE, mkisofs)
+    label_source, _ = label_fixture()
+    make_image(fixtures, 'OLD LABEL', label_source, mkisofs)
+    make_image(fixtures, 'RHEL-9', {'boot.cfg': b'append RHEL-9 inst.stage2\r\n'}, mkisofs, udf=True)
+    make_image(fixtures, 'BADCONFIG', {'bad.cfg': b'append BADCONFIG\xff'}, mkisofs)
+    fixups = fixtures / 'fixups'
+    fixups.mkdir()
+    source, _ = freenas_fixture()
+    image = make_image(fixups, 'OLD LABEL', source, mkisofs)
+    image.rename(fixtures / 'FREENAS.iso')
+    efi = fixtures / 'efi-config'
+    efi.mkdir()
+    image = make_image(efi, 'OLD LABEL', {'EFI/BOOT/isolinux.cfg': EFI_CONFIG_SOURCE}, mkisofs, udf=True)
+    image.rename(fixtures / 'EFICONFIG.iso')
+    make_image(fixtures, 'EFIKEEP', {'eFi/Boot/ISOLINUX.CFG': EFI_CONFIG_SOURCE,
+               'eFi/Boot/SYSLINUX.CFG': b'keep EFI\r\n', 'syslinux.cfg': b'keep root\r\n'}, mkisofs)
     del entries['ldlinux.sys']
     return entries, data, named_entries, named_empty
 
@@ -107,6 +140,7 @@ def make_guest(args, base):
     for name in ('mkdir', 'rm', 'dd', 'umount'):
         add_executable(init, Path('/usr/bin') / name)
     add_executable(init, args.build / 'iso_extract_probe')
+    add_executable(init, args.build / 'config_patch_probe')
     # UDF's compressed Unicode names also use glibc's dynamically loaded
     # converters. ldd alone does not include these runtime data/modules.
     shutil.copytree('/usr/lib/gconv', init / 'usr/lib/gconv')
@@ -147,6 +181,10 @@ def check_reports(text, entries, data, named_entries):
     expected_errors.update({'collision': 0, 'replace-zero': 0, 'invalid': errno.EINVAL,
                             'write-fail': errno.ENOSPC, 'cancel': errno.ECANCELED,
                             'sync-fail': errno.EIO, 'full': errno.ENOSPC, 'readonly': errno.EROFS})
+    expected_errors.update({'config-keep': 0, 'config-backup': 0, 'config-conflict': errno.EEXIST})
+    expected_errors.update({'config-patch': 0, 'label-patch': 0, 'repo-patch': 0,
+                            'netinst-patch': 0, 'invalid-patch': errno.EILSEQ})
+    expected_errors.update({'freenas': 0, 'efi-copy': 0, 'efi-keep': 0, 'efi-failed-copy': errno.ENOSPC})
     reports = {}
     for name, error in expected_errors.items():
         pattern = rf'RUFUS_FAT_CASE {name}\r?\n(.*?)RUFUS_FAT_END {name}\r?\n'
@@ -154,7 +192,7 @@ def check_reports(text, entries, data, named_entries):
         assert len(matches) == 1, (name, matches)
         report = values(matches[0])
         assert report['ERROR'] == error and report['FDS'] == 0, (name, report)
-        assert report['WRITTEN'] == report['ACTUAL'], (name, report)
+        assert report['WRITTEN'] + report['GENERATED'] == report['ACTUAL'], (name, report)
         assert report['MAX_READ'] <= MIB and report['MAX_WRITE'] <= MIB, (name, report)
         if report['FLAGS']:
             for flag in (os.O_NOFOLLOW, os.O_CLOEXEC):
@@ -181,6 +219,25 @@ def check_reports(text, entries, data, named_entries):
         elif name == 'replace-zero':
             assert report['FILES'] == 1 and report['WRITTEN'] == 0, report
             assert report['REPLACEMENTS'] == report['TRUNCATIONS'] == 1, report
+        elif name in CONFIG_CASES:
+            files = {'config-keep': 1, 'config-backup': 2, 'config-conflict': 3}
+            assert report['FILES'] == files[name], report
+            assert report['GENERATED'] == (len(CONFIG_TEXT) if name == 'config-backup' else 0), report
+        elif name == 'freenas':
+            assert report['FILES'] == 3 and report['PATCHED'] == 2, report
+        elif name in ('efi-copy', 'efi-failed-copy'):
+            assert report['FILES'] == report['PATCHED'] == 1, report
+            expected_bytes = len(EFI_CONFIG_PATCHED) + len(EFI_CONFIG_ROOT) if name == 'efi-copy' else 127
+            assert report['GENERATED'] == expected_bytes, report
+        elif name == 'efi-keep':
+            assert report['FILES'] == 3 and report['GENERATED'] == 0, report
+        elif name == 'config-patch':
+            assert report['FILES'] == len(PATCH_SOURCE), report
+        elif name == 'label-patch':
+            source, _ = label_fixture()
+            assert report['FILES'] == len(source) and report['PATCHED'] == 3, report
+        elif name in ('repo-patch', 'netinst-patch'):
+            assert report['FILES'] == report['PATCHED'] == 1, report
         else:
             assert report['FILES'] == 0, (name, report)
         if name == 'full':
@@ -188,6 +245,14 @@ def check_reports(text, entries, data, named_entries):
         if name == 'cancel':
             assert report['RETRY'] == report['RETRY_FDS'] == 0, report
         reports[name] = report
+    for name, error, modified in [('boot.cfg', 0, 1), ('unicode.cfg', 0, 1),
+                                  ('keep.cfg', 0, 0), ('invalid.cfg', errno.EILSEQ, 0)]:
+        pattern = rf'RUFUS_CONFIG_PATCH {re.escape(name)}\r?\n(.*?)RUFUS_CONFIG_END\r?\n'
+        matches = re.findall(pattern, text, re.S)
+        assert len(matches) == 1, name
+        result = values(matches[0])
+        assert result == {'ERROR': error, 'MODIFIED': modified}, (name, result)
+        reports['patch-' + name] = result
     return reports
 
 
@@ -205,8 +270,9 @@ def inspect_disk(args, base, layout, prefix, tail, entries, data, named_entries,
     extracted = base / 'readback'
     extracted.mkdir()
     run([args.mcopy, '-s', '-i', str(volume), '::*', str(extracted)], capture_output=True)
-    expected_dirs = set(SUCCESS_CASES + NAME_CASES + MERGE_CASES + EMPTY_CASES +
-                        ('collision', 'cancel', 'replace-zero'))
+    expected_dirs = set(SUCCESS_CASES + NAME_CASES + MERGE_CASES + CONFIG_CASES + EMPTY_CASES + FIXUP_CASES +
+                        ('collision', 'cancel', 'replace-zero', 'config-patch', 'label-patch',
+                         'repo-patch', 'netinst-patch', 'invalid-patch'))
     assert {path.name for path in extracted.iterdir()} == expected_dirs
     assert all(path.is_dir() for path in extracted.iterdir())
     for name in SUCCESS_CASES:
@@ -222,6 +288,28 @@ def inspect_disk(args, base, layout, prefix, tail, entries, data, named_entries,
     check_tree(extracted / 'collision', {'name.txt': b'first name'})
     check_tree(extracted / 'replace-zero', {'zero.bin': b''})
     check_tree(extracted / 'cancel', {'bad_name.txt': data})
+    check_tree(extracted / 'config-keep', {'SYSLINUX.CFG': CONFIG_SOURCE['SYSLINUX.CFG']})
+    replaced = dict(CONFIG_SOURCE)
+    replaced['syslinux.org'] = replaced.pop('SYSLINUX.CFG')
+    replaced['syslinux.cfg'] = CONFIG_TEXT
+    check_tree(extracted / 'config-backup', replaced)
+    check_tree(extracted / 'config-conflict', dict(CONFIG_SOURCE, **{'SYSLINUX.ORG': CONFIG_BACKUP}))
+    patched = dict(PATCH_SOURCE)
+    patched['boot.cfg'] = b'\xef\xbb\xbfappend NEW\\x20USB\n'
+    patched['unicode.cfg'] = b'\xff\xfe' + 'append čș🚀 NEW\n'.encode('utf-16le')
+    check_tree(extracted / 'config-patch', patched)
+    _, labels = label_fixture()
+    check_tree(extracted / 'label-patch', labels)
+    check_tree(extracted / 'repo-patch', {'boot.cfg': b'append NEW\\x20USB inst.repo\n'})
+    check_tree(extracted / 'netinst-patch', {'boot.cfg': b'append NEW\\x20USB inst.stage2\n'})
+    check_tree(extracted / 'invalid-patch', {})
+    _, freenas = freenas_fixture()
+    check_tree(extracted / 'freenas', freenas)
+    check_tree(extracted / 'efi-copy', {'EFI/BOOT/isolinux.cfg': EFI_CONFIG_PATCHED,
+               'EFI/BOOT/syslinux.cfg': EFI_CONFIG_PATCHED, 'syslinux.cfg': EFI_CONFIG_ROOT})
+    check_tree(extracted / 'efi-keep', {'eFi/Boot/ISOLINUX.CFG': EFI_CONFIG_SOURCE,
+               'eFi/Boot/SYSLINUX.CFG': b'keep EFI\r\n', 'syslinux.cfg': b'keep root\r\n'})
+    check_tree(extracted / 'efi-failed-copy', {'EFI/BOOT/isolinux.cfg': EFI_CONFIG_PATCHED})
 
 
 def main():
@@ -239,7 +327,7 @@ def main():
     args.build = args.build.resolve()
     if any(char in str(base) for char in ',\n\r'):
         parser.error('Output path must not contain QEMU option separators')
-    for name in ('iso_extract_probe', 'partition_image_probe', 'fat_format_probe'):
+    for name in ('iso_extract_probe', 'partition_image_probe', 'fat_format_probe', 'config_patch_probe'):
         if not (args.build / name).is_file():
             parser.error('Build the normal CMake test targets first: ' + name)
     base.mkdir()
@@ -247,7 +335,7 @@ def main():
     entries, data, named_entries, named_empty = make_fixtures(base, args.mkisofs)
     make_guest(args, base)
     inputs = list((base / 'fixtures').glob('*.iso'))
-    inputs += [args.build / name for name in ('iso_extract_probe', 'partition_image_probe', 'fat_format_probe')]
+    inputs += [args.build / name for name in ('iso_extract_probe', 'partition_image_probe', 'fat_format_probe', 'config_patch_probe')]
     inputs += [base / 'vmlinuz', base / 'initramfs.cpio', base / 'usb.raw']
     manifest = {'kernel': args.kernel, 'accel': args.accel, 'layout': layout,
                 'qemu': run(['qemu-system-x86_64', '--version'], capture_output=True, text=True).stdout,

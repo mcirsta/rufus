@@ -1,0 +1,14 @@
+[
+  {
+    "url": "https://rufus.ie/files/grub-2.12/core.img",
+    "resolved_url": "https://rufus.ie/files/grub-2.12/core.img",
+    "bytes": 35918,
+    "sha256": "15902895487c084c8f574666c31e7fa399d05b831fd61c1e3c3eee69d6576924"
+  },
+  {
+    "url": "https://rufus.ie/files/grub-2.12/core.img.sig",
+    "resolved_url": "https://rufus.ie/files/grub-2.12/core.img.sig",
+    "bytes": 256,
+    "sha256": "ff13d50cdd305cbd7fd1b77fea0032e5745427311850b854b9833bd9cc107c3b"
+  }
+]

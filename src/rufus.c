@@ -51,12 +51,14 @@
 #include "wue.h"
 #include "drive.h"
 #include "image_policy.h"
+#include "format_policy.h"
 #include "settings.h"
 #include "darkmode.h"
 #include "bled/bled.h"
 #include "cdio/logging.h"
 #include "../res/grub/grub_version.h"
 #include "../res/grub2/grub2_version.h"
+#include "grub_inspect.h"
 
 enum bootcheck_return {
 	BOOTCHECK_PROCEED = 0,
@@ -145,8 +147,6 @@ char msgbox[1024], msgbox_title[32], *ini_file = NULL, *image_path = NULL, *shor
 char *archive_path = NULL, image_option_txt[128], *fido_url = NULL, *save_image_type = NULL;
 char *sbat_level_txt = NULL, *sb_active_txt = NULL, *sb_revoked_txt = NULL;
 StrArray BlockingProcessList, ImageList;
-// Number of steps for each FS for FCC_STRUCTURE_PROGRESS
-const int nb_steps[FS_MAX] = { 5, 5, 12, 1, 10, 1, 1, 1, 1 };
 const char* flash_type[BADLOCKS_PATTERN_TYPES] = { "SLC", "MLC", "TLC" };
 RUFUS_DRIVE rufus_drive[MAX_DRIVES] = { 0 };
 sbat_entry_t* sbat_entries = NULL;
@@ -171,59 +171,20 @@ static void SetClusterSizeLabels(void)
 
 static void SetAllowedFileSystems(void)
 {
-	int i;
+	bool forced_fat;
 
 	memset(allowed_filesystem, 0, sizeof(allowed_filesystem));
 	// Nothing is allowed if we don't have a drive
 	if (ComboBox_GetCurSel(hDeviceList) < 0)
 		return;
-	switch (selection_default) {
-	case BT_NON_BOOTABLE:
-		for (i = 0; i < FS_MAX; i++)
-			allowed_filesystem[i] = TRUE;
-		break;
-	case BT_MSDOS:
-	case BT_FREEDOS:
-		allowed_filesystem[FS_FAT16] = TRUE;
-		allowed_filesystem[FS_FAT32] = TRUE;
-		break;
-	case BT_IMAGE:
-		if ((image_path == NULL) || !HAS_NTFSLESS_GRUB(img_report))
-			allowed_filesystem[FS_NTFS] = TRUE;
-		// Don't allow anything besides NTFS if the image is not compatible
-		if ((image_path != NULL) && !IS_FAT32_COMPAT(img_report)) {
-			// Only disable FAT32 if we have NTFS enabled
-			if (allowed_filesystem[FS_NTFS])
-				break;
-			// Else, print a warning
-			uprintf("WARNING: FAT32 has been forcefully enabled, but this image may not work with FAT32.");
-		}
-		if (!HAS_WINDOWS(img_report) || (target_type != TT_BIOS) || allow_dual_uefi_bios) {
-			if (!HAS_WINTOGO(img_report) || (ComboBox_GetCurItemData(hImageOption) != IMOP_WIN_TO_GO)) {
-				allowed_filesystem[FS_FAT16] = TRUE;
-				allowed_filesystem[FS_FAT32] = TRUE;
-			}
-		}
-		break;
-	case BT_GRUB2:
-		allowed_filesystem[FS_EXT2] = TRUE;
-		allowed_filesystem[FS_EXT3] = TRUE;
-		allowed_filesystem[FS_EXT4] = TRUE;
-		// Fall through
-	case BT_SYSLINUX_V6:
-	case BT_GRUB4DOS:
-		allowed_filesystem[FS_NTFS] = TRUE;
-		// Fall through
-	case BT_SYSLINUX_V4:
-	case BT_REACTOS:
-		allowed_filesystem[FS_FAT16] = TRUE;
-		allowed_filesystem[FS_FAT32] = TRUE;
-		break;
-	case BT_UEFI_NTFS:
-		allowed_filesystem[FS_NTFS] = TRUE;
-		allowed_filesystem[FS_EXFAT] = TRUE;
-		break;
-	}
+	const RUFUS_FS_OPTIONS options = { selection_default, target_type, image_path != NULL,
+		HAS_WINTOGO(img_report) && (ComboBox_GetCurItemData(hImageOption) == IMOP_WIN_TO_GO),
+		allow_dual_uefi_bios };
+	uint32_t allowed = GetAllowedFileSystems(&img_report, &options, &forced_fat);
+	for (int i = 0; i < FS_MAX; i++)
+		allowed_filesystem[i] = (allowed & FS_MASK(i)) != 0;
+	if (forced_fat)
+		uprintf("WARNING: FAT32 has been forcefully enabled, but this image may not work with FAT32.");
 }
 
 // Populate the Boot selection dropdown
@@ -490,69 +451,20 @@ static BOOL SetFileSystemAndClusterSize(char* fs_name)
  *
  */
 
-	// FAT 16
-	if (SelectedDrive.DiskSize < 4 * GB) {
-		SelectedDrive.ClusterSize[FS_FAT16].Allowed = 0x00001E00;
-		for (i = 32; i <= 4096; i <<= 1) {			// 8 MB -> 4 GB
-			if (SelectedDrive.DiskSize < i * MB) {
-				SelectedDrive.ClusterSize[FS_FAT16].Default = 16 * (ULONG)i;
-				break;
-			}
-			SelectedDrive.ClusterSize[FS_FAT16].Allowed <<= 1;
-		}
-		SelectedDrive.ClusterSize[FS_FAT16].Allowed &= 0x0001FE00;
-	}
-
-	// FAT 32
-	// > 32GB FAT32 is not supported by MS and FormatEx but is achieved using fat32format
-	// See: http://ridgecrop.co.uk/index.htm?fat32format.htm
-	// < 32 MB FAT32 is not allowed by FormatEx, so we don't bother
-	if ((SelectedDrive.DiskSize >= 32 * MB) && (SelectedDrive.DiskSize < MAX_FAT32_SIZE)) {
-		SelectedDrive.ClusterSize[FS_FAT32].Allowed = 0x000001F8;
-		for (i = 32; i <= (32 * 1024); i <<= 1) {			// 32 MB -> 32 GB
-			if (SelectedDrive.DiskSize*1.0f < i * MB * FAT32_CLUSTER_THRESHOLD) {	// MS
-				SelectedDrive.ClusterSize[FS_FAT32].Default = 8*(ULONG)i;
-				break;
-			}
-			SelectedDrive.ClusterSize[FS_FAT32].Allowed <<= 1;
-		}
-		SelectedDrive.ClusterSize[FS_FAT32].Allowed &= 0x0001FE00;
-
-		// Default cluster sizes in the 256MB to 32 GB range do not follow the rule above
-		if ((SelectedDrive.DiskSize >= 256 * MB) && (SelectedDrive.DiskSize < 32 * GB)) {
-			for (i = 8; i <= 32; i <<= 1) {			// 256 MB -> 32 GB
-				if (SelectedDrive.DiskSize * 1.0f < i * GB * FAT32_CLUSTER_THRESHOLD) {
-					SelectedDrive.ClusterSize[FS_FAT32].Default = ((ULONG)i / 2) * KB;
-					break;
-				}
-			}
-		}
-		// More adjustments for large drives
-		if (SelectedDrive.DiskSize >= 32 * GB) {
-			SelectedDrive.ClusterSize[FS_FAT32].Allowed &= 0x0001C000;
-			SelectedDrive.ClusterSize[FS_FAT32].Default = 0x00008000;
-		}
-	}
+	const RUFUS_CLUSTER_SIZES fat16 = GetFat16ClusterSizes(SelectedDrive.DiskSize, SelectedDrive.SectorSize);
+	SelectedDrive.ClusterSize[FS_FAT16].Allowed = fat16.Allowed;
+	SelectedDrive.ClusterSize[FS_FAT16].Default = fat16.Default;
+	const RUFUS_CLUSTER_SIZES fat32 = GetFat32ClusterSizes(SelectedDrive.DiskSize, SelectedDrive.SectorSize);
+	SelectedDrive.ClusterSize[FS_FAT32].Allowed = fat32.Allowed;
+	SelectedDrive.ClusterSize[FS_FAT32].Default = fat32.Default;
+	const RUFUS_CLUSTER_SIZES ntfs = GetNtfsClusterSizes(SelectedDrive.DiskSize, SelectedDrive.SectorSize);
+	SelectedDrive.ClusterSize[FS_NTFS].Allowed = ntfs.Allowed;
+	SelectedDrive.ClusterSize[FS_NTFS].Default = ntfs.Default;
+	const RUFUS_CLUSTER_SIZES exfat = GetExfatClusterSizes(SelectedDrive.DiskSize, SelectedDrive.SectorSize);
+	SelectedDrive.ClusterSize[FS_EXFAT].Allowed = exfat.Allowed;
+	SelectedDrive.ClusterSize[FS_EXFAT].Default = exfat.Default;
 
 	if (SelectedDrive.DiskSize < 256 * TB) {
-		// NTFS
-		SelectedDrive.ClusterSize[FS_NTFS].Allowed = 0x0001F000;
-		for (i = 16; i <= 256; i <<= 1) {			// 7 MB -> 256 TB
-			if (SelectedDrive.DiskSize < i * TB) {
-				SelectedDrive.ClusterSize[FS_NTFS].Default = ((ULONG)i / 4) * KB;
-				break;
-			}
-		}
-
-		// exFAT
-		SelectedDrive.ClusterSize[FS_EXFAT].Allowed = 0x03FFFE00;
-		if (SelectedDrive.DiskSize < 256 * MB)	// < 256 MB
-			SelectedDrive.ClusterSize[FS_EXFAT].Default = 4 * KB;
-		else if (SelectedDrive.DiskSize < 32 * GB)	// < 32 GB
-			SelectedDrive.ClusterSize[FS_EXFAT].Default = 32 * KB;
-		else
-			SelectedDrive.ClusterSize[FS_EXFAT].Default = 128 * KB;
-
 		// UDF
 		SelectedDrive.ClusterSize[FS_UDF].Allowed = SINGLE_CLUSTERSIZE_DEFAULT;
 		SelectedDrive.ClusterSize[FS_UDF].Default = 1;
@@ -640,7 +552,8 @@ static BOOL SetFileSystemAndClusterSize(char* fs_name)
 
 static void SetFSFromISO(void)
 {
-	int i, fs_tmp, preferred_fs = FS_UNKNOWN;
+	int i, fs_tmp, preferred_fs;
+	// Keep the original seed values here; the shared policy does not add mask bits.
 	uint32_t fs_mask = FS_NTFS | (img_report.has_4GB_file ? 0 : FS_FAT32);
 	BOOL windows_to_go = (image_options & IMOP_WINTOGO) && (boot_type == BT_IMAGE) &&
 		HAS_WINTOGO(img_report) && (ComboBox_GetCurItemData(hImageOption) == IMOP_WIN_TO_GO);
@@ -654,24 +567,8 @@ static void SetFSFromISO(void)
 		fs_mask |= 1 << fs_tmp;
 	}
 
-	// If the FS requested from the command line is valid use it
-	if ((preselected_fs != FS_UNKNOWN) && (fs_mask & (1 << preselected_fs))) {
-		preferred_fs = preselected_fs;
-	} else {
-		// Syslinux and EFI have precedence over bootmgr (unless the user selected BIOS as target type)
-		if ((HAS_SYSLINUX(img_report)) || (HAS_REACTOS(img_report)) || HAS_KOLIBRIOS(img_report) ||
-			(IS_EFI_BOOTABLE(img_report) && (target_type == TT_UEFI) && (!windows_to_go) && (!img_report.has_4GB_file))) {
-			if (fs_mask & (1 << FS_FAT32))
-				preferred_fs = FS_FAT32;
-			else if ((fs_mask & (1 << FS_FAT16)) && !HAS_KOLIBRIOS(img_report))
-				preferred_fs = FS_FAT16;
-		} else if ((windows_to_go) || HAS_BOOTMGR(img_report) || HAS_WINPE(img_report)) {
-			if ((fs_mask & (1 << FS_FAT32)) && (!img_report.has_4GB_file) && (allow_dual_uefi_bios))
-				preferred_fs = FS_FAT32;
-			else if (fs_mask & (1 << FS_NTFS))
-				preferred_fs = FS_NTFS;
-		}
-	}
+	const RUFUS_FS_OPTIONS options = { boot_type, target_type, true, windows_to_go, allow_dual_uefi_bios };
+	preferred_fs = GetPreferredFileSystem(&img_report, &options, fs_mask, preselected_fs);
 
 	// Try to select the FS
 	for (i = 0; i < ComboBox_GetCount(hFileSystem); i++) {
@@ -751,9 +648,11 @@ static void EnableUefiValidation(BOOL enable, BOOL remove_checkboxes)
 
 	// The UEFI validation bootloader cannot apply if we don't write an ISO, or if the ISO is not UEFI bootable
 	// or if it's a Windows To Go installation or if DD or BIOS/CSM only are enforced.
-	if ((boot_type != BT_IMAGE) || (!IS_EFI_BOOTABLE(img_report)) || IS_DD_ONLY(img_report) ||
-		((image_options & IMOP_WINTOGO) && (ComboBox_GetCurItemData(hImageOption) == IMOP_WIN_TO_GO)) ||
-		((target_type == TT_BIOS) && HAS_WINDOWS(img_report) && (!allow_dual_uefi_bios))) {
+	const BOOL efi_copy = (boot_type == BT_IMAGE) && IS_EFI_BOOTABLE(img_report) && !IS_DD_ONLY(img_report);
+	const BOOL windows_to_go = efi_copy && (image_options & IMOP_WINTOGO) &&
+		(ComboBox_GetCurItemData(hImageOption) == IMOP_WIN_TO_GO);
+	if (!CanUseRuntimeUefiValidation(&img_report, boot_type,
+		windows_to_go, target_type == TT_BIOS, allow_dual_uefi_bios)) {
 		enable = FALSE;
 	}
 
@@ -1412,7 +1311,7 @@ static DWORD WINAPI BootCheckThread(LPVOID param)
 	const char* ldlinux = "ldlinux";
 	const char* syslinux = "syslinux";
 	const char* ldlinux_ext[3] = { "sys", "bss", "c32" };
-	char tmp[MAX_PATH], tmp2[MAX_PATH], c;
+	char tmp[MAX_PATH], tmp2[MAX_PATH];
 	selection_dialog_options_t selection = { 0 };
 
 	syslinux_ldlinux_len[0] = 0; syslinux_ldlinux_len[1] = 0;
@@ -1604,15 +1503,16 @@ static DWORD WINAPI BootCheckThread(LPVOID param)
 				uprintf("As a result, the 'Windows User Experience dialog' will not be displayed.");
 			} else {
 				int arch = _log2(img_report.has_efi >> 1);
+				const int available = GetWindowsUnattendFlags(&img_report, expert_mode);
 				uint16_t map[16] = { 0 }, b = 1;
 				StrArrayCreate(&selection.choices, 16);
 				StrArrayCreate(&selection.tooltips, 16);
-				if (IS_WINDOWS_11(img_report)) {
+				if (available & UNATTEND_SECUREBOOT_TPM_MINRAM) {
 					StrArrayAdd(&selection.choices, lmprintf(MSG_329), TRUE);
 					StrArrayAdd(&selection.tooltips, lmprintf(MSG_360), TRUE);
 					MAP_BIT(UNATTEND_SECUREBOOT_TPM_MINRAM);
 				}
-				if (img_report.win_version.build >= 22500) {
+				if (available & UNATTEND_NO_ONLINE_ACCOUNT) {
 					StrArrayAdd(&selection.choices, lmprintf(MSG_330), TRUE);
 					StrArrayAdd(&selection.tooltips, lmprintf(MSG_361), TRUE);
 					MAP_BIT(UNATTEND_NO_ONLINE_ACCOUNT);
@@ -1629,7 +1529,7 @@ static DWORD WINAPI BootCheckThread(LPVOID param)
 				StrArrayAdd(&selection.tooltips, lmprintf(MSG_362), TRUE);
 				selection.privacy_index = _log2(b) + 1;
 				MAP_BIT(UNATTEND_NO_DATA_COLLECTION);
-				if (IS_WINDOWS_11(img_report)) {
+				if (available & UNATTEND_SILENT_INSTALL) {
 					StrArrayAdd(&selection.choices, lmprintf(MSG_355), TRUE);
 					StrArrayAdd(&selection.tooltips, lmprintf(MSG_371), TRUE);
 					selection.edition_index = _log2(b) + 1;
@@ -1640,7 +1540,7 @@ static DWORD WINAPI BootCheckThread(LPVOID param)
 					StrArrayAdd(&selection.choices, lmprintf(MSG_324), TRUE);
 					StrArrayAdd(&selection.tooltips, lmprintf(MSG_370), TRUE);
 					MAP_BIT(UNATTEND_QOL_ENHANCEMENTS);
-					if (img_report.win_version.build >= 26200) {
+					if (available & UNATTEND_USE_MS2023_BOOTLOADERS) {
 						StrArrayAdd(&selection.choices, lmprintf(MSG_350), TRUE);
 						StrArrayAdd(&selection.tooltips, lmprintf(MSG_368), TRUE);
 						MAP_BIT(UNATTEND_USE_MS2023_BOOTLOADERS);
@@ -1649,7 +1549,7 @@ static DWORD WINAPI BootCheckThread(LPVOID param)
 						MAP_BIT(UNATTEND_APPLY_SKUSIPOLICY);
 					}
 				}
-				if (expert_mode) {
+				if (available & UNATTEND_FORCE_S_MODE) {
 					StrArrayAdd(&selection.choices, lmprintf(MSG_346), TRUE);
 					StrArrayAdd(&selection.tooltips, lmprintf(MSG_367), TRUE);
 					MAP_BIT(UNATTEND_FORCE_S_MODE);
@@ -1671,8 +1571,7 @@ static DWORD WINAPI BootCheckThread(LPVOID param)
 			}
 		}
 
-		if ((img_report.projected_size < MAX_ISO_TO_ESP_SIZE) && HAS_REGULAR_EFI(img_report) &&
-			(partition_type == PARTITION_STYLE_GPT) && IS_FAT(fs_type) && !esp_already_asked) {
+		if (CanWriteIsoToEsp(&img_report, partition_type == PARTITION_STYLE_GPT, IS_FAT(fs_type)) && !esp_already_asked) {
 			// The ISO is small enough to be written as an ESP and we are using GPT
 			// so ask the users if they want to write it as an ESP.
 			char* iso_image = lmprintf(MSG_036);
@@ -1690,8 +1589,8 @@ static DWORD WINAPI BootCheckThread(LPVOID param)
 		if (target_type != TT_BIOS)
 			goto uefi_target;
 
-		if ((partition_type == PARTITION_STYLE_MBR) && (img_report.has_grub2) && (img_report.grub2_version[0] != 0) &&
-			(strcmp(img_report.grub2_version, GRUB2_PACKAGE_VERSION) != 0)) {
+		if (NeedsGrub2CoreLookup(&img_report, partition_type == PARTITION_STYLE_MBR,
+			target_type == TT_BIOS, GRUB2_PACKAGE_VERSION)) {
 			// We may have to download a different Grub2 version if we can find one
 			IGNORE_RETVAL(_chdirU(app_data_dir));
 			IGNORE_RETVAL(_mkdir(FILES_DIR));
@@ -1726,14 +1625,11 @@ static DWORD WINAPI BootCheckThread(LPVOID param)
 					IGNORE_RETVAL(_chdir(tmp));
 					// The following loops through the grub2 version (which may have the ISO label appended)
 					// and breaks it according to '.' or '-' until it finds a match on the server.
-					for (i = (int)strlen(img_report.grub2_version), grub2_len = 0; i > 0 && grub2_len <= 0; i--) {
-						c = img_report.grub2_version[i];
-						if (c != 0 && c != '.' && c != '-')
-							continue;
-						img_report.grub2_version[i] = 0;
-						static_sprintf(tmp, "%s/%s-%s/%s", FILES_URL, grub, img_report.grub2_version, core_img);
+					for (i = (int)GetGrub2DownloadVersionLength(&img_report, sizeof(img_report.grub2_version)),
+						grub2_len = 0; i > 0 && grub2_len <= 0;
+						i = (int)GetGrub2DownloadVersionLength(&img_report, (size_t)i)) {
+						static_sprintf(tmp, "%s/%s-%.*s/%s", FILES_URL, grub, i, img_report.grub2_version, core_img);
 						grub2_len = (long)DownloadSignedFile(tmp, core_img, hMainDialog, FALSE);
-						img_report.grub2_version[i] = c;
 					}
 					if (grub2_len <= 0) {
 						PrintInfo(0, MSG_195, "Grub2");

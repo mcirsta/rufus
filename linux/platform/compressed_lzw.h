@@ -1,0 +1,8 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+#pragma once
+
+#include "compressed_source.h"
+
+/* Internal provider; source validation and publication belong to the caller. */
+int ReadLzwImageSource(const IMAGE_FILE_SOURCE* source, uint64_t maximum_output,
+	compressed_data_t consumer, void* context, COMPRESSED_IMAGE_RESULT* completed);

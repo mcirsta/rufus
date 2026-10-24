@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "platform/fat_format.h"
+#include "platform/rufus_reporting.h"
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -47,6 +48,12 @@ int IsRufusJobCancelled(void)
 	return strcmp(fault, "cancel-before") == 0 || cancel_running;
 }
 
+int IsIsoScanCancelled(void) { return IsRufusJobCancelled(); }
+void _UpdateProgressWithInfo(int operation, int message, uint64_t done, uint64_t total, int force)
+{
+    (void)operation; (void)message; (void)done; (void)total; (void)force;
+}
+
 void uprintf(const char* format, ...)
 {
 	va_list arguments;
@@ -90,13 +97,19 @@ int main(int argc, char** argv)
 	int fd, error, before, flags, status, child, child_error, leaks, original_flags;
 	off_t position;
 
-	if (argc != 8)
+	if (argc != 8 && argc != 9 && argc != 10)
 		return 64;
+	const bool fat16 = argc >= 9 && strcmp(argv[8], "16") == 0;
 	fault = argv[7];
+	options.full_format = argc == 10 && strcmp(argv[9], "full") == 0;
 	options.offset = strtoull(argv[3], NULL, 10);
 	options.size = strtoull(argv[4], NULL, 10);
 	options.cluster_size = (uint32_t)strtoul(argv[5], NULL, 10);
 	options.volume_id = 0x1234abcd;
+	const char* logical_geometry = getenv("RUFUS_TEST_SECTOR_SIZE");
+	const char* physical_geometry = getenv("RUFUS_TEST_PHYSICAL_SECTOR_SIZE");
+	if (logical_geometry != NULL) options.sector_size = (uint32_t)strtoul(logical_geometry, NULL, 10);
+	if (physical_geometry != NULL) options.physical_sector_size = (uint32_t)strtoul(physical_geometry, NULL, 10);
 	size_t label_size = strlen(argv[6]);
 	if (label_size > sizeof(options.label))
 		label_size = sizeof(options.label);
@@ -129,8 +142,14 @@ int main(int argc, char** argv)
 	}
 	before = DescriptorCount();
 	start = Milliseconds();
-	if (strcmp(fault, "partition-file") == 0 || strcmp(fault, "partition-zero") == 0)
-		error = FormatFat32Partition(fd, strcmp(fault, "partition-zero") == 0 ? 0 : 1, argv[1], &options, &result);
+	if (strcmp(fault, "check-only") == 0)
+		error = fat16 ? CheckFat16Image(fd, &options, &result) : CheckFat32Image(fd, &options, &result);
+	else if (strcmp(fault, "partition-file") == 0 || strcmp(fault, "partition-zero") == 0) {
+		const uint64_t device = strcmp(fault, "partition-zero") == 0 ? 0 : 1;
+		error = fat16 ? FormatFat16Partition(fd, device, argv[1], &options, &result)
+			: FormatFat32Partition(fd, device, argv[1], &options, &result);
+	} else if (fat16)
+		error = FormatFat16Image(fd, argv[1], &options, &result);
 	else
 		error = FormatFat32Image(fd, argv[1], &options, &result);
 	position = lseek(fd, 0, SEEK_CUR);

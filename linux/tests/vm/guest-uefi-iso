@@ -1,0 +1,46 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -eu
+[[ $$ == 1 ]] || exit 77
+export PATH=/usr/bin LC_ALL=C
+
+finish()
+{
+    result=$?
+    trap - EXIT
+    echo "RUFUS_UEFI_ISO_EXIT $result"
+    echo o > /proc/sysrq-trigger
+    while :; do sleep 1; done
+}
+
+mount -t devtmpfs devtmpfs /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+[[ $(< /sys/class/dmi/id/product_name) == RufusIsoBootFixture ]]
+trap finish EXIT
+trap 'echo "RUFUS_UEFI_ISO_FAILED_AT_LINE $LINENO"' ERR
+[[ -d /sys/firmware/efi ]]
+[[ $(< /proc/sys/kernel/osrelease) == "$(< /etc/rufus-expected-kernel)" ]]
+[[ " $(< /proc/cmdline) " == *" rufus.iso_fixture=1 "* ]]
+[[ " $(< /proc/cmdline) " == *' rufus.fixture_label=RUFUS\x20TEST '* ]]
+echo RUFUS_UEFI_ISO_PATCHED_LABEL
+for module in xhci_pci usb_storage sd_mod vfat nls_cp437 nls_iso8859_1; do
+    modprobe "$module"
+done
+for attempt in {1..100}; do
+    [[ -b /dev/sda1 ]] && break
+    sleep .1
+done
+[[ -b /dev/sda1 ]]
+[[ $(< /sys/block/sda/device/model) == "QEMU HARDDISK "* ]]
+mount -t vfat -o ro,nodev,nosuid,noexec /dev/sda1 /target
+if [[ ! -f /target/rufus-iso-payload ]]; then
+    echo RUFUS_UEFI_ISO_MISSING_PAYLOAD
+    exit 1
+fi
+[[ $(< /target/rufus-iso-payload) == RUFUS-UEFI-ISO-TREE ]]
+cd /target
+sha256sum -c payload.sha256
+cd /
+umount /target
+echo RUFUS_UEFI_ISO_BOOT_OK

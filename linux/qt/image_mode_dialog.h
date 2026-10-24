@@ -5,6 +5,7 @@
 #include <QDialog>
 
 class QButtonGroup;
+class QLabel;
 
 namespace rufus
 {

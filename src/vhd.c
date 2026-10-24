@@ -44,6 +44,7 @@
 #include "wimlib.h"
 #include "wim_metadata.h"
 #include "image_file.h"
+#include "image_compression.h"
 #include "registry.h"
 #include "bled/bled.h"
 
@@ -59,105 +60,76 @@ static int progress_op = OP_FILE_COPY, progress_msg = MSG_267;
 static HANDLE mounted_handle = INVALID_HANDLE_VALUE;
 static struct wimlib_progress_info_split last_split_progress;
 
-typedef struct {
-	const char* ext;
-	uint8_t type;
-} comp_assoc;
-
-static comp_assoc file_assoc[] = {
-	{ ".zip", BLED_COMPRESSION_ZIP },
-	{ ".Z", BLED_COMPRESSION_LZW },
-	{ ".gz", BLED_COMPRESSION_GZIP },
-	{ ".lzma", BLED_COMPRESSION_LZMA },
-	{ ".bz2", BLED_COMPRESSION_BZIP2 },
-	{ ".xz", BLED_COMPRESSION_XZ },
-	{ ".vtsi", BLED_COMPRESSION_VTSI },
-	{ ".zst", BLED_COMPRESSION_ZSTD },
-	{ ".ffu", BLED_COMPRESSION_MAX },
-	{ ".vhd", BLED_COMPRESSION_MAX + 1 },
-	{ ".vhdx", BLED_COMPRESSION_MAX + 2 },
-};
-
 // Look for a boot marker in the MBR area of the image
 static int8_t IsCompressedBootableImage(const char* path)
 {
-	char *ext = NULL, *physical_disk = NULL;
+	char *physical_disk = NULL;
 	unsigned char *buf = NULL;
-	int i;
 	FILE* fd = NULL;
 	BOOL r = 0;
 	int64_t dc = 0;
 
-	img_report.compression_type = BLED_COMPRESSION_NONE;
-	if (safe_strlen(path) > 4)
-		for (ext = (char*)&path[safe_strlen(path) - 1]; (*ext != '.') && (ext != path); ext--);
-
-	for (i = 0; i < ARRAYSIZE(file_assoc); i++) {
-		if (safe_stricmp(ext, file_assoc[i].ext) == 0) {
-			img_report.compression_type = file_assoc[i].type;
-			buf = malloc(MBR_SIZE);
-			if (buf == NULL)
-				return 0;
-			ErrorStatus = 0;
-			if (img_report.compression_type < BLED_COMPRESSION_MAX) {
-				bled_init(0, uprintf, NULL, NULL, NULL, NULL, &ErrorStatus);
-				dc = bled_get_uncompressed_size(path, file_assoc[i].type);
-				if (dc > 0)
-					img_report.projected_size = dc;
-				dc = bled_uncompress_to_buffer(path, (char*)buf, MBR_SIZE, file_assoc[i].type);
-				bled_exit();
-			} else if (img_report.compression_type == BLED_COMPRESSION_MAX) {
-				// Dism, through FfuProvider.dll, can mount a .ffu as a physicaldrive, which we
-				// could then use to poke the MBR as we do for VHD... Except Microsoft did design
-				// dism to FAIL AND EXIT, after mounting the ffu as a virtual drive, if it doesn't
-				// find something that looks like Windows at the specified image index... which it
-				// usually won't in our case. So, curse Microsoft and their incredible short-
-				// sightedness (or, most likely in this case, intentional malice, by BREACHING the
-				// OS contract to keep useful disk APIs for their usage, and their usage only).
-				// Then again, considering that .ffu's are GPT based, the marker should always be
-				// present, so just check for the FFU signature and pretend there's a marker then.
-				if (has_ffu_support) {
-					fd = fopenU(path, "rb");
-					if (fd != NULL) {
-						img_report.is_vhd = TRUE;
-						dc = fread(buf, 1, MBR_SIZE, fd);
-						fclose(fd);
-						// The signature may not be constant, but since the only game in town to
-						// create FFU is dism, and dism appears to use "SignedImage " always,.we
-						// might as well use this to our advantage.
-						if (strncmp(&buf[4], "SignedImage ", 12) == 0) {
-							// At this stage, the buffer is only used for marker validation.
-							buf[0x1FE] = 0x55;
-							buf[0x1FF] = 0xAA;
-						}
-					} else
-						uprintf("Could not open %s: %d", path, errno);
-				} else {
-					uprintf("  An FFU image was selected, but this system does not have FFU support!");
-				}
-			} else {
-				physical_disk = VhdMountImageAndGetSize(path, &img_report.projected_size);
-				if (physical_disk != NULL) {
+	img_report.compression_type = GetImageCompressionType(path);
+	if (img_report.compression_type != BLED_COMPRESSION_NONE) {
+		buf = malloc(MBR_SIZE);
+		if (buf == NULL)
+			return 0;
+		ErrorStatus = 0;
+		if (img_report.compression_type < BLED_COMPRESSION_MAX) {
+			bled_init(0, uprintf, NULL, NULL, NULL, NULL, &ErrorStatus);
+			dc = bled_get_uncompressed_size(path, img_report.compression_type);
+			if (dc > 0)
+				img_report.projected_size = dc;
+			dc = bled_uncompress_to_buffer(path, (char*)buf, MBR_SIZE, img_report.compression_type);
+			bled_exit();
+		} else if (img_report.compression_type == BLED_COMPRESSION_MAX) {
+			// Dism, through FfuProvider.dll, can mount a .ffu as a physicaldrive, which we
+			// could then use to poke the MBR as we do for VHD... Except Microsoft did design
+			// dism to FAIL AND EXIT, after mounting the ffu as a virtual drive, if it doesn't
+			// find something that looks like Windows at the specified image index... which it
+			// usually won't in our case. So, curse Microsoft and their incredible short-
+			// sightedness (or, most likely in this case, intentional malice, by BREACHING the
+			// OS contract to keep useful disk APIs for their usage, and their usage only).
+			// Then again, considering that .ffu's are GPT based, the marker should always be
+			// present, so just check for the FFU signature and pretend there's a marker then.
+			if (has_ffu_support) {
+				fd = fopenU(path, "rb");
+				if (fd != NULL) {
 					img_report.is_vhd = TRUE;
-					fd = fopenU(physical_disk, "rb");
-					if (fd != NULL) {
-						dc = fread(buf, 1, MBR_SIZE, fd);
-						fclose(fd);
+					dc = fread(buf, 1, MBR_SIZE, fd);
+					fclose(fd);
+					// The signature may not be constant, but since the only game in town to
+					// create FFU is dism, and dism appears to use "SignedImage " always,.we
+					// might as well use this to our advantage.
+					if (strncmp(&buf[4], "SignedImage ", 12) == 0) {
+						// At this stage, the buffer is only used for marker validation.
+						buf[0x1FE] = 0x55;
+						buf[0x1FF] = 0xAA;
 					}
+				} else
+					uprintf("Could not open %s: %d", path, errno);
+			} else {
+				uprintf("  An FFU image was selected, but this system does not have FFU support!");
+			}
+		} else {
+			physical_disk = VhdMountImageAndGetSize(path, &img_report.projected_size);
+			if (physical_disk != NULL) {
+				img_report.is_vhd = TRUE;
+				fd = fopenU(physical_disk, "rb");
+				if (fd != NULL) {
+					dc = fread(buf, 1, MBR_SIZE, fd);
+					fclose(fd);
 				}
-				VhdUnmountImage();
 			}
-			if (dc != MBR_SIZE) {
-				free(buf);
-				return FALSE;
-			}
-			if ((buf[0x1FE] == 0x55) && (buf[0x1FF] == 0xAA))
-				r = 1;
-			else if (ignore_boot_marker)
-				r = 2;
-			free(buf);
-			return r;
+			VhdUnmountImage();
 		}
+		if (dc != MBR_SIZE) {
+			free(buf);
+			return FALSE;
+		}
+		r = GetCompressedBootMarker(buf, MBR_SIZE, ignore_boot_marker != FALSE);
+		free(buf);
+		return r;
 	}
 
 	return FALSE;

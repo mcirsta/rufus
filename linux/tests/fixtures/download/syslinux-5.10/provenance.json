@@ -1,0 +1,32 @@
+[
+  {
+    "url": "https://rufus.ie/files/syslinux-5.10/ldlinux.sys",
+    "bytes": 56657,
+    "sha256": "ec31c2b7ba09ee69eef85531e2c24f224af7d94a7225b26f4f57f7705e7dda1a"
+  },
+  {
+    "url": "https://rufus.ie/files/syslinux-5.10/ldlinux.sys.sig",
+    "bytes": 256,
+    "sha256": "210f1e20ddc82a0ec709b95972be89cdf3347d3fc03bec0861ddcddd372af3ed"
+  },
+  {
+    "url": "https://rufus.ie/files/syslinux-5.10/ldlinux.bss",
+    "bytes": 512,
+    "sha256": "b2f0de2e01a7e34d96a976364305d39ff849d50ad13ad1f8a8b4411d1d534e88"
+  },
+  {
+    "url": "https://rufus.ie/files/syslinux-5.10/ldlinux.bss.sig",
+    "bytes": 256,
+    "sha256": "a609bd7c518dec6905e6003fdf0b8bb55ed5fdb70ca4e2ec0db8677488050977"
+  },
+  {
+    "url": "https://rufus.ie/files/syslinux-5.10/ldlinux.c32",
+    "bytes": 115304,
+    "sha256": "c33b315fece4adc4c3b27513228466e44499cda7fd6397c5abe0f8ce4fe34539"
+  },
+  {
+    "url": "https://rufus.ie/files/syslinux-5.10/ldlinux.c32.sig",
+    "bytes": 256,
+    "sha256": "78be1c88cc554425e77ae330d6e5ed2c36182d036c250cca5fe8260f8bc468b8"
+  }
+]

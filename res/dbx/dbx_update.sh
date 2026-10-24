@@ -34,8 +34,8 @@ cat << EOF > dbx_info.h
 #include <stdint.h>
 #pragma once
 
-struct {
-	char* url;
+static const struct {
+	const char* url;
 	uint64_t timestamp;
 } dbx_info[] = {
 EOF

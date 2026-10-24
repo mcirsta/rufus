@@ -1,0 +1,60 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -eu
+[[ $$ == 1 ]] || exit 77
+export PATH=/usr/bin LC_ALL=C
+
+finish()
+{
+    result=$?
+    trap - EXIT
+    echo "RUFUS_NTFS_EXIT $result"
+    echo o > /proc/sysrq-trigger
+    while :; do sleep 1; done
+}
+
+mount -t devtmpfs devtmpfs /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+[[ $(< /sys/class/dmi/id/product_name) == RufusNtfsFixture ]]
+[[ " $(< /proc/cmdline) " == *" rufus.ntfs_fixture=1 "* ]]
+trap finish EXIT
+trap 'echo "RUFUS_NTFS_FAILED_AT_LINE $LINENO"' ERR
+for module in xhci_pci usb_storage sd_mod ntfs3 nls_utf8; do
+    modprobe "$module"
+done
+for attempt in {1..100}; do
+    [[ -b /dev/sda ]] && break
+    sleep .1
+done
+[[ -b /dev/sda ]]
+[[ $(< /sys/block/sda/device/model) == "QEMU HARDDISK "* ]]
+sector_bytes=512
+tail_sector=$((5 * 1024 * 1024 * 1024 / sector_bytes))
+file_bytes=$(((tail_sector + 1) * sector_bytes))
+payload='/target/install-ș😀.wim.fixture'
+dd if=/dev/zero of=/run/zero bs="$sector_bytes" count=1 status=none
+printf 'RUFUS NTFS beginning\n' > /run/start
+printf 'RUFUS NTFS beyond FAT32\n' > /run/end
+dd if=/dev/zero of=/run/start bs=1 count=0 seek="$sector_bytes" status=none
+dd if=/dev/zero of=/run/end bs=1 count=0 seek="$sector_bytes" status=none
+mount -t ntfs3 /dev/sda /target
+echo RUFUS_NTFS_WRITING_LARGE_FILE
+dd if=/run/start of="$payload" bs="$sector_bytes" status=none
+dd if=/run/end of="$payload" bs="$sector_bytes" seek="$tail_sector" conv=notrunc status=none
+[[ $(stat -c %s "$payload") == "$file_bytes" ]]
+umount /target
+echo RUFUS_NTFS_REMOUNT_READBACK
+mount -t ntfs3 -o ro /dev/sda /target
+[[ $(stat -c %s "$payload") == "$file_bytes" ]]
+dd if="$payload" of=/run/readback bs="$sector_bytes" count=1 status=none
+cmp /run/start /run/readback
+dd if="$payload" of=/run/readback bs="$sector_bytes" skip="$tail_sector" count=1 status=none
+cmp /run/end /run/readback
+for gib in 2 4; do
+    dd if="$payload" of=/run/readback bs="$sector_bytes" skip=$((gib * 1024 * 1024 * 1024 / sector_bytes)) count=1 status=none
+    cmp /run/zero /run/readback
+done
+umount /target
+echo "RUFUS_NTFS_LARGE_FILE SIZE=$file_bytes"
+echo RUFUS_NTFS_DONE

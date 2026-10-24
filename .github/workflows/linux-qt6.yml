@@ -6,6 +6,10 @@ on:
       - 'linux/**'
       - 'tests/image_policy/**'
       - 'tests/image_file/**'
+      - 'tests/config_text/**'
+      - 'tests/format_policy/**'
+      - 'tests/progress_policy/**'
+      - 'tests/unattend/**'
       - 'tests/partition_layout/**'
       - 'tests/syslinux_version/**'
       - 'tests/syslinux_scan/**'
@@ -13,6 +17,7 @@ on:
       - 'tests/efi_boot_info/**'
       - 'tests/pe_arch/**'
       - 'res/syslinux/**'
+      - 'res/uefi/**'
       - 'src/**'
       - 'res/icons/**'
       - 'res/rufus.ico'
@@ -22,6 +27,10 @@ on:
       - 'linux/**'
       - 'tests/image_policy/**'
       - 'tests/image_file/**'
+      - 'tests/config_text/**'
+      - 'tests/format_policy/**'
+      - 'tests/progress_policy/**'
+      - 'tests/unattend/**'
       - 'tests/partition_layout/**'
       - 'tests/syslinux_version/**'
       - 'tests/syslinux_scan/**'
@@ -29,6 +38,7 @@ on:
       - 'tests/efi_boot_info/**'
       - 'tests/pe_arch/**'
       - 'res/syslinux/**'
+      - 'res/uefi/**'
       - 'src/**'
       - 'res/icons/**'
       - 'res/rufus.ico'
@@ -53,7 +63,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build g++ qt6-base-dev qt6-base-dev-tools dbus-daemon pkg-config libcdio-dev libiso9660-dev libudf-dev libwim-dev libfdisk-dev fdisk libarchive-tools genisoimage dosfstools mtools python3 curl patch
+          sudo apt-get install -y cmake ninja-build g++ qt6-base-dev qt6-base-dev-tools dbus-daemon pkg-config libcdio-dev libiso9660-dev libudf-dev libwim-dev libfdisk-dev libblkid-dev libhivex-dev libssl-dev openssl fdisk libarchive-tools genisoimage dosfstools mtools ntfs-3g python3 curl patch desktop-file-utils zstd
       - name: Fetch upstream wimlib 1.14.5 release
         run: |
           curl -fL --retry 2 https://wimlib.net/downloads/wimlib-1.14.5.tar.gz -o "$RUNNER_TEMP/wimlib.tar.gz"
@@ -61,9 +71,14 @@ jobs:
           mkdir -p "$RUNNER_TEMP/wimlib-source"
           tar -xf "$RUNNER_TEMP/wimlib.tar.gz" --strip-components=1 -C "$RUNNER_TEMP/wimlib-source"
       - name: Configure
-        run: cmake -S linux -B build/linux -G Ninja -DCMAKE_BUILD_TYPE=Debug -DRUFUS_WIMLIB_UPSTREAM="$RUNNER_TEMP/wimlib-source" -DRUFUS_COMPARE_SYSTEM_WIMLIB=ON
+        run: cmake -S linux -B build/linux -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=/usr -DRUFUS_WIMLIB_UPSTREAM="$RUNNER_TEMP/wimlib-source" -DRUFUS_COMPARE_SYSTEM_WIMLIB=ON
       - name: Build
         run: cmake --build build/linux
+      - name: Validate staged desktop integration
+        run: |
+          DESTDIR="$RUNNER_TEMP/rufus-package" cmake --install build/linux
+          desktop-file-validate "$RUNNER_TEMP/rufus-package/usr/share/applications/org.rufus.Rufus.desktop"
+          test -x "$RUNNER_TEMP/rufus-package/usr/bin/rufus-linux"
       - name: Test without hardware
         run: ctest --test-dir build/linux --output-on-failure --no-tests=error -L no-hardware
       - name: Build generated-image fixture probe

@@ -9,6 +9,8 @@ typedef struct {
 	struct stat info;
 	bool is_wim;
 	bool has_boot_marker;
+	struct virtual_disk_node* virtual_disk; /* Borrowed optional retained parent/replay graph. */
+	unsigned ffu_store; /* Explicit one-based store; zero permits only a single-store FFU. */
 } IMAGE_FILE_SOURCE;
 
 #ifdef __cplusplus

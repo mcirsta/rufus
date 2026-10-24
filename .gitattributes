@@ -20,3 +20,5 @@ install-sh      eol=lf
 .github         export-ignore
 *.creole        export-ignore
 
+# Keep native build, packaging and qualification scripts in tag archives.
+linux/**/*.sh   -export-ignore

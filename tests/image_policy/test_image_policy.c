@@ -309,6 +309,23 @@ static void TestWriteChoices(void)
 
 int main(void)
 {
+    RUFUS_IMG_REPORT esp = {0};
+    esp.is_iso = 1; esp.has_efi = 1 << ARCH_X86_64; esp.projected_size = MAX_ISO_TO_ESP_SIZE - 1;
+    for (int hybrid = 0; hybrid < 2; hybrid++) {
+        esp.is_bootable_img = hybrid;
+        for (int persistence = 0; persistence < 2; persistence++) {
+            const IMAGE_WRITE_CHOICES modes = GetFinalImageWriteChoices(&esp, persistence, true, true);
+            cases++;
+            if (modes.count != (hybrid && !persistence ? 3 : 2)
+                || modes.mode[0] != IMAGE_WRITE_ISO || modes.mode[1] != IMAGE_WRITE_ESP) failures++;
+        }
+    }
+    cases += 4;
+    if (CanWriteIsoToEsp(&esp, false, true) || CanWriteIsoToEsp(&esp, true, false)) failures++;
+    esp.projected_size = MAX_ISO_TO_ESP_SIZE;
+    if (CanWriteIsoToEsp(&esp, true, true)) failures++;
+    esp.projected_size--; esp.has_efi = 0;
+    if (CanWriteIsoToEsp(&esp, true, true)) failures++;
 	TestDistributionLabels();
 	TestGrubFilesystems();
 	TestBootMethods();

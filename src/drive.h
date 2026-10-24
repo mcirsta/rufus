@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include <winioctl.h>   // for DISK_GEOMETRY
 #include <winternl.h>
+#include "format_policy.h"
 
 #pragma once
 
@@ -31,12 +32,6 @@
 	CTL_CODE(MOUNTMGRCONTROLTYPE, 15, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_MOUNTMGR_SET_AUTO_MOUNT       \
 	CTL_CODE(MOUNTMGRCONTROLTYPE, 16, METHOD_BUFFERED, FILE_READ_ACCESS | FILE_WRITE_ACCESS)
-
-#define XP_MSR                              0x01
-#define XP_ESP                              0x02
-#define XP_UEFI_NTFS                        0x04
-#define XP_COMPAT                           0x08
-#define XP_PERSISTENCE                      0x10
 
 #define PI_MAIN                             0
 #define PI_ESP                              1

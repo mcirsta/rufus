@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Source and verified upstream trees are mounted read-only at build time.
+FROM docker.io/library/debian@sha256:15a71cc87173e191d5046f9c4288db4e8954b67f92e48d9587087826b0afe562
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    build-essential cmake ninja-build pkg-config perl patch qt6-base-dev \
+    libssl-dev zlib1g-dev libfdisk-dev libblkid-dev libmount-dev libext2fs-dev \
+    libhivex-dev ntfs-3g-dev dosfstools ntfs-3g e2fsprogs exfatprogs udftools \
+    mtools desktop-file-utils python3 dpkg-dev patchelf file \
+    && rm -rf /var/lib/apt/lists/*

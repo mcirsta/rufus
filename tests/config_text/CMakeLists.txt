@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+cmake_minimum_required(VERSION 3.21)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    project(RufusConfigTextTests LANGUAGES C)
+    include(CTest)
+endif()
+
+add_executable(test_config_text test_config_text.c ../../src/config_text.c)
+target_include_directories(test_config_text PRIVATE ../../src)
+target_compile_features(test_config_text PRIVATE c_std_11)
+if(MSVC)
+    target_compile_options(test_config_text PRIVATE /W4)
+    target_compile_definitions(test_config_text PRIVATE _CRT_SECURE_NO_WARNINGS)
+else()
+    target_compile_options(test_config_text PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+if(NOT WIN32)
+    target_compile_definitions(test_config_text PRIVATE _GNU_SOURCE)
+    target_compile_options(test_config_text PRIVATE
+        -include "${CMAKE_CURRENT_SOURCE_DIR}/../../linux/platform/crt_strings.h")
+endif()
+add_test(NAME rufus_config_text COMMAND test_config_text)
+set_tests_properties(rufus_config_text PROPERTIES LABELS "component;image;no-hardware" TIMEOUT 30)

@@ -1,0 +1,10 @@
+<RCC>
+ <qresource prefix="/rufus/md5">
+  <file alias="bootia32.efi">../../res/md5/bootia32.efi</file>
+  <file alias="bootx64.efi">../../res/md5/bootx64.efi</file>
+  <file alias="bootarm.efi">../../res/md5/bootarm.efi</file>
+  <file alias="bootaa64.efi">../../res/md5/bootaa64.efi</file>
+  <file alias="bootriscv64.efi">../../res/md5/bootriscv64.efi</file>
+  <file alias="bootloongarch64.efi">../../res/md5/bootloongarch64.efi</file>
+ </qresource>
+</RCC>

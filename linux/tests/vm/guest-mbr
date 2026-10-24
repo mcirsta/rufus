@@ -1,0 +1,166 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -eu
+[[ $$ == 1 ]] || exit 77
+export PATH=/usr/bin LC_ALL=C
+export ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1
+
+finish()
+{
+    result=$?
+    trap - EXIT
+    echo "RUFUS_MBR_EXIT $result"
+    echo o > /proc/sysrq-trigger
+    while :; do sleep 1; done
+}
+
+mount -t devtmpfs devtmpfs /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+[[ $(< /sys/class/dmi/id/product_name) == RufusMBRFixture ]]
+[[ " $(< /proc/cmdline) " == *" rufus.mbr_fixture=1 "* ]]
+trap finish EXIT
+trap 'echo "RUFUS_MBR_FAILED_AT_LINE $LINENO"' ERR
+for module in xhci_pci usb_storage sd_mod; do
+    modprobe "$module"
+done
+if [[ -f /etc/rufus-geometry-fixture ]]; then modprobe uas; fi
+if [[ -f /etc/rufus-save-qt-fixture ]]; then
+    for module in virtio_pci virtio_blk ext4; do modprobe "$module"; done
+fi
+if [[ -f /etc/rufus-legacy-iso-fixture ]]; then
+    for module in virtio_pci virtio_blk ntfs nls_utf8 fuse; do modprobe "$module"; done
+    for attempt in {1..100}; do [[ -b /dev/vdb ]] && break; sleep .1; done
+    [[ -b /dev/vdb ]]
+fi
+for attempt in {1..100}; do
+    [[ -b /dev/sda ]] && break
+    sleep .1
+done
+[[ -b /dev/sda ]]
+if [[ -f /etc/rufus-geometry-fixture ]]; then
+    for attempt in {1..100}; do [[ -b /dev/sdc ]] && break; sleep .1; done
+    [[ -b /dev/sdc ]]
+    for module in udf ext4 ntfs nls_utf8 exfat fuse; do modprobe "$module"; done
+fi
+if [[ -f /etc/rufus-save-export-fixture ]]; then
+    mkdir -p /run/save-tools /tmp
+    chmod 1777 /tmp
+    chown 0:0 /usr/bin/save_guest_launcher
+    chmod 4755 /usr/bin/save_guest_launcher
+    ln -s /usr/bin/save_guest_launcher /run/save-tools/pkexec
+    modprobe udf
+    modprobe loop
+fi
+if [[ ! -f /etc/rufus-device-options-fixture ]]; then
+    [[ $(< /sys/block/sda/device/model) == "QEMU HARDDISK "* ]]
+fi
+if [[ -f /etc/rufus-device-options-fixture ]]; then
+    modprobe virtio_pci
+    modprobe virtio_scsi
+    if [[ -f /etc/rufus-device-source-fixture ]]; then
+        for module in loop nbd sr_mod btrfs dm_mod overlay; do modprobe "$module"; done
+    else
+    for attempt in {1..100}; do [[ -b /dev/sdd ]] && break; sleep .1; done
+    [[ -b /dev/sdd ]]
+    fi
+fi
+if [[ -f /etc/rufus-native-formats-fixture ]]; then
+    for module in udf ext4 nls_utf8; do modprobe "$module"; done
+fi
+if [[ -f /etc/rufus-runtime-validation-fixture || -f /etc/rufus-iso-options-fixture || -f /etc/rufus-ntfs-options-fixture || -f /etc/rufus-iso-resources-fixture ]]; then
+    for module in ntfs nls_utf8; do modprobe "$module"; done
+fi
+if [[ -f /etc/rufus-windows-togo-fixture ]]; then
+    for module in ntfs ntfs3 nls_utf8; do modprobe "$module"; done
+fi
+if [[ -f /etc/rufus-media-appearance-fixture || -f /etc/rufus-old-bios-fixture || -f /etc/rufus-ffu-optimized-fixture ]]; then
+    for module in fuse ntfs nls_utf8 exfat; do modprobe "$module"; done
+fi
+if [[ -f /etc/rufus-ntfs-mounted-fixture || -f /etc/rufus-ntfs-mount-fixture || -f /etc/rufus-ntfs-options-fixture || -f /etc/rufus-iso-resources-fixture ]]; then modprobe fuse; fi
+if [[ -f /etc/rufus-ntfs-mount-fixture && $(< /etc/rufus-ntfs-mount-fixture) == ntfs ]]; then
+    modprobe ntfs
+    modprobe nls_utf8
+fi
+if [[ -f /etc/rufus-fixed-usb-fixture ]]; then
+    # Default-visible fixed media now needs real caller/source backing even in
+    # the initial seed/helper jobs. Keep them on an independent known filesystem.
+    mkdir -p /run/fixed-fixture
+    mount -t tmpfs -o size=64m tmpfs /run/fixed-fixture
+    mkdir /run/fixed-fixture/home
+    echo 'caller:x:1000:1000:Caller:/run/fixed-fixture/home:/bin/bash' >> /etc/passwd
+    for source in source.iso incompatible.iso unknown.iso; do
+        cp "/$source" "/run/fixed-fixture/$source"
+        mount --bind "/run/fixed-fixture/$source" "/$source"
+    done
+fi
+if [[ -x /usr/bin/test_mbr_handoff_guest ]]; then
+    export LC_ALL=C.UTF-8
+    for module in vfat nls_cp437 nls_iso8859_1; do
+        modprobe "$module"
+    done
+    if [[ -f /etc/rufus-grub2-ext-gui-fixture || -f /etc/rufus-winpe-gui-fixture || -f /etc/rufus-grub4dos-gui-fixture || -f /etc/rufus-grub4dos-image-gui-fixture ]]; then
+        export QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORM_PLUGIN_PATH=/usr/lib/qt6/plugins/platforms
+        test_grub2_widgets_guest
+    elif [[ -f /etc/rufus-geometry-fixture ]]; then
+        test_mbr_handoff_guest --geometry-batch
+    elif [[ -f /etc/rufus-device-options-fixture ]]; then
+        test_mbr_handoff_guest --device-options
+    elif [[ -f /etc/rufus-ntfs-options-fixture ]]; then
+        test_mbr_handoff_guest --ntfs-options
+    elif [[ -f /etc/rufus-iso-resources-fixture ]]; then
+        test_mbr_handoff_guest --iso-resources
+    elif [[ -f /etc/rufus-legacy-iso-fixture ]]; then
+        test_mbr_handoff_guest --legacy-iso
+    elif [[ -f /etc/rufus-iso-options-fixture ]]; then
+        test_mbr_handoff_guest --iso-options
+    elif [[ -f /etc/rufus-legacy-boot-fixture ]]; then
+        test_mbr_handoff_guest --legacy-boot
+    elif [[ -f /etc/rufus-runtime-validation-fixture || -f /etc/rufus-iso-options-fixture || -f /etc/rufus-ntfs-options-fixture || -f /etc/rufus-iso-resources-fixture ]]; then
+        test_mbr_handoff_guest --runtime-validation
+    elif [[ -f /etc/rufus-native-formats-fixture ]]; then
+        test_mbr_handoff_guest --native-formats
+    elif [[ -f /etc/rufus-windows-togo-fixture ]]; then
+        test_mbr_handoff_guest --windows-togo
+    elif [[ -f /etc/rufus-windows-bios-fixture ]]; then
+        test_mbr_handoff_guest --windows-bios
+    elif [[ -f /etc/rufus-grub4dos-image-fixture ]]; then
+        test_mbr_handoff_guest --grub4dos-image
+    elif [[ -f /etc/rufus-grub4dos-fixture ]]; then
+        test_mbr_handoff_guest --grub4dos-helper
+    elif [[ -f /etc/rufus-grub2-image-fixture ]]; then
+        test_mbr_handoff_guest --grub2-image
+    elif [[ -f /etc/rufus-syslinux-fixture ]]; then
+        syslinux_major=$(< /etc/rufus-syslinux-fixture)
+        [[ $syslinux_major == 4 || $syslinux_major == 6 ]] || exit 77
+        test_mbr_handoff_guest "--syslinux${syslinux_major}-helper"
+    elif [[ -f /etc/rufus-freedos-fixture ]]; then
+        test_mbr_handoff_guest --freedos-helper
+    elif [[ -f /etc/rufus-sfd-fixture ]]; then
+        test_mbr_handoff_guest --sfd
+    elif [[ -f /etc/rufus-ntfs-helper-fixture ]]; then
+        test_mbr_handoff_guest --ntfs-helper
+    elif [[ -f /etc/rufus-grub2-ext-helper-fixture ]]; then
+        ext_bits=$(< /etc/rufus-grub2-ext-helper-fixture)
+        [[ $ext_bits == 2 || $ext_bits == 3 ]] || exit 77
+        test_mbr_handoff_guest "--grub2-ext${ext_bits}-helper"
+    elif [[ -f /etc/rufus-fat-helper-fixture ]]; then
+        test_mbr_handoff_guest --fat-helper
+    elif [[ -f /etc/rufus-format-helper-fixture ]]; then
+        test_mbr_handoff_guest --exfat-helper
+    elif [[ -f /etc/rufus-exfat-fixture ]]; then
+        test_mbr_handoff_guest --exfat
+    elif [[ -f /etc/rufus-alpine-fixture ]]; then
+        test_mbr_handoff_guest --alpine
+    elif [[ -f /etc/rufus-zip-supplement-fixture ]]; then
+        test_mbr_handoff_guest --zip-supplement
+    elif [[ -f /etc/rufus-helper-fixture ]]; then
+        test_mbr_handoff_guest --helper
+    elif [[ -f /etc/rufus-install-fixture ]]; then
+        test_mbr_handoff_guest --install
+    else
+        test_mbr_handoff_guest
+    fi
+else
+    test_mbr_guest
+fi

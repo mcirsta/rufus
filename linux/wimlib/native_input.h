@@ -14,8 +14,11 @@ struct filedes;
 
 /* Initialize wimlib before workers and clean it up after they finish. The reader
  * and filesystem remain caller-owned and serialized through wimlib_free().
- * Metadata and bounded ReadWimFile calls are qualified. Exports can retain
- * references longer and remain unqualified. */
+ * Metadata, bounded ReadWimFile calls and synchronous wimlib_split are qualified.
+ * Splitting keeps the complete reader chain alive until wimlib_free(); callers
+ * own output collision checks, actual part-size limits and partial-file cleanup.
+ * Solid archives cannot be split directly. Exports can retain references longer
+ * and remain unqualified. */
 int OpenWimFromIsoReader(struct iso_file_reader* reader, int flags, WIMStruct** wim);
 uint64_t WimReaderSize(const struct iso_file_reader* reader);
 int WimReaderRead(struct filedes* fd, void* buffer, size_t count, off_t offset);

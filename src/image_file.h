@@ -18,6 +18,14 @@ typedef struct {
 	uint8_t is_root_ldlinux_sys;
 } ISO_FILE_PROPS;
 
+#define ISO_SYSLINUX_CONFIG_NAME_CAPACITY sizeof("isolinux.cfg")
+
+typedef struct {
+	bool create;
+	bool backup;
+	char text[512]; /* Two report cfg_path strings plus the fixed directives. */
+} ISO_SYSLINUX_CONFIG;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -49,6 +57,20 @@ bool IsBootImageSignature(const void* data, size_t size);
  * protected prefix (e.g. Windows's drive specifier) and retains the source path.
  * This is not a complete filesystem-name validator or collision policy. */
 bool SanitizeImagePath(char* path);
+
+/* Root syslinux.cfg rules from iso.c, with no file I/O. An existing config is
+ * preserved unless the scan selected an override. Otherwise generate the CONFIG
+ * redirect and its APPEND directory, retaining the original path bytes/case.
+ * report is initialized with terminated paths. The caller handles syslinux.org
+ * backup, target filesystem aliases, writes, errors and text-mode newlines. */
+void GetIsoSyslinuxConfig(const RUFUS_IMG_REPORT* report, bool exists, ISO_SYSLINUX_CONFIG* config);
+
+/* EFI/BOOT/isolinux.cfg is duplicated when the scan found no EFI syslinux.cfg.
+ * Keep the original suffix's case, replacing only "iso" with "sys" as Windows
+ * does. False sets name to empty. The caller copies the already-patched file,
+ * without replacing an existing destination. No file I/O or report mutation. */
+bool GetEfiSyslinuxConfigName(const RUFUS_IMG_REPORT* report, const ISO_FILE_PROPS* props,
+	const char* dirname, const char* basename, char name[ISO_SYSLINUX_CONFIG_NAME_CAPACITY]);
 
 /* Classify a file, with no I/O or report mutation. All flags are populated for
  * both scanning and extraction. dirname is "" for the root; NULL is accepted

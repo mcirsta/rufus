@@ -1,0 +1,29 @@
+{
+  "source": "Original Rufus signed boot-resource service",
+  "files": [
+    {
+      "url": "https://rufus.ie/files/syslinux-4.07/menu.c32",
+      "file": "menu.c32",
+      "sha256": "b46af20919e9f21fa152375ddac4588708c122b3657f0901314e834549a96ce7",
+      "bytes": 55140
+    },
+    {
+      "url": "https://rufus.ie/files/syslinux-4.07/menu.c32.sig",
+      "file": "menu.c32.sig",
+      "sha256": "43fd17ce93d0781bb93f4b6ed732e6c686a266e861dfc5d1b67cd35e51a1ce06",
+      "bytes": 256
+    },
+    {
+      "url": "https://rufus.ie/files/syslinux-4.07/vesamenu.c32",
+      "file": "vesamenu.c32",
+      "sha256": "756f892523c68d2732288b5ad42d7dc74ea7a7089b042b125f5d747ff320a077",
+      "bytes": 154128
+    },
+    {
+      "url": "https://rufus.ie/files/syslinux-4.07/vesamenu.c32.sig",
+      "file": "vesamenu.c32.sig",
+      "sha256": "5d25a95803bc5bea181172a76952287b804bedff50b43528188b5df88551676e",
+      "bytes": 256
+    }
+  ]
+}

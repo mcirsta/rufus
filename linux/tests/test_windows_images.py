@@ -36,11 +36,11 @@ def main():
     with tempfile.TemporaryDirectory(prefix="rufus-windows-images-") as temporary:
         directory = Path(temporary)
         wims = {}
-        for kind in ("win11", "win7", "unknown", "invalid", "no-revision", "multi"):
+        for kind in ("win11", "win7", "win8", "win8.1", "unknown", "invalid", "no-revision", "multi"):
             file = directory / (kind + ".wim")
             subprocess.run([str(args.fixture), str(file), kind], check=True, timeout=15)
             wims[kind] = file.read_bytes()
-        for kind, state, major in (("win11", 1, 11), ("win7", 1, 7), ("unknown", 2, 0),
+        for kind, state, major in (("win11", 1, 11), ("win7", 1, 7), ("win8", 1, 8), ("win8.1", 1, 8), ("unknown", 2, 0),
                                    ("invalid", 2, 0), ("no-revision", 2, 11), ("multi", 1, 7)):
             image = make_image(directory, kind.upper().replace("-", "_"),
                                {"/Sources/Install.wim": wims[kind]}, args.mkisofs)

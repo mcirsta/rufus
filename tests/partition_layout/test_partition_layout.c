@@ -5,6 +5,37 @@
 static unsigned checks, failures;
 #define CHECK(value) do { checks++; if (!(value)) { failures++; fprintf(stderr, "Failed line %d\n", __LINE__); } } while (0)
 
+static void TestTrailingPartitions(void)
+{
+	const uint32_t sectors[] = { 512, 4096 };
+	const uint32_t tracks[] = { 1, 32, 63 };
+	const uint64_t requests[] = { 1, 512, 1024 * 1024, 1024 * 1024 + 1, 260ULL << 20 };
+	const uint64_t disk_size = 8ULL << 30;
+	for (size_t s = 0; s < sizeof(sectors) / sizeof(sectors[0]); s++)
+	for (size_t t = 0; t < sizeof(tracks) / sizeof(tracks[0]); t++)
+	for (size_t r = 0; r < sizeof(requests) / sizeof(requests[0]); r++) {
+		const uint64_t track = (uint64_t)sectors[s] * tracks[t];
+		const uint64_t size = ((requests[r] + track - 1) / track) * track;
+		CHECK(GetTrailingPartitionSize(requests[r], sectors[s], tracks[t]) == size);
+		for (int gpt = 0; gpt < 2; gpt++) {
+			const uint64_t end = disk_size - (gpt ? 33ULL * sectors[s] : 0);
+			const uint64_t offset = ((end - size) / track) * track;
+			CHECK(GetTrailingPartitionOffset(end, size, sectors[s], tracks[t]) == offset);
+			CHECK(offset + size <= end);
+			CHECK(end - offset - size < track);
+		}
+	}
+	CHECK(GetTrailingPartitionSize(0, 512, 63) == 0);
+	CHECK(GetTrailingPartitionSize(1024, 0, 63) == 0);
+	CHECK(GetTrailingPartitionSize(1024, 512, 0) == 0);
+	CHECK(GetTrailingPartitionSize(UINT64_MAX, 512, 63) == 0);
+	CHECK(GetTrailingPartitionOffset(1024, 1024, 512, 1) == 0);
+	CHECK(GetTrailingPartitionOffset(512, 1024, 512, 1) == 0);
+	CHECK(GetTrailingPartitionOffset(1024, 0, 512, 1) == 0);
+	CHECK(GetTrailingPartitionOffset(1024, 512, 0, 1) == 0);
+	CHECK(GetTrailingPartitionOffset(1024, 512, 512, 0) == 0);
+}
+
 int main(void)
 {
 	const uint32_t sectors[] = { 512, 1024, 4096 };
@@ -43,6 +74,7 @@ int main(void)
 	CHECK(GetMainPartitionSize(101, 100, 512, 63, 512) == 0);
 	CHECK(GetMainPartitionSize(0, 100, 512, 63, 512) == 0);
 	CHECK(GetMainPartitionSize(0, UINT64_MAX, 0, 63, 512) == 0);
+	TestTrailingPartitions();
 	printf("Partition layout: %u checks, %u failures\n", checks, failures);
 	return failures ? 1 : 0;
 }

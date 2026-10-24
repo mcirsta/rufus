@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "raw_write.h"
+#include "target_io.h"
 #include "rufus_reporting.h"
 
 #include <errno.h>
@@ -14,37 +15,20 @@
 
 enum {
 	MIN_SECTOR_BYTES = 512,
-	MAX_SECTOR_BYTES = 64 * 1024,
-	UNSUPPORTED_TARGET_FLAGS = O_APPEND | O_DIRECT | O_PATH
+	MAX_SECTOR_BYTES = 64 * 1024
 };
 
 int CheckRawBlockTarget(int fd, uint64_t device, uint64_t capacity, uint64_t image_size)
 {
-	struct stat info;
-	uint64_t size = 0;
-	int read_only = 1, sector = 0;
-	int flags = fcntl(fd, F_GETFL);
-
-	if (flags < 0 || fstat(fd, &info) != 0)
-		return errno;
-	if (!S_ISBLK(info.st_mode))
-		return ENOTBLK;
-	bool valid_plan = device != 0 && capacity != 0 && image_size != 0;
-	bool same_device = (uint64_t)info.st_rdev == device;
-	if (!valid_plan || !same_device)
+	const bool valid_plan = device != 0 && capacity != 0 && image_size != 0;
+	if (!valid_plan)
 		return ESTALE;
-	bool read_write = (flags & O_ACCMODE) == O_RDWR;
-	bool unsupported_flags = (flags & UNSUPPORTED_TARGET_FLAGS) != 0;
-	if (!read_write || unsupported_flags)
-		return EINVAL;
-	if (ioctl(fd, BLKGETSIZE64, &size) != 0)
-		return errno;
-	if (ioctl(fd, BLKROGET, &read_only) != 0)
-		return errno;
-	if (ioctl(fd, BLKSSZGET, &sector) != 0)
-		return errno;
-	if (read_only)
-		return EROFS;
+	WRITABLE_TARGET target;
+	const int error = InspectWritableTarget(fd, device, &target);
+	if (error != 0)
+		return error == ENOTSUP ? ENOTBLK : error;
+	const uint64_t size = target.size;
+	const unsigned sector = target.sector_size;
 	if (size != capacity)
 		return ESTALE;
 	if (image_size > size)
@@ -60,10 +44,11 @@ int CheckRawBlockTarget(int fd, uint64_t device, uint64_t capacity, uint64_t ima
 }
 
 static int CheckFiles(const IMAGE_FILE_SOURCE* source, const char* path, int target,
-	uint64_t device, uint64_t capacity, struct stat* target_info)
+	uint64_t device, uint64_t capacity, uint64_t offset, uint64_t extent_size, struct stat* target_info)
 {
 	int error = CheckImageFileSource(source, path);
 	int flags;
+	uint64_t size;
 
 	if (error != 0)
 		return error;
@@ -77,22 +62,39 @@ static int CheckFiles(const IMAGE_FILE_SOURCE* source, const char* path, int tar
 	if (device != 0) {
 		if ((uint64_t)source->info.st_dev == device)
 			return EINVAL;
-		return CheckRawBlockTarget(target, device, capacity, (uint64_t)source->info.st_size);
+		error = CheckRawBlockTarget(target, device, capacity, (uint64_t)source->info.st_size);
+		if (error != 0)
+			return error;
+		int sector = 0;
+		if (ioctl(target, BLKSSZGET, &sector) != 0)
+			return errno;
+		const bool aligned_extent = sector > 0 && offset % sector == 0 && extent_size % sector == 0;
+		if (!aligned_extent)
+			return EINVAL;
+		size = capacity;
+	} else {
+		WRITABLE_TARGET inspected;
+		error = InspectWritableTarget(target, 0, &inspected);
+		if (error != 0)
+			return error;
+		*target_info = inspected.info;
+		const bool same_file = target_info->st_dev == source->info.st_dev && target_info->st_ino == source->info.st_ino;
+		if (same_file)
+			return EINVAL;
+		size = inspected.size;
 	}
-	if (fstat(target, target_info) != 0)
-		return errno;
-	if (!S_ISREG(target_info->st_mode))
-		return ENOTSUP;
-	if (target_info->st_dev == source->info.st_dev && target_info->st_ino == source->info.st_ino)
-		return EINVAL;
-	if (target_info->st_size < source->info.st_size)
+	if (offset > size)
 		return ENOSPC;
-	flags = fcntl(target, F_GETFL);
-	if (flags < 0)
-		return errno;
-	// Linux pwrite with O_APPEND ignores the supplied offset.
-	if ((flags & O_ACCMODE) != O_RDWR || (flags & UNSUPPORTED_TARGET_FLAGS))
-		return EINVAL;
+	const uint64_t available = size - offset;
+	if (extent_size == 0)
+		extent_size = available; // Existing whole-image entry point.
+	const bool extent_fits = extent_size <= available;
+	const bool source_fits = (uint64_t)source->info.st_size <= extent_size;
+	if (!extent_fits || !source_fits)
+		return ENOSPC;
+	const bool addressable_copy = offset <= INT64_MAX && (uint64_t)source->info.st_size <= INT64_MAX - offset;
+	if (!addressable_copy)
+		return EOVERFLOW;
 	return 0;
 }
 
@@ -114,7 +116,8 @@ static int ReadBuffer(int fd, uint8_t* buffer, size_t size, uint64_t offset)
 	return 0;
 }
 
-static int WriteBuffer(int fd, const uint8_t* buffer, size_t size, uint64_t total, RAW_WRITE_RESULT* result)
+static int WriteBuffer(int fd, const uint8_t* buffer, size_t size, uint64_t offset,
+	uint64_t total, RAW_WRITE_RESULT* result)
 {
 	ssize_t count;
 	size_t position = 0;
@@ -122,7 +125,7 @@ static int WriteBuffer(int fd, const uint8_t* buffer, size_t size, uint64_t tota
 	while (position < size) {
 		if (IsRufusJobCancelled())
 			return ECANCELED;
-		count = pwrite(fd, buffer + position, size - position, (off_t)result->bytes_written);
+		count = pwrite(fd, buffer + position, size - position, (off_t)(offset + result->bytes_written));
 		if (count < 0 && errno == EINTR)
 			continue;
 		if (count <= 0)
@@ -134,7 +137,7 @@ static int WriteBuffer(int fd, const uint8_t* buffer, size_t size, uint64_t tota
 	return 0;
 }
 
-static int CopyImage(int source, int target, uint64_t total, uint8_t* buffer,
+static int CopyImage(int source, int target, uint64_t offset, uint64_t total, uint8_t* buffer,
 	RAW_WRITE_RESULT* result)
 {
 	size_t size;
@@ -145,7 +148,7 @@ static int CopyImage(int source, int target, uint64_t total, uint8_t* buffer,
 			(size_t)(total - result->bytes_written);
 		error = ReadBuffer(source, buffer, size, result->bytes_written);
 		if (error == 0)
-			error = WriteBuffer(target, buffer, size, total, result);
+			error = WriteBuffer(target, buffer, size, offset, total, result);
 		if (error != 0)
 			return error;
 	}
@@ -161,7 +164,7 @@ static int SyncTarget(int target)
 	return 0;
 }
 
-static int VerifyImage(int source, int target, uint64_t total, uint8_t* buffer,
+static int VerifyImage(int source, int target, uint64_t offset, uint64_t total, uint8_t* buffer,
 	RAW_WRITE_RESULT* result)
 {
 	uint8_t* actual = buffer + COPY_BUFFER_SIZE;
@@ -173,7 +176,7 @@ static int VerifyImage(int source, int target, uint64_t total, uint8_t* buffer,
 			(size_t)(total - result->bytes_verified);
 		error = ReadBuffer(source, buffer, size, result->bytes_verified);
 		if (error == 0)
-			error = ReadBuffer(target, actual, size, result->bytes_verified);
+			error = ReadBuffer(target, actual, size, offset + result->bytes_verified);
 		if (error != 0)
 			return error;
 		if (memcmp(buffer, actual, size) != 0)
@@ -185,7 +188,8 @@ static int VerifyImage(int source, int target, uint64_t total, uint8_t* buffer,
 }
 
 static int WriteImage(const IMAGE_FILE_SOURCE* source, const char* source_path,
-	int target_fd, uint64_t device, uint64_t capacity, RAW_WRITE_RESULT* result)
+	int target_fd, uint64_t device, uint64_t capacity, uint64_t offset, uint64_t extent_size,
+	RAW_WRITE_RESULT* result)
 {
 	struct stat initial_target, current_target;
 	uint8_t* buffer;
@@ -194,7 +198,7 @@ static int WriteImage(const IMAGE_FILE_SOURCE* source, const char* source_path,
 	if (result == NULL)
 		return EINVAL;
 	memset(result, 0, sizeof(*result));
-	error = CheckFiles(source, source_path, target_fd, device, capacity, &initial_target);
+	error = CheckFiles(source, source_path, target_fd, device, capacity, offset, extent_size, &initial_target);
 	if (error != 0)
 		return error;
 	buffer = malloc(2 * COPY_BUFFER_SIZE);
@@ -202,7 +206,7 @@ static int WriteImage(const IMAGE_FILE_SOURCE* source, const char* source_path,
 		return ENOMEM;
 	result->phase = RAW_WRITE_COPY;
 	_UpdateProgressWithInfo(RAW_WRITE_COPY, 0, 0, (uint64_t)source->info.st_size, 1);
-	error = CopyImage(source->fd, target_fd, (uint64_t)source->info.st_size, buffer, result);
+	error = CopyImage(source->fd, target_fd, offset, (uint64_t)source->info.st_size, buffer, result);
 	if (error == 0)
 		result->phase = RAW_WRITE_SYNC;
 	if (result->bytes_written != 0) {
@@ -216,7 +220,7 @@ static int WriteImage(const IMAGE_FILE_SOURCE* source, const char* source_path,
 	if (error == 0) {
 		result->phase = RAW_WRITE_VERIFY;
 		_UpdateProgressWithInfo(RAW_WRITE_VERIFY, 0, 0, (uint64_t)source->info.st_size, 1);
-		error = VerifyImage(source->fd, target_fd, (uint64_t)source->info.st_size, buffer, result);
+		error = VerifyImage(source->fd, target_fd, offset, (uint64_t)source->info.st_size, buffer, result);
 	}
 	if (error == 0)
 		error = CheckImageFileSource(source, source_path);
@@ -239,7 +243,18 @@ static int WriteImage(const IMAGE_FILE_SOURCE* source, const char* source_path,
 int WriteRawImage(const IMAGE_FILE_SOURCE* source, const char* source_path,
 	int target_fd, RAW_WRITE_RESULT* result)
 {
-	return WriteImage(source, source_path, target_fd, 0, 0, result);
+	return WriteImage(source, source_path, target_fd, 0, 0, 0, 0, result);
+}
+
+int WriteRawImageToExtent(const IMAGE_FILE_SOURCE* source, const char* source_path,
+	int target_fd, uint64_t offset, uint64_t size, RAW_WRITE_RESULT* result)
+{
+	if (size == 0) {
+		if (result != NULL)
+			memset(result, 0, sizeof(*result));
+		return EINVAL;
+	}
+	return WriteImage(source, source_path, target_fd, 0, 0, offset, size, result);
 }
 
 int WriteRawImageToDevice(const IMAGE_FILE_SOURCE* source, const char* source_path,
@@ -250,5 +265,16 @@ int WriteRawImageToDevice(const IMAGE_FILE_SOURCE* source, const char* source_pa
 			memset(result, 0, sizeof(*result));
 		return EINVAL;
 	}
-	return WriteImage(source, source_path, target_fd, device, capacity, result);
+	return WriteImage(source, source_path, target_fd, device, capacity, 0, 0, result);
+}
+
+int WriteRawImageToDeviceExtent(const IMAGE_FILE_SOURCE* source, const char* source_path,
+	int target_fd, uint64_t device, uint64_t capacity, uint64_t offset, uint64_t size, RAW_WRITE_RESULT* result)
+{
+	if (device == 0 || size == 0) {
+		if (result != NULL)
+			memset(result, 0, sizeof(*result));
+		return EINVAL;
+	}
+	return WriteImage(source, source_path, target_fd, device, capacity, offset, size, result);
 }

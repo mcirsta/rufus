@@ -33,6 +33,8 @@
   "src/lzx_decompress.c": "3a2dc58cd3ccf2421c505f263c7a2c09bbfaab10f98a5a43ecd363fae14c9cfd",
   "src/metadata_resource.c": "69def3ecd8525517c3e73a0a60579d64304008d2d23d3e587d495f1d891769ea",
   "src/mount_image.c": "db2e512695fb44ba48d40b74d44e085ebe6b4f1e07d8dceeae796a6eb21a165e",
+  "src/ntfs-3g_apply.c": "4ef4d9c75255ac4eebc8da5da486d1891f2761a1d2f49b977399dbb8fafd1b73",
+  "src/ntfs-3g_capture.c": "2ac45432fb9cb80fa60f8af0f837a2852d147c3f2d26f116f22263a4e8334ee2",
   "src/pathlist.c": "ab1cc325eec25a5c64d19a44296b05792cff3bad79dec3400ebfa7f58e4865ee",
   "src/paths.c": "e7ddc6dd65505052f1878e6bc3655aac6d769173cd059df00390744261d4cdd2",
   "src/pattern.c": "36deb95d0283f22880bf80ef2848824a86b3050c424a0074fe6f67a7dc396ce4",

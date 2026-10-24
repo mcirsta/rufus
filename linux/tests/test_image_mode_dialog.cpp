@@ -205,6 +205,22 @@ private slots:
         QTest::keyClick(choices.last(), Qt::Key_Return);
         QCOMPARE(dialog.selectedMode(), IMAGE_WRITE_DD);
     }
+
+    void espQuestionAndOriginalMessage()
+    {
+        const IMAGE_WRITE_CHOICES modes = {{IMAGE_WRITE_ISO, IMAGE_WRITE_ESP}, 2};
+        rufus::ImageModeDialog dialog(modes);
+        const auto choices = dialog.findChildren<QRadioButton*>();
+        QCOMPARE(choices.size(), 2);
+        QVERIFY(choices.first()->isChecked());
+        QVERIFY(choices.first()->isEnabled());
+        QVERIFY(choices.at(1)->isEnabled());
+        QCOMPARE(dialog.windowTitle(), originalMessage(274, {QStringLiteral("ESP")}));
+        QCOMPARE(dialog.findChild<QLabel*>(QStringLiteral("imageModeMessage"))->text(), originalMessage(310));
+        choices.at(1)->setChecked(true);
+        dialog.accept();
+        QCOMPARE(dialog.selectedMode(), IMAGE_WRITE_ESP);
+    }
 };
 
 QTEST_MAIN(TestImageModeDialog)

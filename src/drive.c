@@ -2366,16 +2366,19 @@ BOOL CreatePartition(HANDLE hDrive, int partition_style, int file_system, BOOL m
 			assert(persistence_size != 0);
 			partition_index[PI_CASPER] = pi;
 			wcscpy(SelectedDrive.Partition[pi].Name, L"Linux Persistence");
-			SelectedDrive.Partition[pi++].Size = CEILING_ALIGN(persistence_size, bytes_per_track);
+			SelectedDrive.Partition[pi++].Size = GetTrailingPartitionSize(persistence_size,
+				SelectedDrive.SectorSize, SelectedDrive.SectorsPerTrack);
 		}
 		if (extra_partitions & XP_ESP) {
 			partition_index[PI_ESP] = pi;
 			wcscpy(SelectedDrive.Partition[pi].Name, L"EFI System Partition");
-			SelectedDrive.Partition[pi++].Size = CEILING_ALIGN(esp_size, bytes_per_track);
+			SelectedDrive.Partition[pi++].Size = GetTrailingPartitionSize(esp_size,
+				SelectedDrive.SectorSize, SelectedDrive.SectorsPerTrack);
 		} else if (extra_partitions & XP_UEFI_NTFS) {
 			partition_index[PI_UEFI_NTFS] = pi;
 			wcscpy(SelectedDrive.Partition[pi].Name, L"UEFI:NTFS");
-			SelectedDrive.Partition[pi++].Size = CEILING_ALIGN(uefi_ntfs_size, bytes_per_track);
+			SelectedDrive.Partition[pi++].Size = GetTrailingPartitionSize(uefi_ntfs_size,
+				SelectedDrive.SectorSize, SelectedDrive.SectorsPerTrack);
 		} else if (extra_partitions & XP_COMPAT) {
 			wcscpy(SelectedDrive.Partition[pi].Name, L"BIOS Compatibility");
 			SelectedDrive.Partition[pi++].Size = bytes_per_track;	// One track for the extra partition
@@ -2391,7 +2394,10 @@ BOOL CreatePartition(HANDLE hDrive, int partition_style, int file_system, BOOL m
 		last_offset -= 33ULL * SelectedDrive.SectorSize;
 	for (i = pi - 1; i > mi; i--) {
 		assert(SelectedDrive.Partition[i].Size < last_offset);
-		SelectedDrive.Partition[i].Offset = FLOOR_ALIGN(last_offset - SelectedDrive.Partition[i].Size, bytes_per_track);
+		SelectedDrive.Partition[i].Offset = GetTrailingPartitionOffset(last_offset, SelectedDrive.Partition[i].Size,
+			SelectedDrive.SectorSize, SelectedDrive.SectorsPerTrack);
+		if (SelectedDrive.Partition[i].Offset == 0)
+			return FALSE;
 		last_offset = SelectedDrive.Partition[i].Offset;
 	}
 

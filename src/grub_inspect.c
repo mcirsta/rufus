@@ -151,6 +151,42 @@ void GetGrubVersion(const char* buf, size_t buf_size, const char* source,
 	sanitize_label(report->grub2_version);
 }
 
+bool NeedsGrub2CoreLookup(const RUFUS_IMG_REPORT* report, bool mbr, bool bios,
+	const char* embedded_version)
+{
+	if (report == NULL || embedded_version == NULL)
+		return false;
+	const bool bios_mbr = mbr && bios;
+	if (!bios_mbr)
+		return false;
+	const bool detected = report->has_grub2 && report->grub2_version[0] != 0;
+	if (!detected)
+		return false;
+	const bool terminated = memchr(report->grub2_version, 0, sizeof(report->grub2_version)) != NULL;
+	if (!terminated)
+		return false;
+	return strcmp(report->grub2_version, embedded_version) != 0;
+}
+
+size_t GetGrub2DownloadVersionLength(const RUFUS_IMG_REPORT* report, size_t before)
+{
+	if (report == NULL || before == 0)
+		return 0;
+	const char* version = report->grub2_version;
+	const char* end = memchr(version, 0, sizeof(report->grub2_version));
+	if (end == NULL)
+		return 0;
+	size_t length = (size_t)(end - version);
+	if (before <= length)
+		length = before - 1;
+	for (; length > 0; length--) {
+		const char c = version[length];
+		if (c == 0 || c == '.' || c == '-')
+			return length;
+	}
+	return 0;
+}
+
 bool GetGrubFs(const char* buf, size_t buf_size, StrArray* filesystems)
 {
 	const char marker[] = "fshelp";

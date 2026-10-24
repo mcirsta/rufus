@@ -12,7 +12,7 @@ import openwrt
 
 HERE = Path(__file__).resolve().parent
 ROOT_PACKAGES = '''filesystem bash coreutils systemd dbus udisks2 polkit-kde-agent
-qt6-base xorg-server-xvfb xdotool shadow kmod util-linux grep sed procps-ng ttf-dejavu'''.split()
+hivex qt6-base xorg-server-xvfb xdotool shadow kmod util-linux grep sed procps-ng ttf-dejavu'''.split()
 
 
 def run(args, **kwargs):
@@ -108,6 +108,7 @@ StandardError=journal+console
         write(root, 'opt/rufus/' + name, (HERE / name).read_text(), 0o755)
     shutil.copy2(binary, root / 'opt/rufus/test_usb_guest')
     shutil.copy2(binary.parent / 'check_usb_mount', root / 'opt/rufus/check_usb_mount')
+    shutil.copy2(binary.parent / 'rufus-prepare-helper', root / 'opt/rufus/rufus-prepare-helper')
 
 
 def bootstrap(base, root, release):
@@ -196,7 +197,7 @@ def main():
     with (base / 'system.raw').open('xb') as file:
         file.truncate(3 * 1024 * 1024 * 1024)
     run(['mkfs.ext4', '-q', '-F', '-d', str(root), str(base / 'system.raw')])
-    for path in [root / 'opt/rufus/test_usb_guest', root / 'opt/rufus/check_usb_mount',
+    for path in [root / 'opt/rufus/test_usb_guest', root / 'opt/rufus/check_usb_mount', root / 'opt/rufus/rufus-prepare-helper',
                  base / 'vmlinuz', base / 'initramfs.cpio', base / 'boot.img', base / 'system.raw']:
         with path.open('rb') as file:
             manifest.append({'file': path.name, 'sha256': hashlib.file_digest(file, 'sha256').hexdigest()})

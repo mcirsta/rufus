@@ -43,3 +43,25 @@ uint64_t GetMainPartitionSize(uint64_t first_offset, uint64_t last_offset,
 		size = size / cluster_size * cluster_size;
 	return size;
 }
+
+uint64_t GetTrailingPartitionSize(uint64_t requested_size,
+	uint32_t sector_size, uint32_t sectors_per_track)
+{
+	uint64_t track = (uint64_t)sector_size * sectors_per_track;
+	if (track == 0 || requested_size == 0)
+		return 0;
+	if (requested_size > UINT64_MAX - (track - 1))
+		return 0;
+	return (requested_size + track - 1) / track * track;
+}
+
+uint64_t GetTrailingPartitionOffset(uint64_t last_offset, uint64_t size,
+	uint32_t sector_size, uint32_t sectors_per_track)
+{
+	uint64_t track = (uint64_t)sector_size * sectors_per_track;
+	if (track == 0 || size == 0)
+		return 0;
+	if (size >= last_offset)
+		return 0;
+	return (last_offset - size) / track * track;
+}

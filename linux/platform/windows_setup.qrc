@@ -1,0 +1,6 @@
+<RCC>
+ <qresource prefix="/rufus/setup">
+  <file alias="setup_x64.exe">../../res/setup/setup_x64.exe</file>
+  <file alias="setup_arm64.exe">../../res/setup/setup_arm64.exe</file>
+ </qresource>
+</RCC>

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "grub_inspect.h"
 #include "iso_read.h"
+#include "../../res/grub2/grub2_version.h"
 
 #include <cdio/logging.h>
 #include <stdarg.h>
@@ -60,6 +61,15 @@ int main(int argc, char** argv)
 		(unsigned int)GetGrubFsMask(&filesystems));
 	for (uint32_t i = 0; i < filesystems.Index; i++)
 		printf("%s%s", i == 0 ? "" : ",", filesystems.String[i]);
+	putchar('\n');
+	const bool lookup = NeedsGrub2CoreLookup(&report, true, true, GRUB2_PACKAGE_VERSION);
+	printf("CORE_LOOKUP=%u\nDOWNLOAD_NAMES=", (unsigned int)lookup);
+	size_t prefix = lookup ? sizeof(report.grub2_version) : 0;
+	bool first = true;
+	while ((prefix = GetGrub2DownloadVersionLength(&report, prefix)) != 0) {
+		printf("%s%.*s", first ? "" : ",", (int)prefix, report.grub2_version);
+		first = false;
+	}
 	putchar('\n');
 	result = 0;
 out:

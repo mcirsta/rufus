@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "native_disk_fixture.h"
 #include "platform/udisks_target.h"
 #include "platform/raw_write.h"
 
@@ -77,7 +78,7 @@ extern "C" int __wrap_ioctl(int fd, unsigned long request, ...)
             *static_cast<uint64_t*>(value) = nativeCapacity;
         else if (request == BLKROGET)
             *static_cast<int*>(value) = nativeReadOnly;
-        else if (request == BLKSSZGET)
+        else if (request == BLKSSZGET || request == BLKPBSZGET)
             *static_cast<int*>(value) = nativeSector;
         else
             qFatal("Unexpected fixture ioctl");
@@ -172,9 +173,9 @@ class TestUDisksTarget : public QObject
         control(QStringLiteral("SetObjects"), {QVariant::fromValue(objects_)});
     }
 
-    void makeAccess(int timeout = 5000)
+    void makeAccess()
     {
-        access_ = std::make_unique<rufus::UDisksTarget>(*connection_, *plan_, timeout);
+        access_ = std::make_unique<rufus::UDisksTarget>(*connection_, *plan_);
         access_->check();
     }
 
@@ -189,6 +190,7 @@ private slots:
 
     void init()
     {
+        ResetTestNativeDisks();
         emulateBlock = true;
         nativeNumber = 2048; nativeCapacity = 65536;
         nativeReadOnly = nativeError = 0; nativeSector = 512;
@@ -261,23 +263,13 @@ private slots:
     {
         const int before = descriptorCount();
         makeAccess();
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
-        QCOMPARE(stat(QStringLiteral("opens")), 0); // Checking cannot prompt.
-        QVERIFY(!access_->takeDescriptor().isValid());
-        access_->authorize();
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Ready, qPrintable(access_->problem()), fixtureTimeoutMs);
-        QVERIFY2(access_->problem().isEmpty(), qPrintable(access_->problem()));
-        QDBusUnixFileDescriptor descriptor = access_->takeDescriptor();
-        QVERIFY(descriptor.isValid());
-        QVERIFY(!access_->takeDescriptor().isValid());
-        QCOMPARE(stat(QStringLiteral("opens")), 1);
-        QCOMPARE(stat(QStringLiteral("calls")), 3); // prepare, pre-auth, post-auth snapshots
-        QVERIFY(fcntl(descriptor.fileDescriptor(), F_GETFD) & FD_CLOEXEC);
+        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Prepared, fixtureTimeoutMs);
+        QCOMPARE(stat(QStringLiteral("opens")), 0);
+        access_->recheck();
+        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Ready, fixtureTimeoutMs);
+        QCOMPARE(stat(QStringLiteral("opens")), 0);
+        QCOMPARE(stat(QStringLiteral("calls")), 2);
         access_.reset();
-        QVERIFY(fcntl(descriptor.fileDescriptor(), F_GETFD) >= 0);
-        QVERIFY(plan_->checkSource().isEmpty());
-        QCOMPARE(readFile(sourcePath_), sourceBytes_);
-        descriptor = {};
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         QTRY_COMPARE_WITH_TIMEOUT(descriptorCount(), before, fixtureTimeoutMs);
     }
@@ -300,13 +292,13 @@ private slots:
         setObjects();
         makeAccess();
         QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
-        access_->authorize();
+        access_->recheck();
         QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Ready, qPrintable(access_->problem()), fixtureTimeoutMs);
-        QDBusUnixFileDescriptor descriptor = access_->takeDescriptor();
-        QVERIFY(descriptor.isValid());
+        QFile descriptor(targetPath_);
+        QVERIFY(descriptor.open(QIODevice::ReadWrite));
         RAW_WRITE_RESULT result;
         QCOMPARE(WriteRawImageToDevice(&plan_->source(), QFile::encodeName(plan_->sourcePath()).constData(),
-            descriptor.fileDescriptor(), plan_->target().number, plan_->target().size, &result), 0);
+            descriptor.handle(), plan_->target().number, plan_->target().size, &result), 0);
         QCOMPARE(result.phase, RAW_WRITE_DONE);
         QCOMPARE(result.bytes_written, uint64_t(sourceBytes_.size()));
         QCOMPARE(result.bytes_verified, result.bytes_written);
@@ -315,19 +307,111 @@ private slots:
         QCOMPARE(readFile(sourcePath_), sourceBytes_);
     }
 
+    void boundedDeviceWrite_data()
+    {
+        QTest::addColumn<quint64>("offset");
+        QTest::addColumn<quint64>("size");
+        QTest::addColumn<int>("sector");
+        QTest::addColumn<int>("error");
+        QTest::newRow("padded") << quint64(4096) << quint64(8192) << 512 << 0;
+        QTest::newRow("disk-end") << quint64(65536 - 4096) << quint64(4096) << 512 << 0;
+        QTest::newRow("empty") << quint64(4096) << quint64(0) << 512 << EINVAL;
+        QTest::newRow("too-small") << quint64(4096) << quint64(512) << 512 << ENOSPC;
+        QTest::newRow("past-end") << quint64(65536) << quint64(4096) << 512 << ENOSPC;
+        QTest::newRow("offset-overflow") << quint64(UINT64_MAX - 511) << quint64(4096) << 512 << ENOSPC;
+        QTest::newRow("size-overflow") << quint64(4096) << quint64(UINT64_MAX - 511) << 512 << ENOSPC;
+        QTest::newRow("unaligned-offset") << quint64(4097) << quint64(8192) << 512 << EINVAL;
+        QTest::newRow("unaligned-size") << quint64(4096) << quint64(8193) << 512 << EINVAL;
+        QTest::newRow("native-4k") << quint64(4096) << quint64(8192) << 4096 << 0;
+        QTest::newRow("unaligned-4k") << quint64(512) << quint64(8192) << 4096 << EINVAL;
+    }
+
+    void boundedDeviceWrite()
+    {
+        QFETCH(quint64, offset);
+        QFETCH(quint64, size);
+        QFETCH(int, sector);
+        QFETCH(int, error);
+        nativeSector = sector;
+        QFile target(targetPath_);
+        QVERIFY(target.open(QIODevice::ReadWrite));
+        RAW_WRITE_RESULT result;
+        QCOMPARE(WriteRawImageToDeviceExtent(&plan_->source(), QFile::encodeName(sourcePath_).constData(),
+            target.handle(), nativeNumber, nativeCapacity, offset, size, &result), error);
+        if (error == 0)
+        {
+            QCOMPARE(result.phase, RAW_WRITE_DONE);
+            QCOMPARE(result.bytes_verified, uint64_t(sourceBytes_.size()));
+            expectedTarget_.replace(qsizetype(offset), sourceBytes_.size(), sourceBytes_);
+        }
+        else
+        {
+            QCOMPARE(result.phase, RAW_WRITE_PREPARE);
+            QCOMPARE(result.bytes_written, uint64_t(0));
+        }
+        QCOMPARE(readFile(targetPath_), expectedTarget_); // Includes all padding and both outside regions.
+        QCOMPARE(readFile(sourcePath_), sourceBytes_);
+    }
+
     void changedAfterAcquisition()
     {
         makeAccess();
         QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
-        access_->authorize();
+        access_->recheck();
         QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Ready, qPrintable(access_->problem()), fixtureTimeoutMs);
-        QDBusUnixFileDescriptor descriptor = access_->takeDescriptor();
+        QFile descriptor(targetPath_);
+        QVERIFY(descriptor.open(QIODevice::ReadWrite));
         nativeNumber++;
         RAW_WRITE_RESULT result;
         QCOMPARE(WriteRawImageToDevice(&plan_->source(), QFile::encodeName(plan_->sourcePath()).constData(),
-            descriptor.fileDescriptor(), plan_->target().number, plan_->target().size, &result), ESTALE);
+            descriptor.handle(), plan_->target().number, plan_->target().size, &result), ESTALE);
         QCOMPARE(result.bytes_written, uint64_t(0));
         QCOMPARE(result.phase, RAW_WRITE_PREPARE);
+    }
+
+    void nativeChangeBeforeStart_data()
+    {
+        QTest::addColumn<QString>("kind");
+        for (const char* kind : {"sequence", "path", "model", "vendor", "usb-id", "removal", "unavailable"})
+            QTest::newRow(kind) << QString::fromLatin1(kind);
+    }
+
+    void nativeChangeBeforeStart()
+    {
+        QFETCH(QString, kind);
+        makeAccess();
+        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Prepared, fixtureTimeoutMs);
+        auto& facts = TestNativeDisk(device_.number);
+        if (kind == QStringLiteral("sequence")) facts.diskSequence++;
+        else if (kind == QStringLiteral("path")) facts.sysfsPath += QStringLiteral("-replacement");
+        else if (kind == QStringLiteral("model")) facts.model = "other USB";
+        else if (kind == QStringLiteral("vendor")) facts.vendor = "Other";
+        else if (kind == QStringLiteral("usb-id")) { facts.usbIdsKnown = true; facts.usbVendor = 1; }
+        else if (kind == QStringLiteral("removal")) facts.mediaRemoval = rufus::MediaRemoval::Fixed;
+        else testNativeDiskError = ENODEV;
+        access_->recheck();
+        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, fixtureTimeoutMs);
+        QCOMPARE(stat(QStringLiteral("opens")), 0);
+        QCOMPARE(readFile(targetPath_), expectedTarget_);
+    }
+
+    void fixedFlashDefaultPreflight()
+    {
+        TestNativeDisk(device_.number).mediaRemoval = rufus::MediaRemoval::Fixed;
+        objects_[drive][driveInterface][QStringLiteral("MediaRemovable")] = false;
+        const QString owner = device_.serviceOwner;
+        QVERIFY(rufus::DescribeUDisksDevice(objects_, disk.path(), device_));
+        device_.serviceOwner = owner;
+        QVERIFY(device_.defaultVisible && device_.requiresNativeProtection);
+        QVERIFY(!device_.mediaRemovable);
+        QVERIFY(plan_->prepare(sourcePath_, device_).isEmpty());
+        QVERIFY(!plan_->allowsFixedUsb());
+        setObjects();
+        makeAccess();
+        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Prepared, fixtureTimeoutMs);
+        access_->recheck();
+        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Ready, fixtureTimeoutMs);
+        QCOMPARE(stat(QStringLiteral("opens")), 0);
     }
 
     void invalidInput()
@@ -361,6 +445,34 @@ private slots:
             QTest::newRow(name) << QString::fromLatin1(name);
     }
 
+    void mountedSnapshotCandidates()
+    {
+        objects_[partition][blockInterface] = {
+            {QStringLiteral("Drive"), QVariant::fromValue(drive)},
+            {QStringLiteral("DeviceNumber"), quint64(2049)},
+            {QStringLiteral("HintSystem"), false}, {QStringLiteral("HintIgnore"), false},
+            {QStringLiteral("ReadOnly"), false}
+        };
+        objects_[partition][QStringLiteral("org.freedesktop.UDisks2.Partition")]
+            [QStringLiteral("Table")] = QVariant::fromValue(disk);
+        objects_[partition][fsInterface][QStringLiteral("MountPoints")] =
+            QVariant::fromValue(QList<QByteArray>{QByteArray("/run/media/user/USB") + '\0'});
+        setObjects();
+        const QDBusMessage request = QDBusMessage::createMethodCall(device_.serviceOwner, root,
+            QStringLiteral("org.freedesktop.DBus.ObjectManager"), QStringLiteral("GetManagedObjects"));
+        const QDBusMessage reply = connection_->call(request, QDBus::Block, fixtureTimeoutMs);
+        QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+        const auto snapshot = qdbus_cast<rufus::UDisksObjects>(reply.arguments().at(0));
+        QStringList mounts;
+        const QString problem = rufus::ListUDisksTargetMounts(snapshot, device_, 0, mounts);
+        QVERIFY2(problem.isEmpty(), qPrintable(problem));
+        QCOMPARE(mounts, QStringList{partition.path()});
+        // A successful read-only candidate list cannot authorize or start DD.
+        makeAccess();
+        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, fixtureTimeoutMs);
+        QCOMPARE(stat(QStringLiteral("opens")), 0);
+    }
+
     void usedTarget()
     {
         QFETCH(QString, kind);
@@ -389,24 +501,9 @@ private slots:
         QCOMPARE(stat(QStringLiteral("opens")), 0);
     }
 
-    void openFailure_data()
-    {
-        QTest::addColumn<QString>("mode");
-        for (const char* name : {"deny", "dismiss", "unsupported", "malformed", "readonly"})
-            QTest::newRow(name) << QString::fromLatin1(name);
-    }
 
-    void openFailure()
-    {
-        QFETCH(QString, mode);
-        control(QStringLiteral("OpenMode"), {mode});
-        makeAccess();
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
-        access_->authorize();
-        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), mode == QStringLiteral("dismiss") ? State::Cancelled : State::Failed, fixtureTimeoutMs);
-        QVERIFY(!access_->takeDescriptor().isValid());
-        QCOMPARE(stat(QStringLiteral("opens")), 1);
-    }
+
+
 
     void invalidDescriptor_data()
     {
@@ -430,13 +527,13 @@ private slots:
             nativeSector = 8192;
         if (kind == QStringLiteral("ioctl"))
             nativeError = ENODEV;
-        makeAccess();
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
-        access_->authorize();
-        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, fixtureTimeoutMs);
-        QVERIFY(!access_->takeDescriptor().isValid());
-        QVERIFY(!access_->problem().isEmpty());
+        QFile descriptor(targetPath_);
+        QVERIFY(descriptor.open(QIODevice::ReadWrite));
+        QVERIFY(CheckRawBlockTarget(descriptor.handle(), plan_->target().number,
+            plan_->target().size, quint64(sourceBytes_.size())) != 0);
+        QCOMPARE(stat(QStringLiteral("opens")), 0);
     }
+
 
     void changedBeforeAuthorization()
     {
@@ -444,7 +541,7 @@ private slots:
         QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
         objects_[drive][driveInterface][QStringLiteral("Serial")] = QStringLiteral("replaced");
         setObjects();
-        access_->authorize();
+        access_->recheck();
         QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, fixtureTimeoutMs);
         QCOMPARE(stat(QStringLiteral("opens")), 0);
     }
@@ -454,26 +551,21 @@ private slots:
         control(QStringLiteral("ReleaseName"));
         makeAccess();
         QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, fixtureTimeoutMs);
-        QVERIFY(!access_->takeDescriptor().isValid());
         QCOMPARE(stat(QStringLiteral("opens")), 0);
     }
 
     void disconnectedBus()
     {
-        control(QStringLiteral("HoldOpen"), {true});
         makeAccess();
-        QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
-        access_->authorize();
-        QTRY_COMPARE_WITH_TIMEOUT(stat(QStringLiteral("openHeld")), 1, fixtureTimeoutMs);
+        QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Prepared, fixtureTimeoutMs);
         stopProcess(daemon_);
         QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, fixtureTimeoutMs);
-        QVERIFY(!access_->takeDescriptor().isValid());
     }
 
     void changeDuringAuthorization_data()
     {
         QTest::addColumn<QString>("kind");
-        for (const char* name : {"device", "source", "mount", "remove", "service", "cancel", "timeout"})
+        for (const char* name : {"device", "source", "mount", "remove", "service", "cancel"})
             QTest::newRow(name) << QString::fromLatin1(name);
     }
 
@@ -481,11 +573,11 @@ private slots:
     {
         QFETCH(QString, kind);
         const int before = descriptorCount();
-        control(QStringLiteral("HoldOpen"), {true});
-        makeAccess(kind == QStringLiteral("timeout") ? 100 : 5000);
+        makeAccess();
         QTRY_VERIFY2_WITH_TIMEOUT(access_->state() == State::Prepared, qPrintable(access_->problem()), fixtureTimeoutMs);
-        access_->authorize();
-        QTRY_COMPARE_WITH_TIMEOUT(stat(QStringLiteral("openHeld")), 1, fixtureTimeoutMs);
+        control(QStringLiteral("Hold"), {true});
+        access_->recheck();
+        QTRY_COMPARE_WITH_TIMEOUT(stat(QStringLiteral("held")), 1, fixtureTimeoutMs);
         if (kind == QStringLiteral("device"))
             objects_[drive][driveInterface][QStringLiteral("TimeMediaDetected")] = QVariant::fromValue(quint64(99999));
         if (kind == QStringLiteral("source"))
@@ -499,14 +591,16 @@ private slots:
             control(QStringLiteral("ReleaseName"));
         if (kind == QStringLiteral("cancel"))
             access_->cancel();
-        if (kind == QStringLiteral("timeout"))
-            QTRY_COMPARE_WITH_TIMEOUT(access_->state(), State::Failed, fixtureTimeoutMs);
-        control(QStringLiteral("ReplyOpen"));
+        // The held reply has the old snapshot; discard it and initiate a new
+        // preflight to prove changes are rejected without any authorization.
+        if (kind != QStringLiteral("cancel")) access_->cancel();
+        control(QStringLiteral("ReplyOldest"));
+        control(QStringLiteral("Hold"), {false});
+        if (kind != QStringLiteral("cancel")) makeAccess();
         QTRY_COMPARE_WITH_TIMEOUT(access_->state(), kind == QStringLiteral("cancel") ? State::Cancelled : State::Failed, fixtureTimeoutMs);
-        QVERIFY(!access_->takeDescriptor().isValid());
-        QCOMPARE(stat(QStringLiteral("opens")), 1);
+        QCOMPARE(stat(QStringLiteral("opens")), 0);
         // An ordinary bus round trip ensures the fixture sent the late reply.
-        QCOMPARE(stat(QStringLiteral("openHeld")), 0);
+        QCOMPARE(stat(QStringLiteral("held")), 0);
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         QVERIFY(access_->state() != State::Ready);
         access_.reset();

@@ -260,24 +260,8 @@ BOOL FormatLargeFAT32(DWORD DriveIndex, uint64_t PartitionOffset, DWORD ClusterS
 
 	// Set default cluster size
 	// https://support.microsoft.com/en-us/help/140365/default-cluster-size-for-ntfs-fat-and-exfat
-	if (ClusterSize == 0) {
-		if (piDrive.PartitionLength.QuadPart < 64 * MB)
-			ClusterSize = 512;
-		else if (piDrive.PartitionLength.QuadPart < 128 * MB)
-			ClusterSize = 1 * KB;
-		else if (piDrive.PartitionLength.QuadPart < 256 * MB)
-			ClusterSize = 2 * KB;
-		else if (piDrive.PartitionLength.QuadPart < 8 * GB)
-			ClusterSize = 4 * KB;
-		else if (piDrive.PartitionLength.QuadPart < 16 * GB)
-			ClusterSize = 8 * KB;
-		else if (piDrive.PartitionLength.QuadPart < 32 * GB)
-			ClusterSize = 16 * KB;
-		else if (piDrive.PartitionLength.QuadPart < 2 * TB)
-			ClusterSize = 32 * KB;
-		else
-			ClusterSize = 64 * KB;
-	}
+	if (ClusterSize == 0)
+		ClusterSize = GetLargeFat32DefaultClusterSize(piDrive.PartitionLength.QuadPart);
 
 	// coverity[tainted_data]
 	pFAT32BootSect = (FAT_BOOTSECTOR32*)calloc(BytesPerSect, 1);

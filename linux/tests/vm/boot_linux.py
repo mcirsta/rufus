@@ -12,7 +12,7 @@ import time
 from openwrt import VERSION, digest
 
 
-def firmware_options(output, firmware):
+def firmware_options(output, firmware, prefix='openwrt'):
     if firmware == 'bios':
         sources = [Path('/usr/share/qemu/bios-256k.bin')]
     else:
@@ -23,7 +23,7 @@ def firmware_options(output, firmware):
         target = output / (firmware + '-' + source.name)
         shutil.copyfile(source, target)
         records.append({'source': str(source), 'file': target.name, 'sha256': digest(target)})
-    (output / ('openwrt-' + firmware + '-firmware.json')).write_text(json.dumps({
+    (output / (prefix + '-' + firmware + '-firmware.json')).write_text(json.dumps({
         'files': records,
         'qemu': subprocess.check_output(['qemu-system-x86_64', '--version'], text=True).strip()
     }, indent=2) + '\n')

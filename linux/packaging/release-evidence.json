@@ -1,0 +1,1185 @@
+{
+  "schema_version": 1,
+  "checkpoint": "CP78",
+  "date": "2026-10-24",
+  "status": "retained_evidence_reconciled_with_open_release_qualifications",
+  "purpose": "Q01 bounded eligible-workflow reconciliation; this is not a new media test or a declaration of full Windows parity.",
+  "scope_register": "docs/linux-parity-register.json",
+  "evidence_location": "Retained receipts are relative to workspace .rufus-test-artifacts; repository documents ship with the release. The receipts are not claimed to be included in installed packages.",
+  "evidence_reuse": {
+    "artifact": "cp78/media-source-reuse.json",
+    "sha256": "df7a02c68183336c130b234b0db99e1fd6408858b8963773b3045e2a795dba3b",
+    "unchanged_production_media_files": 197,
+    "candidate_gate_required_for_changed_gui_localization_and_packages": true
+  },
+  "retained_receipts": {
+    "CP77": {
+      "artifact": "cp77/checks.json",
+      "sha256": "acc73ee5a2a8943f216ea2ff5cc595a17256654b3f05957140b897ff0347a13d"
+    },
+    "CP76": {
+      "artifact": "cp76/checks.json",
+      "sha256": "3f1cb891a971bc8e66de6d675b83a8bdf1f8d1c0ccbe9ad01fe4b34e6e90ec0f"
+    },
+    "CP75": {
+      "artifact": "cp75/checks.json",
+      "sha256": "cdb6ac6f2b169edf4c44136ca04dbe23b51f6b63a07f8f45c860d05e5c1b64d5"
+    },
+    "CP74": {
+      "artifact": "cp74/checks.json",
+      "sha256": "8fe78a7252e6060bd2b1b2536353b19f769a576ab5e5f35520c3285d9f75262a"
+    },
+    "CP73": {
+      "artifact": "cp73/checks.json",
+      "sha256": "d2bf6999f568c5fc913871b4f2e6bff7efe09a97f0daaf3948ea3bd6b8cc1c90"
+    },
+    "CP72": {
+      "artifact": "cp72/checks.json",
+      "sha256": "cf9a437fce55e23be7cbe52cb50a9f65eb7706dbe3ad386c2541fa3b5c9575ca"
+    },
+    "CP70": {
+      "artifact": "cp70/checks.json",
+      "sha256": "a7498c854927852777757a5197aad770c36dba827435b55ff23f46b6ac935b3f"
+    },
+    "CP69": {
+      "artifact": "cp69/checks.json",
+      "sha256": "30d95e80f41bbfe387512849384d54aa513586e9685768fc2a0c1272524bd3ab"
+    },
+    "CP68": {
+      "artifact": "cp68/checks.json",
+      "sha256": "759d35cc2576fea32492487f7f7041b41975717904662616d73a86c0724ed6cf"
+    },
+    "CP64": {
+      "artifact": "cp64/checks.json",
+      "sha256": "da648638001a1555d4d6a72bdf426ee923c8d8c0ec7452af510000544693974d"
+    },
+    "CP63": {
+      "artifact": "cp63/checks.json",
+      "sha256": "95882ac560441b4570017651ac64c70c0f20dcaf444dec59f22412553b62f35a"
+    },
+    "CP60": {
+      "artifact": "cp60/checks.json",
+      "sha256": "2b33a34ee8339fd7310ece012ea790951dd762fb7be7b89ca59b3b68b0365bd7"
+    },
+    "CP58": {
+      "artifact": "cp58/checks.json",
+      "sha256": "4cefe203159fa49371dda661e5b29c696fdb423f3bd0bc7a8f2d7548ae5d0d81"
+    },
+    "CP56": {
+      "artifact": "cp56/checks.json",
+      "sha256": "321762599d28bc8faf630933db5eb5253df9e5c92195ef4ca00e4d674a471156"
+    },
+    "CP51": {
+      "artifact": "cp51/checks.json",
+      "sha256": "f9ded717c85ee3d0aa05671d920aff028d9ed3711c316509d42a7978a82a0814"
+    },
+    "CP49": {
+      "artifact": "cp49/checks.json",
+      "sha256": "d540f75490ac59ea62ae154655ce1b87863e97a024bea3503091b024b84ba9b0"
+    },
+    "CP48": {
+      "artifact": "cp48/checks.json",
+      "sha256": "5a7469be7ffb96abe37856b362275d1473f67d4f71db2b14076a263854d49218"
+    },
+    "CP47": {
+      "artifact": "cp47/checks.json",
+      "sha256": "b2f5bb39ab22d43cda2001dc8d4bd76f4a0c6c43196d924d0d8c17bb01335be5"
+    },
+    "CP46": {
+      "artifact": "cp46/checks.json",
+      "sha256": "16d8a5a04a85de88a58c3e74c9b9f8dfc5d039d8f01db2a9d1b45c59f6b324aa"
+    },
+    "CP38": {
+      "artifact": "cp38/checks.json",
+      "sha256": "c1205fd2738832e7c8cacf65749859d564bc51d036b79f8b7febd09e251701e8"
+    },
+    "CP37": {
+      "artifact": "cp37/checks.json",
+      "sha256": "3d440ea0da9a6d852ed2134e4572269be983585ac02298d63e1e2fa4acd3fbc8"
+    },
+    "CP36": {
+      "artifact": "cp36/checks.json",
+      "sha256": "9bd878974edf6e776ac2e5726ecd5ef1c7ee1a48663bc98c87657c1a9ada4440"
+    },
+    "CP35": {
+      "artifact": "cp35/checks.json",
+      "sha256": "5c377c1f2588c7058ec999474790eea1199b22a7002c42cb14d10a87a031d4ea"
+    },
+    "CP22n71": {
+      "artifact": "cp22n71/checks.json",
+      "sha256": "e3a756370e0d0dc61590f55422da6841c64b6833a9b3f6b5c1c83bc7cb7f7ea3"
+    },
+    "CP19d2c": {
+      "artifact": "cp19d2c-final-checks.json",
+      "sha256": "53181e98087c184c4968a4c3dbc6276538b0ab750f34ceb83e17f18a433605b5"
+    },
+    "CP18e": {
+      "artifact": "cp18e-final-checks.json",
+      "sha256": "14d2cdb7cb1662b75d45b072257f45f9bf51c35f5f7633c0486373ae4a9c9a4d"
+    }
+  },
+  "boot_choices": [
+    {
+      "id": "BT_NON_BOOTABLE",
+      "label": "Non bootable",
+      "scope": "Seven native data filesystems; eligible MBR/GPT/SFD and real geometry bounds",
+      "evidence": [
+        "CP76",
+        "CP77"
+      ],
+      "document": "docs/linux-sector-geometry.md",
+      "firmware": "No bootloader is installed."
+    },
+    {
+      "id": "BT_MSDOS",
+      "label": "MS-DOS",
+      "scope": "Eligible 512-byte MBR FAT16/FAT32; explicit DOS keyboard/code page and owner-supplied Microsoft resource",
+      "evidence": [
+        "CP64",
+        "CP69"
+      ],
+      "document": "docs/linux-legacy-boot.md",
+      "firmware": "Exact original boot records and payload readback; no Microsoft application/installation execution."
+    },
+    {
+      "id": "BT_FREEDOS",
+      "label": "FreeDOS",
+      "scope": "Eligible 512-byte MBR FAT16/FAT32; explicit keyboard/code page",
+      "evidence": [
+        "CP19d2c",
+        "CP51"
+      ],
+      "document": "docs/linux-support.md#creation-modes",
+      "firmware": "Retained SeaBIOS FAT16/FAT32 FreeDOS boots; not modern UEFI without CSM."
+    },
+    {
+      "id": "BT_IMAGE",
+      "label": "Disk or ISO image",
+      "scope": "Raw/compressed/container/FFU restore; source-selected ISO/WIM/ESD/Windows To Go paths",
+      "evidence": [
+        "CP56",
+        "CP58",
+        "CP73",
+        "CP74",
+        "CP75"
+      ],
+      "document": "docs/linux-support.md#creation-modes",
+      "firmware": "Representative BIOS/UEFI source handoffs; no universal OS-installation or per-distribution boot claim."
+    },
+    {
+      "id": "BT_SYSLINUX_V4",
+      "label": "Syslinux 4.07",
+      "scope": "Eligible 512-byte MBR FAT16/FAT32; packaged native provider",
+      "evidence": [
+        "CP74"
+      ],
+      "historical_checkpoints": [
+        "CP20e",
+        "CP20f",
+        "CP20g",
+        "CP20h"
+      ],
+      "document": "docs/linux-support.md#creation-modes",
+      "firmware": "Retained bare original BIOS loader handoff; no operating system/configuration supplied."
+    },
+    {
+      "id": "BT_SYSLINUX_V6",
+      "label": "Syslinux 6.04",
+      "scope": "Eligible 512-byte MBR FAT16/FAT32/NTFS; packaged native provider",
+      "evidence": [
+        "CP74"
+      ],
+      "historical_checkpoints": [
+        "CP20a",
+        "CP20b",
+        "CP20c",
+        "CP20d",
+        "CP20i",
+        "CP20j",
+        "CP20k",
+        "CP20l",
+        "CP20m"
+      ],
+      "document": "docs/linux-support.md#creation-modes",
+      "firmware": "Retained bare original BIOS loader handoff; kernel NTFS and selected NTFS-3G paths."
+    },
+    {
+      "id": "BT_REACTOS",
+      "label": "ReactOS",
+      "scope": "Eligible 512-byte MBR FAT16/FAT32 boot records; separately supplied loader/OS",
+      "evidence": [
+        "CP64"
+      ],
+      "document": "docs/linux-legacy-boot.md",
+      "firmware": "Original ReactOS PBR loads a multi-cluster native marker; no ReactOS installation/application execution."
+    },
+    {
+      "id": "BT_GRUB4DOS",
+      "label": "Grub4DOS",
+      "scope": "Eligible 512-byte MBR FAT16/FAT32/NTFS; retained grldr and original bootstrap",
+      "evidence": [
+        "CP22n71"
+      ],
+      "historical_checkpoints": [
+        "CP22n47",
+        "CP22n49",
+        "CP22n53"
+      ],
+      "document": "docs/linux-grub4dos-reuse.md",
+      "firmware": "Retained ordinary Qt creation/readback and original BIOS loader execution."
+    },
+    {
+      "id": "BT_GRUB2",
+      "label": "Grub 2.14",
+      "scope": "Eligible 512-byte MBR FAT16/FAT32/NTFS/ext2/ext3; embedded core",
+      "evidence": [],
+      "historical_checkpoints": [
+        "CP21b",
+        "CP21c",
+        "CP21d",
+        "CP21g",
+        "CP21h",
+        "CP21k2",
+        "CP21l"
+      ],
+      "document": "docs/linux-grub2-reuse.md",
+      "firmware": "Retained bare original BIOS loader execution; no operating system/configuration supplied."
+    },
+    {
+      "id": "BT_UEFI_NTFS",
+      "label": "UEFI:NTFS",
+      "scope": "Eligible 512-byte GPT/MBR NTFS/exFAT data layout plus embedded UEFI:NTFS",
+      "evidence": [
+        "CP18e",
+        "CP74"
+      ],
+      "document": "docs/linux-support.md#creation-modes",
+      "firmware": "Original embedded UEFI:NTFS firmware handoffs; a blank data filesystem alone is not an OS."
+    }
+  ],
+  "filesystem_reconciliation": {
+    "windows_selectable_count": 8,
+    "native_active_count": 7,
+    "native_active": [
+      "FAT16",
+      "FAT32",
+      "NTFS",
+      "exFAT",
+      "UDF 1.02/1.50/2.00/2.01",
+      "ext2",
+      "ext3"
+    ],
+    "evidence": [
+      "CP76",
+      "CP77"
+    ],
+    "qualification": "CP76 ordinary Qt/helper native writes/readback cover all seven at 512/512, 512/4096 and 4096/4096, rotating MBR/GPT/SFD. Sparse component fixtures cover capacity/cluster boundaries. This is not every filesystem/layout/capacity Cartesian combination.",
+    "deferred": {
+      "ReFS": "I15 user-deferred first-release gap",
+      "UDF 2.50/2.60": "I14/B6 user-deferred; existing revisions remain"
+    },
+    "dormant_ext4": "E01: no enabled original Windows data-format selection; ext4 persistence is separately supported.",
+    "limits_document": "docs/linux-sector-geometry.md"
+  },
+  "layout_and_firmware": {
+    "layouts": [
+      "MBR",
+      "GPT",
+      "SFD"
+    ],
+    "firmware": [
+      "BIOS/UEFI-CSM",
+      "UEFI"
+    ],
+    "policy": "Only original source/filesystem/capacity eligible combinations are offered. SFD and non-512-byte boot limits are intentional provider limits; there is no promise that every boot choice supports every layout or filesystem.",
+    "512e": "512-byte logical/4096-byte physical media uses 512-byte filesystem blocks; CP76 freezes and independently checks both facts.",
+    "4kn": "Native data formatting and FAT UEFI are qualified under emulation. Original BIOS/DOS/Syslinux/SBR and bundled UEFI:NTFS retain their executable 512-byte contract and refuse unsupported logical sectors before writes.",
+    "ntfs_4kn": "NTFS-3G is selected before partitioning for 4096-byte logical-sector file creation; no fallback after I/O errors. 512/512 and 512e prefer the kernel provider.",
+    "evidence": [
+      "CP76",
+      "CP74",
+      "CP75",
+      "CP58",
+      "CP51"
+    ]
+  },
+  "expert_and_advanced_controls": {
+    "shortcuts": {
+      "C03": [
+        "Ctrl+SELECT",
+        "Alt+I",
+        "Alt+J",
+        "Alt+K",
+        "Alt+M",
+        "Alt+S",
+        "Alt+T"
+      ],
+      "C01,I01": [
+        "Ctrl+A (log)"
+      ],
+      "C01": [
+        "Ctrl+L",
+        "Ctrl+P",
+        "Alt+R",
+        "Alt+U",
+        "Ctrl+Alt+E"
+      ],
+      "E04": [
+        "Ctrl+T"
+      ],
+      "I01": [
+        "Alt plus/minus",
+        "Alt+.",
+        "Alt+D"
+      ],
+      "A01": [
+        "Alt+,"
+      ],
+      "C10": [
+        "Alt+A",
+        "Alt+E"
+      ],
+      "C14": [
+        "Alt+B",
+        "Alt+Z",
+        "Ctrl+Alt+Z"
+      ],
+      "I07": [
+        "Alt+C",
+        "Alt+P"
+      ],
+      "C02": [
+        "Alt+F",
+        "Alt+G",
+        "Alt+W",
+        "Ctrl+Alt+F"
+      ],
+      "C04": [
+        "Alt+H"
+      ],
+      "A02": [
+        "Alt+L",
+        "Alt+V"
+      ],
+      "C06": [
+        "Alt+N"
+      ],
+      "I06": [
+        "Alt+O"
+      ],
+      "C06,A03": [
+        "Alt+Q"
+      ],
+      "E06": [
+        "Alt+X"
+      ],
+      "C12": [
+        "Alt+Y"
+      ],
+      "I02": [
+        "Ctrl+Alt+D"
+      ],
+      "I04": [
+        "Ctrl+Alt+Y"
+      ],
+      "I03": [
+        "bare Alt"
+      ]
+    },
+    "settings": {
+      "E02": [
+        "AdvancedMode"
+      ],
+      "C01": [
+        "ShowAdvancedDriveProperties",
+        "ShowAdvancedFormatOptions",
+        "ExpertMode",
+        "UseProperSizeUnits",
+        "PersistentLog"
+      ],
+      "E13": [
+        "CommCheck64"
+      ],
+      "I01": [
+        "DefaultThreadPriority",
+        "EnableUsbDebug"
+      ],
+      "I02": [
+        "DarkMode"
+      ],
+      "C14": [
+        "DisableFakeDrivesCheck"
+      ],
+      "E14": [
+        "DisableLGP"
+      ],
+      "C10,E15": [
+        "DisableRufusMBR"
+      ],
+      "E03": [
+        "DisableSecureBootNotice"
+      ],
+      "C02": [
+        "DisableVHDs"
+      ],
+      "C04": [
+        "EnableExtraHashes"
+      ],
+      "C06,A03": [
+        "EnableFileIndexing"
+      ],
+      "C13,E05": [
+        "EnableRuntimeValidation"
+      ],
+      "C02,E15": [
+        "EnableVmdkDetection"
+      ],
+      "C10": [
+        "EnableWindowsDualUefiBiosMode"
+      ],
+      "A02": [
+        "ForceLargeFat32Formatting",
+        "UseVds"
+      ],
+      "C03": [
+        "IgnoreBootMarker",
+        "PreserveTimestamps"
+      ],
+      "C12": [
+        "CheckForBetas",
+        "UpdateCheckInterval"
+      ],
+      "C12,E13": [
+        "LastUpdateCheck"
+      ],
+      "C01,E10": [
+        "Locale"
+      ],
+      "C13": [
+        "UseExtVersion"
+      ],
+      "C06,I14": [
+        "UseUdfVersion"
+      ],
+      "C08": [
+        "PreferredSaveImageType"
+      ],
+      "I04": [
+        "VerboseUpdateCheck"
+      ],
+      "C10,E07": [
+        "WindowsUserExperienceOptions"
+      ]
+    },
+    "dynamic_settings": {
+      "I08": [
+        "IgnoreUsb01..08",
+        "IgnoreDisk01..08"
+      ],
+      "I07": [
+        "ToggleEsp GUID restoration records"
+      ],
+      "C12,E13": [
+        "Remote policy/download cache timestamps and internal network addresses"
+      ]
+    },
+    "unattend_flags": {
+      "C09,C10,E17": [
+        "UNATTEND_SECUREBOOT_TPM_MINRAM",
+        "UNATTEND_NO_ONLINE_ACCOUNT",
+        "UNATTEND_NO_DATA_COLLECTION",
+        "UNATTEND_OFFLINE_INTERNAL_DRIVES",
+        "UNATTEND_SET_USER",
+        "UNATTEND_DISABLE_BITLOCKER",
+        "UNATTEND_FORCE_S_MODE",
+        "UNATTEND_USE_MS2023_BOOTLOADERS",
+        "UNATTEND_APPLY_SKUSIPOLICY",
+        "UNATTEND_SILENT_INSTALL",
+        "UNATTEND_QOL_ENHANCEMENTS",
+        "UNATTEND_WINDOWS_TO_GO"
+      ],
+      "E07": [
+        "UNATTEND_DUPLICATE_LOCALE"
+      ]
+    }
+  },
+  "owner_evidence": {
+    "C01": {
+      "title": "Application storage, startup, logging, About and language selection",
+      "document": "docs/linux-desktop-settings.md"
+    },
+    "C02": {
+      "title": "USB/SCSI/MMC discovery, HDD/card filtering and protected target identity",
+      "document": "docs/linux-device-discovery.md"
+    },
+    "C03": {
+      "title": "Image entry, analysis views, source identity and supplementary ZIP",
+      "document": "docs/linux-iso-options.md"
+    },
+    "C04": {
+      "title": "MD5/SHA1/SHA256 and optional SHA512 hashing",
+      "document": "docs/linux-feature-parity.md"
+    },
+    "C05": {
+      "title": "MBR/GPT/SFD layouts, old BIOS fixes and ISO-to-ESP",
+      "document": "docs/linux-feature-parity.md"
+    },
+    "C06": {
+      "title": "FAT16/FAT32/NTFS/exFAT/ext2/ext3 and UDF through 2.01; quick/full, labels, NTFS options",
+      "document": "docs/linux-filesystem-formatting.md"
+    },
+    "C07": {
+      "title": "DD/compressed/container deployment, relative VHD/VHDX parents/log replay and FFU feature set",
+      "document": "docs/linux-ffu-parity.md"
+    },
+    "C08": {
+      "title": "Device VHD/VHDX/FFU saving, UDF filesystem ISO export and read-only discovery/unmount",
+      "document": "docs/linux-support.md"
+    },
+    "C09": {
+      "title": "Windows To Go and standalone WIM/ESD native deployment",
+      "document": "docs/linux-windows-to-go.md"
+    },
+    "C10": {
+      "title": "Qualified Windows 7/8/8.1/10/11 and WinPE creation; applicable customization flags",
+      "document": "docs/linux-windows-installer.md"
+    },
+    "C11": {
+      "title": "Qualified ISO/standalone GRUB2, GRUB4DOS, Syslinux, FreeDOS, MS-DOS and ReactOS choices",
+      "document": "docs/linux-legacy-boot.md"
+    },
+    "C12": {
+      "title": "Image/payload downloads, policy refresh and native application release checking",
+      "document": "docs/linux-application-updates.md"
+    },
+    "C13": {
+      "title": "Persistence, runtime UEFI validators and bundled/remote Secure Boot policy",
+      "document": "docs/linux-runtime-validation.md"
+    },
+    "C14": {
+      "title": "Full/fast zeroing, bad-block patterns, fake-capacity detection and recovery choices",
+      "document": "docs/linux-support.md"
+    },
+    "C15": {
+      "title": "Dialogs, control lifecycle, one authorization, cancellation and sync/cleanup/exit before READY",
+      "document": "docs/linux-gui-parity.md"
+    },
+    "I01": {
+      "title": "Cache, priority, USB diagnostics and log keyboard action",
+      "document": "docs/linux-desktop-controls.md"
+    },
+    "I02": {
+      "title": "Explicit dark appearance override",
+      "document": "docs/linux-desktop-controls.md"
+    },
+    "I03": {
+      "title": "Progress display selection",
+      "document": "docs/linux-desktop-controls.md"
+    },
+    "I04": {
+      "title": "Advanced application update diagnostics and force mode",
+      "document": "docs/linux-desktop-controls.md"
+    },
+    "I06": {
+      "title": "Raw optical disc capture",
+      "document": "docs/linux-device-source-operations.md"
+    },
+    "I07": {
+      "title": "USB port reset and GPT ESP type toggle",
+      "document": "docs/linux-device-source-operations.md"
+    },
+    "I08": {
+      "title": "Configured device exclusion tables",
+      "document": "docs/linux-device-source-operations.md"
+    },
+    "I09": {
+      "title": "File-backed virtual devices and drive-less UDisks objects",
+      "document": "docs/linux-device-source-operations.md"
+    },
+    "I11": {
+      "title": "Mounted source and caller-home backing resolution",
+      "document": "docs/linux-device-source-operations.md"
+    },
+    "A01": {
+      "title": "Drive-locking override",
+      "document": "docs/linux-device-source-operations.md"
+    },
+    "A04": {
+      "title": "Windows-specific virtual-disk parent locators",
+      "document": "docs/linux-device-source-operations.md"
+    },
+    "I16": {
+      "title": "Source-selected EFI architectures",
+      "document": "docs/linux-iso-efi-resources.md"
+    },
+    "I20": {
+      "title": "Embedded FAT EFI extraction and broken-link repair",
+      "document": "docs/linux-iso-efi-resources.md"
+    },
+    "I21": {
+      "title": "ISO symbolic links and nonregular-entry compatibility",
+      "document": "docs/linux-iso-efi-resources.md"
+    },
+    "I22": {
+      "title": "Image-matched Syslinux versions and obsolete modules",
+      "document": "docs/linux-iso-efi-resources.md"
+    },
+    "I23": {
+      "title": "Slax relocation and missing-directory ISO recovery",
+      "document": "docs/linux-iso-efi-resources.md"
+    },
+    "I24": {
+      "title": "Syslinux v4 host portability",
+      "document": "docs/linux-iso-efi-resources.md"
+    },
+    "I25": {
+      "title": "Secure Boot issuer lookup outside embedded certificates",
+      "document": "docs/linux-iso-efi-resources.md"
+    },
+    "I17": {
+      "title": "Windows and legacy FAT16 boot routes",
+      "document": "docs/linux-legacy-iso-routes.md"
+    },
+    "I18": {
+      "title": "Older BOOTMGR, PE and mixed-loader dispatch",
+      "document": "docs/linux-legacy-iso-routes.md"
+    },
+    "I19": {
+      "title": "ReactOS and KolibriOS ISO creation",
+      "document": "docs/linux-legacy-iso-routes.md"
+    },
+    "I12": {
+      "title": "Logical 4-KiB formatting geometry",
+      "document": "docs/linux-sector-geometry.md"
+    },
+    "I13": {
+      "title": "UDF block size and volume geometry",
+      "document": "docs/linux-sector-geometry.md"
+    },
+    "A02": {
+      "title": "Forced FAT32 formatter and Windows VDS backend controls",
+      "document": "docs/linux-sector-geometry.md"
+    },
+    "Q03": {
+      "title": "Distribution packages and dependency delivery",
+      "document": "linux/packaging/README.md"
+    },
+    "I05": {
+      "title": "Native user-facing translation coverage",
+      "document": "docs/linux-localization.md"
+    },
+    "I10": {
+      "title": "Microsoft Dev Drive exclusion",
+      "document": "docs/linux-filesystem-metadata-policy.md#dev-drive-protection-deferred-by-the-user"
+    },
+    "I14": {
+      "title": "UDF 2.50 and 2.60 metadata partitions",
+      "document": "docs/linux-filesystem-formatting.md#deferred-udf-250260-gap--user-decision-2026-10-24"
+    },
+    "I15": {
+      "title": "Native ReFS formatting provider",
+      "document": "docs/linux-filesystem-formatting.md#refs-formatting-excluded-from-the-first-release"
+    },
+    "A03": {
+      "title": "UDF/ReFS file indexing hint",
+      "document": "docs/linux-filesystem-metadata-policy.md"
+    },
+    "Q01": {
+      "title": "Consolidated eligible-media and firmware coverage",
+      "document": "docs/linux-release-evidence.md"
+    },
+    "Q02": {
+      "title": "Physical media, supported hosts and desktop qualification",
+      "document": "docs/linux-release-evidence.md"
+    },
+    "Q04": {
+      "title": "Versioned release publication and native update handoff",
+      "document": "docs/linux-parity-register.json"
+    },
+    "E01": {
+      "title": "Dormant ext4 format enum",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E02": {
+      "title": "Unused AdvancedMode key",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E03": {
+      "title": "Dead DisableSecureBootNotice setting",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E04": {
+      "title": "Developer-only test/version helpers",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E05": {
+      "title": "Session runtime-validation preference",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E06": {
+      "title": "Windows autorun registry cleanup",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E07": {
+      "title": "Agreed host regional-settings behavior",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E08": {
+      "title": "Native package update ownership",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E09": {
+      "title": "Agreed FAT32 caption",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E10": {
+      "title": "Explicit DOS and initial language choices",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E11": {
+      "title": "Autorun attribute claim corrected",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E12": {
+      "title": "Shared label normalization",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E13": {
+      "title": "Native update consent bookkeeping",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E14": {
+      "title": "Windows autoplay group policy",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E15": {
+      "title": "Case-insensitive imported setting names",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E16": {
+      "title": "IA64/EBC runtime validators",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E17": {
+      "title": "Deferred original Windows execution",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E18": {
+      "title": "FFU multi-target requirement corrected",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E19": {
+      "title": "Deferred UDF 2.50/2.60 metadata partitions",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E20": {
+      "title": "ReFS formatter excluded from first release; remaining work retained",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    },
+    "E21": {
+      "title": "Dev Drive detection excluded from this release",
+      "document": "docs/linux-parity-register.json#explicit_dispositions"
+    }
+  },
+  "other_media_families": [
+    {
+      "family": "Raw/compressed/VHD/VHDX/FFU deploy",
+      "owners": [
+        "C07",
+        "A04"
+      ],
+      "evidence": [
+        "CP56",
+        "CP38",
+        "CP73"
+      ],
+      "document": "docs/linux-ffu-parity.md"
+    },
+    {
+      "family": "Read-only device capture and ISO export/unmount",
+      "owners": [
+        "C08",
+        "I06",
+        "I11"
+      ],
+      "evidence": [
+        "CP35",
+        "CP36",
+        "CP37",
+        "CP73"
+      ],
+      "document": "docs/linux-support.md#save-a-device-to-an-image"
+    },
+    {
+      "family": "Windows To Go and standalone WIM/ESD",
+      "owners": [
+        "C09"
+      ],
+      "evidence": [
+        "CP58",
+        "CP76"
+      ],
+      "document": "docs/linux-windows-to-go.md"
+    },
+    {
+      "family": "Windows installer customization",
+      "owners": [
+        "C10",
+        "E07",
+        "E17"
+      ],
+      "historical_checkpoints": [
+        "CP11n"
+      ],
+      "document": "docs/linux-windows-installer.md",
+      "qualification": "Agreed real ISO creation/readback with Skip privacy questions is retained. Installed-Windows effects remain unverified and no new installation matrix is scheduled."
+    },
+    {
+      "family": "Persistence/runtime validators/security/policy",
+      "owners": [
+        "C13",
+        "I25"
+      ],
+      "evidence": [
+        "CP63",
+        "CP74"
+      ],
+      "document": "docs/linux-runtime-validation.md"
+    },
+    {
+      "family": "Full/fast zero, bad blocks, old BIOS geometry",
+      "owners": [
+        "C14",
+        "C05"
+      ],
+      "evidence": [
+        "CP46",
+        "CP47",
+        "CP48",
+        "CP51"
+      ],
+      "document": "docs/linux-support.md"
+    },
+    {
+      "family": "NTFS compression/indexing and labels/icons",
+      "owners": [
+        "C06"
+      ],
+      "evidence": [
+        "CP49",
+        "CP70"
+      ],
+      "document": "docs/linux-ntfs-options.md"
+    },
+    {
+      "family": "Device/source operations and protected identity",
+      "owners": [
+        "C02",
+        "I06",
+        "I07",
+        "I08",
+        "I09",
+        "I11",
+        "A01"
+      ],
+      "evidence": [
+        "CP73",
+        "CP76"
+      ],
+      "document": "docs/linux-device-source-operations.md"
+    },
+    {
+      "family": "Application release checking and expert controls",
+      "owners": [
+        "C12",
+        "I01",
+        "I02",
+        "I03",
+        "I04"
+      ],
+      "evidence": [
+        "CP68",
+        "CP72"
+      ],
+      "document": "docs/linux-desktop-controls.md"
+    }
+  ],
+  "architecture_qualification": {
+    "source_selected_efi": {
+      "owners": [
+        "I16",
+        "C13"
+      ],
+      "evidence": [
+        "CP74"
+      ],
+      "document": "docs/linux-iso-efi-resources.md",
+      "boundary": "Architecture selection, bytes and exact fallback paths are qualified by components; representative x64 handoff does not establish every architecture firmware."
+    },
+    "windows_to_go": {
+      "implemented_uefi_source_architectures": [
+        "ia32",
+        "x64",
+        "arm32",
+        "arm64"
+      ],
+      "x64": "CP58 ordinary device jobs and representative UEFI:NTFS/native EFI marker; no Windows execution.",
+      "arm64": "CP58 boot-tree/CA2023 component bytes only.",
+      "ia32_arm32": "No completed To Go device/firmware evidence identified in retained receipts.",
+      "open_owner": "Q01",
+      "required_followup": "A bounded non-x64 creation/readback and applicable EFI handoff is still required before claiming this acceptance fully qualified; do not run installed Windows."
+    },
+    "host_x86_64": "Normal/sanitizer/Qt and Arch/generic package evidence retained.",
+    "host_aarch64": "CP74 Syslinux v4 cross-build/accessor execution under emulation only; this is not a complete application host build/run.",
+    "host_i686": "Complete representative application host build/run remains Q02."
+  },
+  "explicit_release_gaps": [
+    {
+      "owner": "I14",
+      "status": "user_deferred",
+      "gap": "UDF 2.50/2.60 metadata-partition formatting"
+    },
+    {
+      "owner": "I15",
+      "status": "user_deferred",
+      "gap": "ReFS formatting"
+    },
+    {
+      "owner": "I10",
+      "status": "user_deferred",
+      "gap": "Actual Dev Drive membership detection; no blanket ReFS refusal or label guess"
+    },
+    {
+      "owner": "A03",
+      "status": "qualified_native_release_limitation",
+      "gap": "Supported-UDF saved Alt+Q choice and optional unsupported diagnostic work; actual Windows indexing attribute is not written.",
+      "evidence": [
+        "CP77"
+      ]
+    }
+  ],
+  "open_release_qualification": {
+    "Q01": "Reconciliation is recorded; non-x64 To Go acceptance remains a visible qualification gap.",
+    "Q02": "Bounded KDE native Wayland and Qt xcb/XWayland checks pass at 1x/2x with live French/Arabic/Romanian, keyboard/tab/close and 18-point layout. Standalone Xorg, physical USB/unplug, physical 4Kn and complete i686/aarch64 application host build/run remain unqualified. No host package repair or physical-media action was performed.",
+    "Q03": "Debian 13 and Fedora 44 clean native builds plus fresh install/same-payload lower-release upgrade/removal passed with explicit container/provider limits. The corrected local AUR candidate clean build and runtime smoke also passed; final public-source re-render/verifysource remains Q04.",
+    "Q04": "Source-candidate phase: the user authorized GitHub commit/push/tag publication of linux-preview.47 at mcirsta/rufus as the AUR source. Freeze prepublication evidence/assets, then record actual public source/archive hashes and applicable publisher/update handoff in the final attached delivery receipt. This source manifest does not claim the post-tag checks have already run; it is not retagged to embed a self-referential receipt."
+  },
+  "test_budget": "Reuse unchanged media evidence. One combined focused localization/control group and one final nine-suite Qt gate; repair only concrete affected failures. Do not reopen delivered media families or add OS-installation matrices.",
+  "translation_release_policy": {
+    "owner": "I05",
+    "date": "2026-10-24",
+    "status": "accepted_catalog_reuse_scope",
+    "release_requirement": "Reuse original Rufus catalog messages where equivalent; preserve documented English fallback for Linux-specific text and incompatible or inherited original messages.",
+    "full_native_translations": "Follow-up full-parity work, not a first-release completion requirement.",
+    "document": "docs/linux-localization.md#cp78--original-catalog-reuse-and-coverage-inventory"
+  },
+  "publication_authorization": {
+    "status": "user_authorized",
+    "repository": "mcirsta/rufus",
+    "tag": "linux-preview.47",
+    "scope": "GitHub commit/push/tag release as the AUR source",
+    "qualification": "Authorization is distinct from successful publication or verification of the resulting public archive."
+  },
+  "source_archive_policy": {
+    "status": "local_git_export_semantics_qualified",
+    "artifact": "cp78/tag-archive-input-audit.json",
+    "artifact_sha256": "6db92725b261e57563bf66b32623a6245059eb7df013596b68a179f8d8c5148f",
+    "required_native_inputs": 914,
+    "configured_target_source_inputs": 282,
+    "qrc_resource_inputs": 43,
+    "native_shell_scripts_exported": 6,
+    "missing_required_inputs": [],
+    "attributes": "The inherited *.sh export-ignore has a narrow linux/**/*.sh -export-ignore override. Git eol filters apply during archive export; the original Rufus catalog remains byte-identical.",
+    "real_index_unchanged": true,
+    "public_archive": "Verify the actual public linux-preview.47 GitHub tag archive after publication and use its own SHA256 in final AUR metadata. This audit does not predict compressed public archive bytes."
+  },
+  "candidate_receipts": {
+    "distribution_qualification": {
+      "artifact": "cp78/distributions/qualification.json",
+      "sha256": "415a61f6c65394e44b83115affae5c65898ecbc08cad77f852f514a7c106de7d"
+    },
+    "aur_local_source_qualification": {
+      "artifact": "cp78/aur/qualification.json",
+      "sha256": "85d34e43897612cc4ec4ff6d2471599cdbba9d1f9868b2662fff25ea1d123339"
+    },
+    "localization_inventory": {
+      "artifact": "cp78/localization-sources.json",
+      "sha256": "fb7fe362eeaa478a5d357d93715b73f1c82e2de8fde4ef6ff5a7996e8b526cec"
+    },
+    "localization_normal": {
+      "artifact": "cp78/localization-coverage-normal.json",
+      "sha256": "32fe3550753bf09dc6df1fee5c884a7218e898bb70e36844e4d98da3e2647b28"
+    },
+    "localization_sanitized": {
+      "artifact": "cp78/localization-coverage-sanitized.json",
+      "sha256": "32fe3550753bf09dc6df1fee5c884a7218e898bb70e36844e4d98da3e2647b28"
+    },
+    "components_normal": {
+      "artifact": "cp78/component-normal-run.json",
+      "sha256": "45fe0f600244d57861edc7f31477e992fc7db3ce737887010460cebf53b05185"
+    },
+    "components_sanitized": {
+      "artifact": "cp78/component-sanitized-run.json",
+      "sha256": "5938c613380fcdd58137b1a19914739c95860c91974672757508cdd5c396f934"
+    },
+    "pinned_windows_baseline": {
+      "artifact": "cp78/pinned-windows-baseline.json",
+      "sha256": "7df804f503facb2eb050dc442437d1c524c257c91c3eb3b20b2b1c106c90b956"
+    },
+    "tag_archive_inputs": {
+      "artifact": "cp78/tag-archive-input-audit.json",
+      "sha256": "6db92725b261e57563bf66b32623a6245059eb7df013596b68a179f8d8c5148f"
+    },
+    "qt_gate": {
+      "artifact": "cp78/qt-run.json",
+      "sha256": "3a08cd6e77400738535e1989cbd61ee7c7072ad80551608f5419020ca8fca3f7"
+    },
+    "qt_transcript": {
+      "artifact": "cp78/qt-transcript.log",
+      "sha256": "af4e8016d9a6c17bd7dfea844cf2ef71f4540770de74660b6a362a98ef5d9603"
+    },
+    "production_source_stability": {
+      "artifact": "cp78/production-source-stability.json",
+      "sha256": "1e468521a69ec7d120097d1ebe43e3ea0f0b79a6c193d7f8eafa1221b56d002e"
+    },
+    "desktop_qualification": {
+      "artifact": "cp78/desktop-qualification.json",
+      "sha256": "d35a4ddc650b9ab2a353133d1edbd7d444966a0290fe251c4c5b15ba9d80b5b3"
+    }
+  },
+  "candidate_qualification": {
+    "components": {
+      "localization_total_qt_passes_per_build": 105,
+      "application_update_total_qt_passes_per_build": 67,
+      "combined_substantive_cases_per_build": 168,
+      "failures": 0,
+      "skips": 0,
+      "counting": "Each suite total includes initTestCase/cleanupTestCase; combined substantive count removes four lifecycle hooks. Normal and sanitizer execute the same cases and are not added together. A later opt-in publishedRelease check is separate."
+    },
+    "localization": {
+      "literal_sources": 557,
+      "literal_occurrences": 677,
+      "catalog_languages": 38,
+      "english_catalog_bindings": 193,
+      "unbound_english_sources": 364,
+      "placeholder_refusal_sources_by_locale": {
+        "ar-SA": [
+          "%1 image detected",
+          "ISOHybrid image detected"
+        ],
+        "hr-HR": [
+          "WARNING: ALL DATA ON DEVICE '%1' WILL BE DESTROYED.\nTo continue with this operation, click OK. To quit click CANCEL."
+        ],
+        "he-IL": [
+          "1 pass"
+        ],
+        "it-IT": [
+          "Default thread priority: %1"
+        ],
+        "lt-LT": [
+          "Default thread priority: %1",
+          "Disk or ISO image (Please select)"
+        ],
+        "sr-RS": [
+          "Disk or ISO image (Please select)"
+        ]
+      },
+      "meaning": "Source inventory is not full reachability coverage. Original catalog inheritance, invalid placeholders and Linux-only English fallback are explicit; no native translation is invented."
+    },
+    "distributions": {
+      "status": "qualified_with_recorded_limits",
+      "environments": [
+        "Debian GNU/Linux 13 x86-64",
+        "Fedora Linux 44 x86-64"
+      ],
+      "native_clean_builds": true,
+      "fresh_install": true,
+      "upgrade": "Same candidate payload with lower package release, not an older published Debian/Fedora version.",
+      "removal_and_user_state_preservation": true,
+      "runtime": "Unprivileged offscreen GUI/help/version/single-instance; libraries and helper/policy/resource/provider paths checked.",
+      "limits": [
+        "Rootless containers do not qualify desktop authentication, physical USB or kernel filesystem drivers.",
+        "Optional cdrtools mkisofs ISO-export provider was not supplied/qualified in these environments."
+      ]
+    },
+    "aur": {
+      "status": "corrected_local_candidate_source_build_and_smoke_qualified",
+      "clean_product_builds": 1,
+      "build_seconds": 73.93687169199984,
+      "runtime_smoke_passed": true,
+      "final_metadata_fixes": "Direct hicolor-icon-theme/libgcc/libstdc++ runtime dependencies; no compiled product change.",
+      "pending": "After the tag is public, re-render/verifysource against the actual public source archive; no second product compile when compiled inputs match.",
+      "delivery": "The release owner will set maintainer identity and submit to AUR manually. No AUR account/credentials are needed to prepare the candidate.",
+      "aur_submission_published": false
+    },
+    "qt_gate": {
+      "status": "passed",
+      "full_runs": 1,
+      "reports": 9,
+      "substantive_passes": 2217,
+      "failures": 0,
+      "optional_skips": 2,
+      "seconds": 465.46802345600736,
+      "uid": 1000,
+      "product_unchanged_after_gate": true,
+      "skip_boundary": "Two existing opt-in real Windows/Alpine source-selection cases; no per-OS installation matrix."
+    },
+    "desktop": {
+      "status": "qualified_with_explicit_environment_limits",
+      "substantive_cases": 32,
+      "outstanding_failures": 0,
+      "skips": 0,
+      "platforms": [
+        "Native Qt Wayland on KDE Wayland",
+        "Qt xcb on actual KDE XWayland"
+      ],
+      "scales": [
+        1,
+        2
+      ],
+      "languages": [
+        "fr-FR",
+        "ar-SA",
+        "ro-RO"
+      ],
+      "checks": [
+        "Live relabel and RTL",
+        "Keyboard device choice and tab chain",
+        "Dialog close/reopen and main Escape",
+        "18-point font layout"
+      ],
+      "application_only_screenshots": 12,
+      "visual_review": "Representative French/Arabic/Romanian normal-scale Wayland and French/Arabic 2x views reviewed.",
+      "post_gate_repair": "Two test-only methods now wait for native activation/modal focus restoration and Escape closure; normal test target rebuilt after the full gate. Production inputs remain unchanged.",
+      "limits": [
+        "Qt xcb is qualified under XWayland, not a standalone Xorg session.",
+        "Host kwin_x11 has a ScreenLocker ABI symbol mismatch; no host packages were changed.",
+        "Keyboard events are Qt test events, not physical input hardware.",
+        "Physical USB/native 4Kn and complete additional architecture host qualification remain open."
+      ]
+    },
+    "production_stability": {
+      "qualified_source_candidate_sha256": "b65bbf3df283893930e014d987734f7cbf08df047fb1b143a589e244bd3ff0a8",
+      "unchanged_production_inputs": 929,
+      "scope": "src/** and non-test/non-packaging Linux source inputs recorded in the stability receipt.",
+      "different": [],
+      "remaining_changes": "Documentation, package/AUR metadata, ignore/export rules and test-only live-check/timing hooks do not change the compiled product."
+    }
+  },
+  "pinned_original_sources": {
+    "baseline": "parity-audit-2026-10-23/baseline.json",
+    "scope": "src/** and AGENTS.md only",
+    "pinned_files": 125,
+    "unchanged": true,
+    "boundary": "The baseline has 394 entries; Linux implementation/docs legitimately changed. This does not assert all 394 entries unchanged."
+  },
+  "publication_phase": {
+    "phase": "source_candidate_prepublication",
+    "authorized_tag": "linux-preview.47",
+    "prepublication_evidence": "Candidate components, one Qt gate, bounded desktop/package results and source export checks are frozen before tagging.",
+    "postpublication_evidence": "Final attached release delivery receipt records the source commit/tag, actual public source archive hashes and live release/update handoff. These checks are not claimed complete in this source manifest.",
+    "source_manifest_not_retagged_for_its_own_publication_receipt": true,
+    "aur_submission": "Manual submission by the release owner."
+  },
+  "prepublication_evidence_status": "Frozen after components, one full Qt gate, bounded desktop/package qualification and production/source-export identity checks. Q01/Q02 scope gaps remain explicit; post-tag Q04 proof belongs to the final attached delivery receipt."
+}

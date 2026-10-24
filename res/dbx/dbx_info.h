@@ -3,8 +3,8 @@
 #include <stdint.h>
 #pragma once
 
-struct {
-	char* url;
+static const struct {
+	const char* url;
 	uint64_t timestamp;
 } dbx_info[] = {
 	{ "https://api.github.com/repos/microsoft/secureboot_objects/contents/PostSignedObjects/SignedByKEK2023/dbx_ia32.efiauth2", 1788300339 },

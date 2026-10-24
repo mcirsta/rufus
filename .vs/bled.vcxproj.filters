@@ -54,6 +54,10 @@
     <ClCompile Include="..\src\bled\seek_by_read.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <None Include="..\src\bled\bunzip_core.inc" />
+    <None Include="..\src\bled\unlzma_core.inc" />
+    <None Include="..\src\bled\uncompress_core.inc" />
+    <None Include="..\src\bled\unzip_format.inc" />
     <ClCompile Include="..\src\bled\decompress_bunzip2.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -125,6 +129,7 @@
     <ClInclude Include="..\src\bled\bb_archive.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\bled\compression.h" />
     <ClInclude Include="..\src\bled\bled.h">
       <Filter>Header Files</Filter>
     </ClInclude>

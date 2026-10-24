@@ -16,6 +16,18 @@
 
 extern void uprintf(const char* format, ...);
 
+iso_extension_mask_t GetIsoExtensionMask(bool joliet, bool rockridge, bool scan,
+	const RUFUS_IMG_REPORT* report)
+{
+	iso_extension_mask_t mask = ISO_EXTENSION_ALL;
+	const bool rock_names = report != NULL && (report->has_long_filename || report->has_symlinks == SYMLINKS_RR);
+	if (!joliet || (rockridge && (scan || rock_names)))
+		mask &= ~ISO_EXTENSION_JOLIET;
+	if (!rockridge)
+		mask &= ~ISO_EXTENSION_ROCK_RIDGE;
+	return mask;
+}
+
 bool FinalizeIsoScan(RUFUS_IMG_REPORT* report, uint64_t total_blocks,
 	int64_t image_size, int64_t volume_blocks)
 {
@@ -82,10 +94,7 @@ int AnalyzeIsoImageWithSource(const char* image, uint64_t image_size,
 		goto out;
 	}
 	// Rufus's initial scan prefers Rock Ridge over Joliet.
-	if (!options->enable_joliet || options->enable_rockridge)
-		mask &= ~ISO_EXTENSION_JOLIET;
-	if (!options->enable_rockridge)
-		mask &= ~ISO_EXTENSION_ROCK_RIDGE;
+	mask = GetIsoExtensionMask(options->enable_joliet, options->enable_rockridge, true, NULL);
 	analysis->report.image_size = image_size;
 	StrArrayCreate(&configs, 8);
 	StrArrayCreate(&loaders, 8);
@@ -146,7 +155,8 @@ int AnalyzeIsoImageWithSource(const char* image, uint64_t image_size,
 	}
 	if (analysis->report.mismatch_size > 0)
 		analysis->pending |= ISO_PENDING_TRUNCATED;
-	result = ScanSyslinuxBootloaders(image, mask, &state, options->embedded_sl_version);
+	const iso_extension_mask_t content_mask = GetIsoExtensionMask(options->enable_joliet, options->enable_rockridge, false, NULL);
+	result = ScanSyslinuxBootloaders(image, content_mask, &state, options->embedded_sl_version);
 	if (result == ISO_SCAN_ERROR || result == ISO_SCAN_CANCELLED)
 		goto out;
 	if (result == ISO_SCAN_PARTIAL)
@@ -163,19 +173,29 @@ int AnalyzeIsoImageWithSource(const char* image, uint64_t image_size,
 			}
 		}
 	}
-	result = ScanWinPeOptions(image, mask, &analysis->report);
+	result = ScanWinPeOptions(image, content_mask, &analysis->report);
 	if (result == ISO_SCAN_ERROR || result == ISO_SCAN_CANCELLED)
 		goto out;
 	if (analysis->report.winpe_options_known && !HAS_BOOTMGR(analysis->report) &&
 		!HAS_WININST(analysis->report))
 		analysis->pending &= ~ISO_PENDING_WINDOWS;
-	result = ScanGrubAndEfiBootloaders(image, mask, &analysis->report);
+	result = ScanGrubAndEfiBootloaders(image, content_mask, &analysis->report);
 	if (result == ISO_SCAN_ERROR || result == ISO_SCAN_CANCELLED)
 		goto out;
 	if (result == ISO_SCAN_PARTIAL)
 		analysis->pending |= ISO_PENDING_CONTENT;
 	result = analysis->pending ? ISO_SCAN_PARTIAL : ISO_SCAN_OK;
 out:
+	if (udf == NULL && iso != NULL && analysis->tree_complete && (result == ISO_SCAN_OK || result == ISO_SCAN_PARTIAL)) {
+		const iso_extension_mask_t extract_mask = GetIsoExtensionMask(options->enable_joliet,
+			options->enable_rockridge, false, &analysis->report);
+		if (extract_mask != mask) {
+			iso9660_close(iso);
+			iso = iso9660_open_ext(image, extract_mask);
+			if (iso == NULL)
+				result = ISO_SCAN_ERROR;
+		}
+	}
 	udf_dirent_free(root);
 	free(label);
 	StrArrayDestroy(&configs);

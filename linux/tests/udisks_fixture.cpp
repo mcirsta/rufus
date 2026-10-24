@@ -38,6 +38,19 @@ public:
         if (message.interface() == manager && message.member() == QStringLiteral("GetManagedObjects"))
         {
             ++calls_;
+            if (refreshMounts_) {
+                for (auto item = objects_.begin(); item != objects_.end(); ++item) {
+                    auto& properties = item.value()[QStringLiteral("org.freedesktop.UDisks2.Filesystem")];
+                    QList<QByteArray> kept;
+                    const quint64 device = item.value().value(QStringLiteral("org.freedesktop.UDisks2.Block")).value(QStringLiteral("DeviceNumber")).toULongLong();
+                    for (QByteArray path : qdbus_cast<QList<QByteArray>>(properties.value(QStringLiteral("MountPoints")))) {
+                        if (path.endsWith('\0')) path.chop(1);
+                        struct stat info;
+                        if (stat(path.constData(), &info) == 0 && quint64(info.st_dev) == device) kept.append(path + '\0');
+                    }
+                    properties[QStringLiteral("MountPoints")] = QVariant::fromValue(kept);
+                }
+            }
             QDBusMessage reply = message.createReply(QVariant::fromValue(objects_));
             if (mode_ == QStringLiteral("error"))
                 reply = message.createErrorReply(QStringLiteral("org.rufus.TestError"),
@@ -69,10 +82,13 @@ private:
         const QList<QVariant> args = message.arguments();
         const QVariantMap options = args.size() == 2 ? qdbus_cast<QVariantMap>(args.at(1)) : QVariantMap();
         const bool readWrite = args.size() == 2 && args.at(0).toString() == QStringLiteral("rw");
-        const bool expectedFlags = options.value(QStringLiteral("flags")).toInt() == (O_EXCL | O_SYNC | O_CLOEXEC);
+        const bool readOnly = args.size() == 2 && args.at(0).toString() == QStringLiteral("r");
+        const bool optical = openFile_.startsWith(QLatin1String("/dev/sr"))
+            && QFile::exists(QStringLiteral("/etc/rufus-device-source-fixture"));
+        const bool expectedFlags = options.value(QStringLiteral("flags")).toInt() == ((optical ? 0 : O_EXCL) | O_CLOEXEC | (readWrite ? O_SYNC : 0));
         const bool interactive = !options.value(QStringLiteral("auth.no_user_interaction"), true).toBool()
             && message.isInteractiveAuthorizationAllowed();
-        if (!readWrite || !expectedFlags || !interactive)
+        if ((!readWrite && !readOnly) || !expectedFlags || !interactive)
         {
             ++unexpected_;
             connection.send(message.createErrorReply(QDBusError::InvalidArgs, QStringLiteral("Wrong raw open request")));
@@ -89,14 +105,21 @@ private:
             reply = message.createReply(QStringLiteral("not a descriptor"));
         else
         {
-            const int flags = openMode_ == QStringLiteral("readonly") ? O_RDONLY : O_RDWR;
-            const int fd = ::open(QFile::encodeName(openFile_).constData(), flags | O_SYNC | O_CLOEXEC | O_NOFOLLOW);
+            const bool guestBlock = readOnly && ((openFile_ == QLatin1String("/dev/sda")
+                && QFile::exists(QStringLiteral("/etc/rufus-save-qt-fixture"))) || optical);
+            const int flags = readOnly || openMode_ == QStringLiteral("readonly") ? O_RDONLY : O_RDWR;
+            const int fd = ::open(QFile::encodeName(openFile_).constData(), flags | O_CLOEXEC | O_NOFOLLOW
+                | (optical ? 0 : guestBlock ? O_EXCL : O_SYNC));
             struct stat info;
-            if (fd < 0 || fstat(fd, &info) != 0 || !S_ISREG(info.st_mode))
-                qFatal("Fixture only accepts its disposable regular file");
-            const QDBusUnixFileDescriptor descriptor(fd);
-            ::close(fd);
-            reply = message.createReply(QVariant::fromValue(descriptor));
+            if (fd < 0 && guestBlock)
+                reply = message.createErrorReply(QStringLiteral("org.freedesktop.UDisks2.Error.DeviceBusy"), QStringLiteral("Exclusive read failed"));
+            else {
+                if (fd < 0 || fstat(fd, &info) != 0 || (!S_ISREG(info.st_mode) && !(guestBlock && S_ISBLK(info.st_mode))))
+                    qFatal("Fixture only accepts its disposable file or guarded guest disk");
+                const QDBusUnixFileDescriptor descriptor(fd);
+                ::close(fd);
+                reply = message.createReply(QVariant::fromValue(descriptor));
+            }
         }
         message.setDelayedReply(true);
         if (holdOpen_)
@@ -116,6 +139,8 @@ private:
             hold_ = args.at(0).toBool();
         else if (method == QStringLiteral("Mode") && args.size() == 1)
             mode_ = args.at(0).toString();
+        else if (method == QStringLiteral("RefreshMounts") && args.size() == 1)
+            refreshMounts_ = args.at(0).toBool();
         else if (method == QStringLiteral("OpenFile") && args.size() == 1)
             openFile_ = args.at(0).toString();
         else if (method == QStringLiteral("OpenMode") && args.size() == 1)
@@ -173,6 +198,7 @@ private:
     QString openFile_, openMode_;
     QList<QDBusMessage> openReplies_;
     bool holdOpen_ = false;
+    bool refreshMounts_ = false;
     int opens_ = 0;
     bool hold_ = false;
     int calls_ = 0;
@@ -188,6 +214,7 @@ int main(int argc, char* argv[])
         return 2;
     qDBusRegisterMetaType<rufus::UDisksInterfaces>();
     qDBusRegisterMetaType<rufus::UDisksObjects>();
+    qDBusRegisterMetaType<QList<QByteArray>>();
     QDBusConnection connection = QDBusConnection::connectToBus(app.arguments().at(1),
         QStringLiteral("fixture"));
     UDisksFixture fixture;

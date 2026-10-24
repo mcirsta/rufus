@@ -101,6 +101,12 @@ bool ApplyIsoPolicy(RUFUS_IMG_REPORT* report)
 	return RequiresDd(report);
 }
 
+bool CanWriteIsoToEsp(const RUFUS_IMG_REPORT* report, bool gpt, bool fat)
+{
+	return report != NULL && report->projected_size < MAX_ISO_TO_ESP_SIZE
+		&& HAS_REGULAR_EFI((*report)) && gpt && fat;
+}
+
 IMAGE_WRITE_CHOICES GetImageWriteChoices(const RUFUS_IMG_REPORT* report,
 	uint64_t persistence_size, bool gpt, bool fat)
 {
@@ -114,10 +120,19 @@ IMAGE_WRITE_CHOICES GetImageWriteChoices(const RUFUS_IMG_REPORT* report,
 		return choices;
 	choices.mode[choices.count++] = IMAGE_WRITE_ISO;
 	if (IS_DD_BOOTABLE((*report)) && persistence_size == 0) {
-		if (report->projected_size < MAX_ISO_TO_ESP_SIZE && HAS_REGULAR_EFI((*report)) && gpt && fat)
+		if (CanWriteIsoToEsp(report, gpt, fat))
 			choices.mode[choices.count++] = IMAGE_WRITE_ESP;
 		choices.mode[choices.count++] = IMAGE_WRITE_DD;
 	}
+	return choices;
+}
+
+IMAGE_WRITE_CHOICES GetFinalImageWriteChoices(const RUFUS_IMG_REPORT* report,
+	uint64_t persistence_size, bool gpt, bool fat)
+{
+	IMAGE_WRITE_CHOICES choices = GetImageWriteChoices(report, persistence_size, gpt, fat);
+	if (choices.count == 1 && choices.mode[0] == IMAGE_WRITE_ISO && CanWriteIsoToEsp(report, gpt, fat))
+		choices.mode[choices.count++] = IMAGE_WRITE_ESP;
 	return choices;
 }
 

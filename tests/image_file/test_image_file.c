@@ -11,6 +11,50 @@
 
 static unsigned int checks, failures;
 
+static void TestSyslinuxConfig(void)
+{
+	static const struct {
+		const char* path;
+		const char* text;
+	} cases[] = {
+		{ "/isolinux.cfg", "DEFAULT loadconfig\n\nLABEL loadconfig\n  CONFIG /isolinux.cfg\n" },
+		{ "isolinux.cfg", "DEFAULT loadconfig\n\nLABEL loadconfig\n  CONFIG isolinux.cfg\n" },
+		{ "/boot/isolinux/isolinux.cfg", "DEFAULT loadconfig\n\nLABEL loadconfig\n"
+			"  CONFIG /boot/isolinux/isolinux.cfg\n  APPEND /boot/isolinux/\n" },
+		{ "/MiXeD/\xc8\x99 space/isolinux.cfg", "DEFAULT loadconfig\n\nLABEL loadconfig\n"
+			"  CONFIG /MiXeD/\xc8\x99 space/isolinux.cfg\n  APPEND /MiXeD/\xc8\x99 space/\n" },
+		{ "", "DEFAULT loadconfig\n\nLABEL loadconfig\n  CONFIG \n" },
+		{ "/trailing/", "DEFAULT loadconfig\n\nLABEL loadconfig\n  CONFIG /trailing/\n  APPEND /trailing/\n" }
+	};
+	RUFUS_IMG_REPORT report = { 0 }, original;
+	ISO_SYSLINUX_CONFIG config;
+
+	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+		strcpy(report.cfg_path, cases[i].path);
+		for (int state = 0; state < 8; state++) {
+			bool exists = (state & 1) != 0;
+			report.has_syslinux = (state & 2) != 0;
+			report.needs_syslinux_overwrite = (state & 4) != 0;
+			bool create = report.has_syslinux && (!exists || report.needs_syslinux_overwrite);
+			original = report;
+			memset(&config, 0xa5, sizeof(config));
+			GetIsoSyslinuxConfig(&report, exists, &config);
+			CHECK(config.create == create);
+			CHECK(config.backup == (create && exists));
+			CHECK(strcmp(config.text, create ? cases[i].text : "") == 0);
+			CHECK(memcmp(&report, &original, sizeof(report)) == 0);
+		}
+	}
+	// Longest terminated report path, with the longest possible APPEND directory.
+	memset(report.cfg_path, 'x', sizeof(report.cfg_path) - 1);
+	report.cfg_path[sizeof(report.cfg_path) - 2] = '/';
+	report.cfg_path[sizeof(report.cfg_path) - 1] = 0;
+	GetIsoSyslinuxConfig(&report, false, &config);
+	CHECK(strlen(config.text) == 311);
+	CHECK(strstr(config.text, report.cfg_path) != NULL);
+	CHECK(strcmp(config.text + strlen(config.text) - 2, "/\n") == 0);
+}
+
 static void TestPathSubstitutions(void)
 {
 	static const struct {
@@ -303,9 +347,41 @@ static void TestBootSignature(void)
 	CHECK(memcmp(data + 1, empty, sizeof(empty)) == 0);
 }
 
+static void TestEfiSyslinuxConfigName(void)
+{
+	static const struct { const char* directory; const char* source; const char* output; } cases[] = {
+		{ "/EFI/BOOT", "isolinux.cfg", "syslinux.cfg" },
+		{ "/efi/Boot", "ISOLINUX.CFG", "sysLINUX.CFG" },
+		{ "/EFI/BOOT", "syslinux.cfg", "" },
+		{ "/EFI/BOOT", "grub.cfg", "" },
+		{ "/EFI/BOOT", "loopback.cfg", "" },
+		{ "/EFI/BOOT", "extlinux.conf", "" },
+		{ "/EFI/BOOT/nested", "isolinux.cfg", "" },
+		{ "/boot", "isolinux.cfg", "" },
+		{ NULL, "isolinux.cfg", "" }
+	};
+	RUFUS_IMG_REPORT report = { 0 };
+	ISO_FILE_PROPS props;
+	char name[ISO_SYSLINUX_CONFIG_NAME_CAPACITY];
+	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+		GetIsoFileProps(cases[i].directory, 1, cases[i].source, &props);
+		// The text-pass ordering relies on these real classifications being disjoint.
+		CHECK(!props.is_grub_cfg || !props.is_syslinux_cfg);
+		report.has_efi_syslinux = false;
+		bool duplicate = GetEfiSyslinuxConfigName(&report, &props, cases[i].directory, cases[i].source, name);
+		CHECK(duplicate == (cases[i].output[0] != 0));
+		CHECK(strcmp(name, cases[i].output) == 0);
+		report.has_efi_syslinux = true;
+		CHECK(!GetEfiSyslinuxConfigName(&report, &props, cases[i].directory, cases[i].source, name));
+		CHECK(name[0] == 0);
+	}
+}
+
 int main(void)
 {
 	TestPathSubstitutions();
+	TestSyslinuxConfig();
+	TestEfiSyslinuxConfigName();
 	TestWimSignature();
 	TestBootSignature();
 	TestFileProperties();

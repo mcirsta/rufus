@@ -44,5 +44,8 @@
 #cmakedefine HAVE_LSETXATTR 1
 #cmakedefine HAVE_STAT_NANOSECOND_PRECISION 1
 #cmakedefine WORDS_BIGENDIAN 1
+/* Upstream's internal macro also covers the compatible ntfsprogs-plus library.
+ * Direct volume application preserves Windows metadata without a FUSE mount. */
+#define WITH_NTFS_3G 1
 /* WITH_LIBCDIO's filename transport is replaced by explicit borrowed readers.
- * FUSE, NTFS-3G and Win32 backends are not enabled in this build. */
+ * FUSE and Win32 backends are not enabled in this build. */

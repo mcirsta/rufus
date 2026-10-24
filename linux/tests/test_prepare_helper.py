@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import struct
 import sys
 import tempfile
 import time
@@ -15,6 +16,7 @@ import time
 sys.path.insert(0, str(Path(__file__).parent / 'vm'))
 from gpt import inspect_formatted_partition
 from test_partition_image import make_image, inspect_gpt, check_preserved
+from test_fat_format import copy_volume
 
 DISK_BYTES = 64 * 1024 * 1024
 PROCESS_TIMEOUT_SECONDS = 10
@@ -72,6 +74,26 @@ def wait_for_formatter(marker):
     raise AssertionError('Formatter did not start')
 
 
+def inspect_fat16(args, root, image, offset, size, cluster, empty=True):
+    with image.open('rb') as source:
+        source.seek(offset)
+        boot = source.read(512)
+    assert boot[54:62] == b'FAT16   ' and boot[510:] == b'\x55\xaa'
+    assert struct.unpack_from('<H', boot, 11)[0] == 512 and boot[13] * 512 == cluster
+    assert struct.unpack_from('<I', boot, 28)[0] == offset // 512
+    assert struct.unpack_from('<I', boot, 39)[0] == 0x1234abcd
+    assert boot[43:54] == b'RUFUS TEST '
+    volume = root / 'volume.img'
+    copy_volume(image, volume, offset, size)
+    checked = subprocess.run([args.fsck, '-n', str(volume)], capture_output=True, timeout=15)
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    listing = subprocess.run([args.mdir, '-i', f'{image}@@{offset}', '::'], capture_output=True, timeout=10)
+    assert listing.returncode == 0, listing.stdout + listing.stderr
+    if empty:
+        assert b'No files' in listing.stdout, listing.stdout + listing.stderr
+    volume.unlink()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('helper', type=Path)
@@ -79,20 +101,31 @@ def main():
     parser.add_argument('--sfdisk', required=True)
     parser.add_argument('--fsck', required=True)
     parser.add_argument('--mdir', required=True)
+    parser.add_argument('--fat16', action='store_true')
     args = parser.parse_args()
+    cluster = 2048 if args.fat16 else 512
     with tempfile.TemporaryDirectory(prefix='rufus-prepare-helper-') as temporary:
         root = Path(temporary)
-        image, segments = make_image(root, 'native.img', DISK_BYTES)
+        image, segments = make_image(root, 'native.img', DISK_BYTES, cluster)
         request = request_for(image)
+        if args.fat16:
+            request.update(operation='prepare-fat16-image-v1', cluster=str(cluster))
         result = finish(start(args.helper, request), 0, True)
         offset, size = int(result['offset']), int(result['size'])
-        inspect_gpt(args, image, DISK_BYTES, 512)
+        inspect_gpt(args, image, DISK_BYTES, cluster)
         check_preserved(image, DISK_BYTES, segments, (offset, size))
-        inspect_formatted_partition(args, root, image, {'OFFSET': offset, 'SIZE': size})
+        if args.fat16:
+            inspect_fat16(args, root, image, offset, size, cluster)
+        else:
+            inspect_formatted_partition(args, root, image, {'OFFSET': offset, 'SIZE': size})
         original = digest(image)
 
         # Reject unsupported operations and invalid settings before GPT writes.
         invalid = [({'operation': 'prepare-device-v1'}, errno.EPROTO),
+                   ({'operation': 'prepare-fat16-device-v1'}, errno.EPROTO),
+                   ({'operation': 'prepare-exfat-image-v1'}, errno.EPROTO),
+                   ({'source': {}}, errno.EPROTO),
+                   ({'windows': {}}, errno.EPROTO),
                    ({'mkfs': '/bin/false'}, errno.EPROTO),
                    ({'device': str(int(request['device']) + 1)}, errno.ESTALE),
                    ({'inode': str(int(request['inode']) + 1)}, errno.ESTALE),
@@ -129,7 +162,8 @@ def main():
         assert digest(image) == original
 
         # Split a request across actual pipe writes, then qualify another complete run.
-        process = start(args.helper, b'{"operation": "prepare-image-v1",')
+        prefix = json.dumps({'operation': request['operation']})[:-1].encode() + b','
+        process = start(args.helper, prefix)
         remainder = json.dumps(request).split(',', 1)[1].encode() + b'\n'
         process.stdin.write(remainder)
         process.stdin.flush()
@@ -157,10 +191,23 @@ def main():
 
         result = finish(start(args.probe, request, RUFUS_TEST_SYNC_ERROR='1'), errno.EIO, True)
         assert result['syncError'] == errno.EIO and result['filesystemBytes'] == '0', result
+        result = finish(start(args.probe, request, RUFUS_TEST_SYNC_AFTER_FORMAT='1'), errno.EIO, True)
+        assert result['syncError'] == errno.EIO, result
+        formatter.write_text('#!/usr/bin/python3\nimport sys\nsys.exit(7)\n')
+        finish(start(args.probe, request, RUFUS_TEST_FORMATTER=str(formatter)), errno.EIO, True)
+        # Start with an unformatted volume so a false-success formatter cannot
+        # pass readback using the filesystem written by an earlier case.
+        with image.open('r+b') as target:
+            target.seek(offset)
+            target.write(bytes(512))
+        formatter.write_text('#!/usr/bin/python3\n')
+        finish(start(args.probe, request, RUFUS_TEST_FORMATTER=str(formatter)), errno.EBADMSG, True)
         finish(start(args.helper, request), 0, True)
-        inspect_gpt(args, image, DISK_BYTES, 512)
+        inspect_gpt(args, image, DISK_BYTES, cluster)
         check_preserved(image, DISK_BYTES, segments, (offset, size))
-    print('PASS: helper process, native GPT/FAT32 readback, request rejection, EOF cancellation, '
+        if args.fat16:
+            inspect_fat16(args, root, image, offset, size, cluster)
+    print(f'PASS: helper process, native GPT/FAT{16 if args.fat16 else 32} readback, request rejection, EOF cancellation, '
           'child reaping, flush failure and recovery; disposable files only.')
 
 

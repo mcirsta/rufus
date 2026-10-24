@@ -1,0 +1,11 @@
+<RCC>
+ <qresource prefix="/rufus/dbx">
+  <file alias="ia32">../../res/dbx/dbx_ia32.efiauth2</file>
+  <file alias="x64">../../res/dbx/dbx_x64.efiauth2</file>
+  <file alias="arm">../../res/dbx/dbx_arm.efiauth2</file>
+  <file alias="aa64">../../res/dbx/dbx_aarch64.efiauth2</file>
+  <file alias="ia64">../../res/dbx/dbx_ia64.efiauth2</file>
+  <file alias="riscv64">../../res/dbx/dbx_riscv64.efiauth2</file>
+  <file alias="loongarch64">../../res/dbx/dbx_loongarch64.efiauth2</file>
+ </qresource>
+</RCC>

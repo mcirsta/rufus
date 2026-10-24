@@ -37,6 +37,11 @@ typedef struct {
 IMAGE_WRITE_CHOICES GetImageWriteChoices(const RUFUS_IMG_REPORT* report,
 	uint64_t persistence_size, bool gpt, bool fat);
 
+/* The separate ESP question also applies to non-hybrid ISOs and persistence. */
+bool CanWriteIsoToEsp(const RUFUS_IMG_REPORT* report, bool gpt, bool fat);
+IMAGE_WRITE_CHOICES GetFinalImageWriteChoices(const RUFUS_IMG_REPORT* report,
+	uint64_t persistence_size, bool gpt, bool fat);
+
 /* SelectionDialog returns one bit per row, or -1 for Cancel. Reject anything
  * except one offered row; never turn cancellation into a default mode. */
 enum IMAGE_WRITE_MODE GetImageWriteMode(const IMAGE_WRITE_CHOICES* choices, int selected);

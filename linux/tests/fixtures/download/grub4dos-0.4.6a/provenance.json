@@ -1,0 +1,14 @@
+[
+  {
+    "url": "https://rufus.ie/files/grub4dos-0.4.6a/grldr",
+    "bytes": 322965,
+    "sha256": "19ba57329be745ceae46354c5d411b7d8efec6802cfd7f6fee986df4b763f6fe",
+    "fetched": "2026-10-04"
+  },
+  {
+    "url": "https://rufus.ie/files/grub4dos-0.4.6a/grldr.sig",
+    "bytes": 256,
+    "sha256": "698052e99cf1b92924b47485ee94b616a67e3c855a9c2eb4e777de64f729ffee",
+    "fetched": "2026-10-04"
+  }
+]

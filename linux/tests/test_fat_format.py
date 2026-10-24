@@ -38,8 +38,11 @@ def check_guards(image, offset, size):
 def invoke(args, image, offset=MIB, size=64*MIB, cluster=512, label="RUFUS TEST",
            fault="none", error=0, program=None, started=True):
     global runs
-    result = subprocess.run([str(args.probe), program or args.mkfs, str(image), str(offset),
-                             str(size), str(cluster), label, fault], capture_output=True, timeout=8)
+    command = [str(args.probe), program or args.mkfs, str(image), str(offset),
+               str(size), str(cluster), label, fault]
+    if getattr(args, "fat_bits", 32) == 16:
+        command.append("16")
+    result = subprocess.run(command, capture_output=True, timeout=8)
     runs += 1
     assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
     values = {key.decode(): int(value) for key, value in re.findall(rb"([A-Z_]+)=(-?\d+)", result.stdout)}
@@ -50,7 +53,8 @@ def invoke(args, image, offset=MIB, size=64*MIB, cluster=512, label="RUFUS TEST"
     assert values["DIAG"] <= 4095 and values["MS"] < 6000, values
     assert values["SYNCS"] >= int(started), values
     if error == 0:
-        assert values["EXIT"] == 0 and values["SYNC"] == 0 and values["BYTES"] > 0, values
+        expected_exit = -1 if fault == "check-only" else 0
+        assert values["EXIT"] == expected_exit and values["SYNC"] == 0 and values["BYTES"] > 0, values
     return values
 
 
@@ -149,7 +153,8 @@ def main():
                    ("cancel-before", {}, errno.ECANCELED), ("none", {"offset": 513}, errno.EINVAL),
                    ("none", {"size": 64*MIB+1}, errno.EINVAL), ("none", {"size": 0}, errno.ENOTSUP),
                    ("none", {"size": 128*MIB}, errno.ENOSPC), ("none", {"cluster": 0}, errno.EINVAL),
-                   ("none", {"cluster": 1536}, errno.EINVAL), ("none", {"cluster": 65536}, errno.EINVAL),
+                   ("none", {"cluster": 1536}, errno.EINVAL), ("none", {"cluster": 131072}, errno.EINVAL),
+                   ("none", {"cluster": 65536}, errno.ENOTSUP),
                    ("none", {"cluster": 32768}, errno.ENOTSUP), ("none", {"label": "TOO_LONG_LBL" + "X"}, errno.EINVAL),
                    ("none", {"label": "lower"}, errno.EINVAL), ("none", {"label": "BAD/LABEL"}, errno.EINVAL),
                    ("none", {"label": "É"}, errno.EINVAL), ("none", {"label": " SPACE"}, errno.EINVAL),

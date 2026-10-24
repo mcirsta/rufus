@@ -1,10 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Writes only the disposable regular files supplied by test_raw_write.py. */
-#include "platform/raw_write.h"
+#include "platform/uefi_ntfs.h"
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -14,6 +15,7 @@ static const char* fault;
 static const char* source_path;
 static IMAGE_FILE_SOURCE source = { .fd = -1 };
 static RAW_WRITE_RESULT result;
+static uint64_t target_offset;
 
 enum {
 	MAX_TRANSFER_BYTES = 1024 * 1024,
@@ -26,6 +28,13 @@ enum {
 
 int IsRufusJobCancelled(void) { return cancelled; }
 int IsIsoScanCancelled(void) { return IsRufusJobCancelled(); }
+void uprintf(const char* format, ...)
+{
+	va_list args;
+	va_start(args, format);
+	vfprintf(stderr, format, args);
+	va_end(args);
+}
 void _UpdateProgressWithInfo(int operation, int message, uint64_t processed, uint64_t total, int forced)
 {
 	(void)operation; (void)message; (void)processed; (void)total; (void)forced;
@@ -133,10 +142,10 @@ int __wrap_fsync(int fd)
 	if (strcmp(fault, "sync-cancel") == 0)
 		cancelled = 1;
 	if (strcmp(fault, "corrupt") == 0) {
-		if (RealRead(fd, &byte, 1, CORRUPTION_OFFSET) != 1)
+		if (RealRead(fd, &byte, 1, target_offset + CORRUPTION_OFFSET) != 1)
 			abort();
 		byte ^= 1;
-		if (RealWrite(fd, &byte, 1, CORRUPTION_OFFSET) != 1)
+		if (RealWrite(fd, &byte, 1, target_offset + CORRUPTION_OFFSET) != 1)
 			abort();
 	}
 	if (strcmp(fault, "source-change") == 0) {
@@ -148,6 +157,12 @@ int __wrap_fsync(int fd)
 			abort();
 		close(changed);
 	}
+	if (strcmp(fault, "target-resize") == 0 && ftruncate(fd, source.info.st_size) != 0)
+		abort();
+	if (strcmp(fault, "gpt-change") == 0 && RealWrite(fd, "bad", 3, 512) != 3)
+		abort();
+	if (strcmp(fault, "mbr-change") == 0 && RealWrite(fd, "bad", 3, 466) != 3)
+		abort();
 	error = __real_fsync(fd);
 	if (error == 0)
 		synced = 1;
@@ -168,8 +183,31 @@ static int DescriptorCount(void)
 int main(int argc, char** argv)
 {
 	int error, before = DescriptorCount(), flags = O_RDWR;
-	if (argc < 3 || argc > 5)
+	GPT_IMAGE_OPTIONS options = { 0, 512, 63, 4096, 0, 0 };
+	GPT_IMAGE_RESULT layout;
+	MBR_IMAGE_OPTIONS mbr = {0};
+	const bool exfat_payload = argc == 9 && strcmp(argv[4], "uefi-exfat-mbr") == 0;
+	const bool mbr_payload = exfat_payload || (argc == 9 && strcmp(argv[4], "uefi-ntfs-mbr") == 0);
+	if (argc < 3 || (argc > 6 && argc != 9))
 		return 64;
+	if (argc == 9) {
+		if (!mbr_payload && strcmp(argv[4], "uefi-ntfs") != 0)
+			return 64;
+		options.disk_size = strtoull(argv[5], NULL, 10);
+		options.cluster_size = (uint32_t)strtoul(argv[6], NULL, 10);
+		options.sectors_per_track = (uint32_t)strtoul(argv[7], NULL, 10);
+		options.uefi_ntfs_size = strtoull(argv[8], NULL, 10);
+		if (mbr_payload) {
+			mbr = (MBR_IMAGE_OPTIONS){options.disk_size, options.sector_size, options.sectors_per_track,
+				options.cluster_size, 0, 0, exfat_payload ? FS_EXFAT : FS_NTFS, MBR_BOOT_ZERO, options.uefi_ntfs_size};
+			MBR_IMAGE_RESULT planned;
+			if (PlanMbrImageLayout(&mbr, &planned) == 0)
+				target_offset = planned.uefi_ntfs_offset;
+		} else if (PlanGptImageLayout(&options, &layout) == 0)
+			target_offset = layout.uefi_ntfs_offset;
+	} else if (argc == 6) {
+		target_offset = strtoull(argv[4], NULL, 10);
+	}
 	source_path = argv[1];
 	fault = argc >= 4 ? argv[3] : "none";
 	error = OpenImageFileSource(source_path, &source);
@@ -194,8 +232,18 @@ int main(int argc, char** argv)
 		abort();
 	if (strcmp(fault, "cancel-before") == 0)
 		cancelled = 1;
+	if (strcmp(fault, "block-request") == 0)
+		options.device = mbr.device = 1;
 	active = 1;
-	error = WriteRawImage(&source, source_path, target_fd, &result);
+	if (mbr_payload)
+		error = WriteMbrUefiNtfsImage(&source, source_path, target_fd, &mbr, &result);
+	else if (argc == 9)
+		error = WriteUefiNtfsImage(&source, source_path, target_fd, &options, &result);
+	else if (argc == 6)
+		error = WriteRawImageToExtent(&source, source_path, target_fd, target_offset,
+			strtoull(argv[5], NULL, 10), &result);
+	else
+		error = WriteRawImage(&source, source_path, target_fd, &result);
 	active = 0;
 	if (lseek(source_fd, 0, SEEK_CUR) != SOURCE_POSITION)
 		abort();

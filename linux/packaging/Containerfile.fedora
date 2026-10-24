@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Source and verified upstream trees are mounted read-only at build time.
+FROM registry.fedoraproject.org/fedora@sha256:0d2a354dfdf7ba75083fe371eb6239842fe13f38c52d339dae1ebcf13c7c4062
+RUN dnf -y install \
+    gcc gcc-c++ cmake ninja-build pkgconf-pkg-config perl patch qt6-qtbase-devel \
+    openssl-devel zlib-devel libfdisk-devel libblkid-devel libmount-devel \
+    e2fsprogs-devel hivex-devel ntfs-3g-devel ntfsprogs ntfs-3g dosfstools \
+    e2fsprogs exfatprogs udftools mtools desktop-file-utils python3 rpm-build \
+    redhat-rpm-config patchelf file \
+    && dnf clean all

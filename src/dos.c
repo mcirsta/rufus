@@ -36,6 +36,7 @@
 #include "msapi_utf8.h"
 
 #include "dos.h"
+#include "freedos_files.h"
 
 static BYTE* DiskImage = NULL;
 static DWORD DiskImageSize;
@@ -168,35 +169,31 @@ static void FatDateTimeToSystemTime(PLARGE_INTEGER SystemTime, PFAT_DATETIME Fat
  */
 static BOOL Patch_COMMAND_COM(size_t filestart, size_t filesize)
 {
-	const BYTE expected[8] = { 0x15, 0x80, 0xFA, 0x03, 0x75, 0x10, 0xB8, 0x0E };
 
 	uprintf("Patching COMMAND.COM...");
 	if (filesize != 93040) {
 		uprintf("  unexpected file size");
 		return FALSE;
 	}
-	if (memcmp(&DiskImage[filestart+0x650c], expected, sizeof(expected)) != 0) {
+	if (!PatchMsDosFile("COMMAND.COM", &DiskImage[filestart], filesize)) {
 		uprintf("  unexpected binary data");
 		return FALSE;
 	}
-	DiskImage[filestart+0x6510] = 0xeb;
 	return TRUE;
 }
 
 static BOOL Patch_IO_SYS(size_t filestart, size_t filesize)
 {
-	const BYTE expected[8] = { 0xFA, 0x80, 0x75, 0x09, 0x8D, 0xB6, 0x99, 0x00 };
 
 	uprintf("Patching IO.SYS...");
 	if (filesize != 116736) {
 		uprintf("  unexpected file size");
 		return FALSE;
 	}
-	if (memcmp(&DiskImage[filestart+0x3a8], expected, sizeof(expected)) != 0) {
+	if (!PatchMsDosFile("IO.SYS", &DiskImage[filestart], filesize)) {
 		uprintf("  unexpected binary data");
 		return FALSE;
 	}
-	DiskImage[filestart+0x3aa] = 0xeb;
 	return TRUE;
 }
 
@@ -295,9 +292,7 @@ static BOOL ExtractMSDOS(const char* path)
 	uint8_t* diskcopy_buffer;
 	char locale_path[MAX_PATH];
 	char diskcopy_dll_path[MAX_PATH];
-	char* extractlist[] = { "MSDOS   SYS", "COMMAND COM", "IO      SYS", "MODE    COM",
-		"KEYB    COM", "KEYBOARDSYS", "KEYBRD2 SYS", "KEYBRD3 SYS", "KEYBRD4 SYS",
-		"DISPLAY SYS", "EGA     CPI", "EGA2    CPI", "EGA3    CPI" };
+
 
 	if (path == NULL || (diskcopy_buffer = malloc(DISKCOPY_SIZE)) == NULL)
 		return FALSE;
@@ -323,8 +318,8 @@ static BOOL ExtractMSDOS(const char* path)
 	for (i = 0, r = TRUE; r && i < FAT_FN_DIR_ENTRY_LAST; i++) {
 		if (DiskImage[FAT12_ROOTDIR_OFFSET + i * FAT_BYTES_PER_DIRENT] == FAT_DIRENT_DELETED)
 			continue;
-		for (j = 0; r && j < ARRAYSIZE(extractlist); j++) {
-			if (memcmp(extractlist[j], &DiskImage[FAT12_ROOTDIR_OFFSET + i * FAT_BYTES_PER_DIRENT], 8 + 3) == 0) {
+		for (j = 0; r && GetMsDosFile((size_t)j) != NULL; j++) {
+			if (memcmp(GetMsDosFile((size_t)j)->fat_name, &DiskImage[FAT12_ROOTDIR_OFFSET + i * FAT_BYTES_PER_DIRENT], 8 + 3) == 0) {
 				r = ExtractFAT(i, (j < 3) ? path : locale_path);
 				if ((j == 2) || (j == 7) || (j == 12))
 					UpdateProgress(OP_FILE_COPY, -1.0f);
@@ -343,18 +338,11 @@ out:
 /* Extract the FreeDOS files embedded in the app */
 BOOL ExtractFreeDOS(const char* path)
 {
-	const char* res_name[] = { "COMMAND.COM", "KERNEL.SYS", "DISPLAY.EXE", "KEYB.EXE",
-		"MODE.COM", "KEYBOARD.SYS", "KEYBRD2.SYS", "KEYBRD3.SYS", "KEYBRD4.SYS", "EGA.CPX",
-		"EGA2.CPX", "EGA3.CPX", "EGA4.CPX", "EGA5.CPX", "EGA6.CPX",
-		"EGA7.CPX", "EGA8.CPX", "EGA9.CPX", "EGA10.CPX", "EGA11.CPX",
-		"EGA12.CPX", "EGA13.CPX", "EGA14.CPX", "EGA15.CPX", "EGA16.CPX",
-		"EGA17.CPX", "EGA18.CPX" };
-	const int res_id[ARRAYSIZE(res_name)] = { IDR_FD_COMMAND_COM, IDR_FD_KERNEL_SYS, IDR_FD_DISPLAY_EXE, IDR_FD_KEYB_EXE,
-		IDR_FD_MODE_COM, IDR_FD_KB1_SYS, IDR_FD_KB2_SYS, IDR_FD_KB3_SYS, IDR_FD_KB4_SYS, IDR_FD_EGA1_CPX,
-		IDR_FD_EGA2_CPX, IDR_FD_EGA3_CPX, IDR_FD_EGA4_CPX, IDR_FD_EGA5_CPX, IDR_FD_EGA6_CPX,
-		IDR_FD_EGA7_CPX, IDR_FD_EGA8_CPX, IDR_FD_EGA9_CPX, IDR_FD_EGA10_CPX, IDR_FD_EGA11_CPX,
-		IDR_FD_EGA12_CPX, IDR_FD_EGA13_CPX, IDR_FD_EGA14_CPX, IDR_FD_EGA15_CPX, IDR_FD_EGA16_CPX,
-		IDR_FD_EGA17_CPX, IDR_FD_EGA18_CPX };
+	const int res_id[] = {
+#define FREEDOS_FILE_ENTRY(name, resource, root, progress) resource,
+#include "freedos_files.inc"
+#undef FREEDOS_FILE_ENTRY
+	};
 	char filename[MAX_PATH], locale_path[MAX_PATH];
 	BYTE* res_data;
 	DWORD res_size;
@@ -371,14 +359,14 @@ BOOL ExtractFreeDOS(const char* path)
 	static_strcat(locale_path, "LOCALE\\");
 	CreateDirectoryA(locale_path, NULL);
 
-	for (i = 0; i < ARRAYSIZE(res_name); i++) {
-		res_data = (BYTE*)GetResource(hMainInstance, MAKEINTRESOURCEA(res_id[i]), _RT_RCDATA, res_name[i], &res_size, FALSE);
+	for (i = 0; i < ARRAYSIZE(res_id); i++) {
+		res_data = (BYTE*)GetResource(hMainInstance, MAKEINTRESOURCEA(res_id[i]), _RT_RCDATA, freedos_files[i].name, &res_size, FALSE);
 
-		static_strcpy(filename, ((i<2) ? path : locale_path));
-		static_strcat(filename, res_name[i]);
+		static_strcpy(filename, (freedos_files[i].root ? path : locale_path));
+		static_strcat(filename, freedos_files[i].name);
 
 		hFile = CreateFileA(filename, GENERIC_READ|GENERIC_WRITE, FILE_SHARE_READ, NULL,
-			CREATE_ALWAYS, (i<2)?(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM):FILE_ATTRIBUTE_NORMAL, NULL);
+			CREATE_ALWAYS, freedos_files[i].root?(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM):FILE_ATTRIBUTE_NORMAL, NULL);
 		if ((hFile == NULL) || (hFile == INVALID_HANDLE_VALUE)) {
 			uprintf("Unable to create file '%s': %s.", filename, WindowsErrorString());
 			return FALSE;
@@ -396,7 +384,7 @@ BOOL ExtractFreeDOS(const char* path)
 		safe_closehandle(hFile);
 		uprintf("Successfully wrote '%s' (%d bytes)", filename, res_size);
 
-		if ((i == 4) || (i == 10) || (i == 16) || (i == 22) || (i == ARRAYSIZE(res_name)-1))
+		if (freedos_files[i].progress)
 			UpdateProgress(OP_FILE_COPY, -1.0f);
 	}
 

@@ -16,7 +16,7 @@ from test_fat_format import copy_volume
 
 DISK_BYTES = 64 * 1024 * 1024
 GUEST_TIMEOUT_SECONDS = 120
-CASES = ('missing-device', 'wrong-device', 'wrong-capacity', 'cancel-before',
+CASES = ('uefi-layout', 'missing-device', 'wrong-device', 'wrong-capacity', 'cancel-before',
          'cancel-before-write', 'native-readonly', 'readonly-descriptor',
          'sync-fail', 'cancel-after-write', 'success')
 
@@ -69,7 +69,7 @@ def run_guest(args, base, disk, sector):
     return reports
 
 
-def inspect_formatted_partition(args, base, disk, partition):
+def inspect_formatted_partition(args, base, disk, partition, empty=True):
     offset, size = partition['OFFSET'], partition['SIZE']
     with disk.open('rb') as source:
         source.seek(offset)
@@ -78,7 +78,7 @@ def inspect_formatted_partition(args, base, disk, partition):
         assert sector == 512 and spc == 1 and fats == 2
         assert boot[510:] == b'\x55\xaa' and boot[82:90] == b'FAT32   '
         assert struct.unpack_from('<I', boot, 28)[0] == offset // 512
-        assert struct.unpack_from('<I', boot, 67)[0] == 0x1234abcd
+        assert struct.unpack_from('<I', boot, 67)[0] == partition.get('VOLUME_ID', 0x1234abcd)
         assert boot[71:82] == b'RUFUS TEST '
         sectors, fat_size = struct.unpack_from('<II', boot, 32)
         assert 0 <= size - sectors * sector < 63 * sector
@@ -91,7 +91,8 @@ def inspect_formatted_partition(args, base, disk, partition):
     (base / 'fsck.log').write_bytes(checked.stdout + checked.stderr)
     listing = run([args.mdir, '-i', str(volume), '::'], capture_output=True)
     (base / 'mdir.log').write_bytes(listing.stdout + listing.stderr)
-    assert b'No files' in listing.stdout
+    if empty:
+        assert b'No files' in listing.stdout
 
 
 def main():

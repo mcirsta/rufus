@@ -1,0 +1,9 @@
+<RCC>
+ <qresource prefix="/rufus/syslinux">
+  <file alias="mboot.c32">../../res/syslinux/mboot.c32</file>
+  <file alias="ldlinux.sys">../../res/syslinux/ldlinux_v6.sys</file>
+  <file alias="ldlinux.bss">../../res/syslinux/ldlinux_v6.bss</file>
+  <file alias="v4/ldlinux.sys">../../res/syslinux/ldlinux_v4.sys</file>
+  <file alias="v4/ldlinux.bss">../../res/syslinux/ldlinux_v4.bss</file>
+ </qresource>
+</RCC>

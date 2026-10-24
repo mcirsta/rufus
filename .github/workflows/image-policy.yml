@@ -5,6 +5,13 @@ on:
     paths:
       - 'src/image_policy.*'
       - 'src/image_file.*'
+      - 'src/config_text.*'
+      - 'src/format_policy.*'
+      - 'src/progress_policy.*'
+      - 'src/unattend.*'
+      - 'src/wue.c'
+      - 'src/partition_layout.*'
+      - 'src/parser.c'
       - 'src/image_report.h'
       - 'src/syslinux_version.*'
       - 'src/syslinux_scan.*'
@@ -17,6 +24,11 @@ on:
       - 'src/cregex*'
       - 'tests/image_policy/**'
       - 'tests/image_file/**'
+      - 'tests/config_text/**'
+      - 'tests/format_policy/**'
+      - 'tests/progress_policy/**'
+      - 'tests/unattend/**'
+      - 'tests/partition_layout/**'
       - 'tests/syslinux_version/**'
       - 'tests/syslinux_scan/**'
       - 'tests/grub_inspect/**'
@@ -27,6 +39,13 @@ on:
     paths:
       - 'src/image_policy.*'
       - 'src/image_file.*'
+      - 'src/config_text.*'
+      - 'src/format_policy.*'
+      - 'src/progress_policy.*'
+      - 'src/unattend.*'
+      - 'src/wue.c'
+      - 'src/partition_layout.*'
+      - 'src/parser.c'
       - 'src/image_report.h'
       - 'src/syslinux_version.*'
       - 'src/syslinux_scan.*'
@@ -39,6 +58,11 @@ on:
       - 'src/cregex*'
       - 'tests/image_policy/**'
       - 'tests/image_file/**'
+      - 'tests/config_text/**'
+      - 'tests/format_policy/**'
+      - 'tests/progress_policy/**'
+      - 'tests/unattend/**'
+      - 'tests/partition_layout/**'
       - 'tests/syslinux_version/**'
       - 'tests/syslinux_scan/**'
       - 'tests/grub_inspect/**'
@@ -58,7 +82,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: [Win32, x64]
-        component: [image_policy, image_file, syslinux_version, syslinux_scan, grub_inspect, efi_boot_info, pe_arch]
+        component: [image_policy, image_file, config_text, format_policy, progress_policy, unattend, partition_layout, syslinux_version, syslinux_scan, grub_inspect, efi_boot_info, pe_arch]
     steps:
       - uses: actions/checkout@v7
         with:

@@ -1,0 +1,5 @@
+<RCC>
+ <qresource prefix="/rufus/appearance">
+  <file alias="autorun.ico">../../res/rufus.ico</file>
+ </qresource>
+</RCC>

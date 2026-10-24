@@ -17,9 +17,11 @@ ImageModeDialog::ImageModeDialog(const IMAGE_WRITE_CHOICES& choices, QWidget* pa
     : QDialog(parent), choices_(choices), buttons_(new QButtonGroup(this))
 {
     Q_ASSERT(choices.count >= 2 && choices.count <= 3);
-    Q_ASSERT(choices.mode[0] == IMAGE_WRITE_ISO && choices.mode[choices.count - 1] == IMAGE_WRITE_DD);
+    Q_ASSERT(choices.mode[0] == IMAGE_WRITE_ISO && (choices.mode[choices.count - 1] == IMAGE_WRITE_DD
+        || (choices.count == 2 && choices.mode[1] == IMAGE_WRITE_ESP)));
+    const bool espQuestion = choices.count == 2 && choices.mode[1] == IMAGE_WRITE_ESP;
     setObjectName(QStringLiteral("imageModeDialog"));
-    setWindowTitle(tr("%1 image detected").arg(QStringLiteral("ISOHybrid"))); // MSG_274
+    setWindowTitle(tr("%1 image detected").arg(espQuestion ? QStringLiteral("ESP") : QStringLiteral("ISOHybrid"))); // MSG_274
     setWindowModality(Qt::WindowModal);
     setWindowFlag(Qt::WindowContextHelpButtonHint, false);
 
@@ -32,12 +34,17 @@ ImageModeDialog::ImageModeDialog(const IMAGE_WRITE_CHOICES& choices, QWidget* pa
 
     const QString iso = tr("ISO Image"); // MSG_036
     const QString dd = tr("DD Image"); // MSG_095
-    QLabel* message = new QLabel(tr(
+    const QString hybridMessage = tr(
         "The image you have selected is an 'ISOHybrid' image. This means it can be written either in "
         "%1 (file copy) mode or %2 (disk image) mode.\n"
         "Rufus recommends using %1 mode, so that you always have full access to the drive after writing it.\n"
         "However, if you encounter issues during boot, you can try writing this image again in %2 mode.\n\n"
-        "Please select the mode that you want to use to write this image:").arg(iso, dd), this); // MSG_275
+        "Please select the mode that you want to use to write this image:").arg(iso, dd); // MSG_275
+    const QString espMessage = tr(
+        "The ISO you have selected uses UEFI and is small enough to be written as an EFI System Partition (ESP). "
+        "Writing to an ESP, instead of writing to a generic data partition occupying the whole disk, can be preferable "
+        "for some types of installations.\n\nPlease select the mode that you want to use to write this image:"); // MSG_310
+    QLabel* message = new QLabel(espQuestion ? espMessage : hybridMessage, this);
     message->setObjectName(QStringLiteral("imageModeMessage"));
     message->setTextFormat(Qt::PlainText);
     message->setWordWrap(true);
@@ -59,10 +66,10 @@ ImageModeDialog::ImageModeDialog(const IMAGE_WRITE_CHOICES& choices, QWidget* pa
 
     QFrame* line = new QFrame(this);
     line->setFrameShape(QFrame::HLine);
-    layout->addWidget(line, choices.count + 1, 0, 1, 2);
+    layout->addWidget(line, choices.count + 2, 0, 1, 2);
     QDialogButtonBox* actions = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     actions->button(QDialogButtonBox::Ok)->setDefault(true);
-    layout->addWidget(actions, choices.count + 2, 0, 1, 2);
+    layout->addWidget(actions, choices.count + 3, 0, 1, 2);
     connect(actions, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(actions, &QDialogButtonBox::rejected, this, &QDialog::reject);
     buttons_->button(1)->setFocus();
@@ -70,7 +77,9 @@ ImageModeDialog::ImageModeDialog(const IMAGE_WRITE_CHOICES& choices, QWidget* pa
 
 IMAGE_WRITE_MODE ImageModeDialog::selectedMode() const
 {
-    return result() == QDialog::Accepted ? GetImageWriteMode(&choices_, buttons_->checkedId()) : IMAGE_WRITE_NONE;
+    const QAbstractButton* selected = buttons_->checkedButton();
+    const bool accepted = result() == QDialog::Accepted && selected && selected->isEnabled();
+    return accepted ? GetImageWriteMode(&choices_, buttons_->checkedId()) : IMAGE_WRITE_NONE;
 }
 
 } // namespace rufus

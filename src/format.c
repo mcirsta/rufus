@@ -37,6 +37,8 @@
 
 #include "rufus.h"
 #include "format.h"
+#include "format_policy.h"
+#include "winpe_setup.h"
 #include "missing.h"
 #include "resource.h"
 #include "settings.h"
@@ -260,74 +262,21 @@ static BOOLEAN __stdcall ChkdskCallback(FILE_SYSTEM_CALLBACK_COMMAND Command, DW
  * TODO: Use IVdsService::QueryFileSystemTypes -> VDS_FILE_SYSTEM_TYPE_PROP
  * to get the list of unauthorised and max length for each FS.
  */
-static void ToValidLabel(char* Label, BOOL bFAT)
+static void ToValidLabel(char* Label, size_t capacity, BOOL bFAT)
 {
-	size_t i, j, k;
-	BOOL found;
-	const WCHAR unauthorized[] = L"*?,;:/\\|+=<>[]\"";
-	const WCHAR to_underscore[] = L"\t.";
-	char label[16] = { 0 };
 	WCHAR *wLabel = utf8_to_wchar(Label);
-
+	WCHAR normalized[VOLUME_LABEL_CAPACITY];
 	if (wLabel == NULL)
 		return;
-
-	for (i = 0, k = 0; i < wcslen(wLabel); i++) {
-		if (bFAT) {	// NTFS does allows all the FAT unauthorized above
-			found = FALSE;
-			for (j = 0; j < wcslen(unauthorized); j++) {
-				if (wLabel[i] == unauthorized[j]) {
-					found = TRUE;
-					break;
-				}
-			}
-			// A FAT label that contains extended chars will be rejected
-			if (wLabel[i] >= 0x80) {
-				wLabel[k++] = L'_';
-				found = TRUE;
-			}
-			if (found)
-				continue;
-		}
-		found = FALSE;
-		for (j = 0; j < wcslen(to_underscore); j++) {
-			if (wLabel[i] == to_underscore[j]) {
-				wLabel[k++] = '_';
-				found = TRUE;
-				break;
-			}
-		}
-		if (found)
-			continue;
-		wLabel[k++] = bFAT ? toupper(wLabel[i]) : wLabel[i];
-	}
-	wLabel[k] = 0;
-
-	if (bFAT) {
-		if (wcslen(wLabel) > 11)
-			wLabel[11] = 0;
-		for (i = 0, j = 0; wLabel[i] != 0 ; i++)
-			if (wLabel[i] == '_')
-				j++;
-		if (i < 2*j) {
-			// If the final label is mostly underscore, use an alternate label according to the
-			// size (eg: "256 MB", "7.9 GB"). Note that we can't use SelectedDrive.proposed_label
-			// here as it may contain localized character for GB or MB, so make sure that the
-			// effective label we use is an English one, and also make sure we convert the dot.
-			static_sprintf(label, "%s", SizeToHumanReadable(SelectedDrive.DiskSize, TRUE, FALSE));
-			for (i = 0; label[i] != 0; i++)
-				wLabel[i] = (label[i] == '.') ? '_' : label[i];
-			wLabel[i] = 0;
-			uprintf("FAT label is mostly underscores. Using '%S' label instead.", wLabel);
-		}
-	} else if (wcslen(wLabel) > 32) {
-		wLabel[32] = 0;
-	}
-
-	// Needed for disk by label isolinux.cfg workaround
-	wchar_to_utf8_no_alloc(wLabel, img_report.usb_label, sizeof(img_report.usb_label));
-	safe_strcpy(Label, strlen(Label) + 1, img_report.usb_label);
+	const bool fallback = NormalizeVolumeLabel((const uint16_t*)wLabel,
+		(uint16_t*)normalized, bFAT != FALSE, SelectedDrive.DiskSize);
 	free(wLabel);
+	if (fallback)
+		uprintf("FAT label is mostly underscores. Using '%S' label instead.", normalized);
+	// Needed for disk by label isolinux.cfg workaround. The fallback can be
+	// longer than the input, so use the actual destination buffer capacity.
+	wchar_to_utf8_no_alloc(normalized, img_report.usb_label, sizeof(img_report.usb_label));
+	safe_strcpy(Label, capacity, img_report.usb_label);
 }
 
 /*
@@ -760,7 +709,10 @@ out:
 static BOOL WriteMBR(HANDLE hPhysicalDrive)
 {
 	BOOL r = FALSE;
-	BOOL needs_masquerading = HAS_WINPE(img_report) && (!img_report.uses_minint);
+	BOOL needs_masquerading = GetWinPeSetupPlan(img_report.winpe, img_report.uses_minint).masquerade_disk;
+	const RUFUS_BOOT_OPTIONS boot_options = { boot_type, fs_type, target_type,
+		partition_type == PARTITION_STYLE_GPT, allow_dual_uefi_bios, use_rufus_mbr, needs_masquerading };
+	const enum rufus_mbr_type mbr_type = GetMasterBootRecord(&img_report, &boot_options);
 	uint8_t* buffer = NULL;
 	FAKE_FD fake_fd = { 0 };
 	FILE* fp = (FILE*)&fake_fd;
@@ -769,7 +721,7 @@ static BOOL WriteMBR(HANDLE hPhysicalDrive)
 	if (SelectedDrive.SectorSize < 512)
 		goto out;
 
-	if (partition_type == PARTITION_STYLE_GPT) {
+	if (mbr_type == RUFUS_MBR_PROTECTIVE) {
 		// Add a notice with a protective MBR
 		fake_fd._handle = (char*)hPhysicalDrive;
 		set_bytes_per_sector(SelectedDrive.SectorSize);
@@ -826,62 +778,41 @@ static BOOL WriteMBR(HANDLE hPhysicalDrive)
 	fake_fd._handle = (char*)hPhysicalDrive;
 	set_bytes_per_sector(SelectedDrive.SectorSize);
 
-	// What follows is really a case statement with complex conditions listed
-	// by order of preference
-	if ((boot_type == BT_IMAGE) && HAS_WINDOWS(img_report) && (allow_dual_uefi_bios) && (target_type == TT_BIOS))
-		goto windows_mbr;
-
-	// Non bootable or forced UEFI (zeroed MBR)
-	if ((boot_type == BT_NON_BOOTABLE) || (target_type == TT_UEFI)) {
+	switch (mbr_type) {
+	case RUFUS_MBR_ZERO:
 		uprintf(using_msg, "Zeroed");
 		r = write_zero_mbr(fp);
-		goto notify;
-	}
-
-	// Syslinux
-	if ( (boot_type == BT_SYSLINUX_V4) || (boot_type == BT_SYSLINUX_V6) ||
-		 ((boot_type == BT_IMAGE) && HAS_SYSLINUX(img_report)) ) {
+		break;
+	case RUFUS_MBR_SYSLINUX:
 		uprintf(using_msg, "Syslinux");
 		r = write_syslinux_mbr(fp);
-		goto notify;
-	}
-
-	// Grub 2.0
-	if ( ((boot_type == BT_IMAGE) && (img_report.has_grub2)) || (boot_type == BT_GRUB2) ) {
+		break;
+	case RUFUS_MBR_GRUB2:
 		uprintf(using_msg, "Grub 2.0");
 		r = write_grub2_mbr(fp);
-		goto notify;
-	}
-
-	// Grub4DOS
-	if ( ((boot_type == BT_IMAGE) && (img_report.has_grub4dos)) || (boot_type == BT_GRUB4DOS) ) {
+		break;
+	case RUFUS_MBR_GRUB4DOS:
 		uprintf(using_msg, "Grub4DOS");
 		r = write_grub4dos_mbr(fp);
-		goto notify;
-	}
-
-	// ReactOS
-	if (boot_type == BT_REACTOS) {
+		break;
+	case RUFUS_MBR_REACTOS:
 		uprintf(using_msg, "ReactOS");
 		r = write_reactos_mbr(fp);
-		goto notify;
-	}
-
-	// KolibriOS
-	if ( (boot_type == BT_IMAGE) && HAS_KOLIBRIOS(img_report) && (IS_FAT(fs_type))) {
+		break;
+	case RUFUS_MBR_KOLIBRIOS:
 		uprintf(using_msg, "KolibriOS");
 		r = write_kolibrios_mbr(fp);
-		goto notify;
-	}
-
-	// If everything else failed, fall back to a conventional Windows/Rufus MBR
-windows_mbr:
-	if (needs_masquerading || use_rufus_mbr) {
+		break;
+	case RUFUS_MBR_RUFUS:
 		uprintf(using_msg, APPLICATION_NAME);
 		r = write_rufus_mbr(fp);
-	} else {
+		break;
+	case RUFUS_MBR_WIN7:
 		uprintf(using_msg, "Windows 7");
 		r = write_win7_mbr(fp);
+		break;
+	default:
+		break;
 	}
 
 notify:
@@ -901,24 +832,13 @@ static BOOL WriteSBR(HANDLE hPhysicalDrive)
 {
 	// TODO: Do we need anything special for 4K sectors?
 	DWORD size, max_size, br_size = 0x200;
-	int r, sub_type = boot_type;
+	int r, sub_type = GetSecondaryBootType(boot_type, &img_report, partition_type == PARTITION_STYLE_GPT);
 	uint8_t *buf = NULL;
 	FAKE_FD fake_fd = { 0 };
 	FILE* fp = (FILE*)&fake_fd;
 
 	fake_fd._handle = (char*)hPhysicalDrive;
 	set_bytes_per_sector(SelectedDrive.SectorSize);
-	// Syslinux has precedence over Grub
-	if ((boot_type == BT_IMAGE) && (!HAS_SYSLINUX(img_report))) {
-		if (img_report.has_grub4dos)
-			sub_type = BT_GRUB4DOS;
-		if (img_report.has_grub2)
-			sub_type = BT_GRUB2;
-	}
-
-	// Use BT_MAX for the protective message
-	if ((boot_type != BT_NON_BOOTABLE) && (partition_type == PARTITION_STYLE_GPT))
-		sub_type = BT_MAX;
 
 	switch (sub_type) {
 	case BT_GRUB4DOS:
@@ -992,6 +912,7 @@ static __inline const char* bt_to_name(void) {
 BOOL WritePBR(HANDLE hLogicalVolume)
 {
 	int i;
+	const enum rufus_pbr_type pbr_type = GetPartitionBootRecord(boot_type, actual_fs_type, &img_report);
 	FAKE_FD fake_fd = { 0 };
 	FILE* fp = (FILE*)&fake_fd;
 	const char* using_msg = "Using %s %s partition boot record";
@@ -1007,11 +928,11 @@ BOOL WritePBR(HANDLE hLogicalVolume)
 			break;
 		}
 		uprintf("Confirmed new volume has a FAT16 boot sector");
-		if (boot_type == BT_FREEDOS) {
+		if (pbr_type == RUFUS_PBR_FAT16_FREEDOS) {
 			if (!write_fat_16_fd_br(fp, 0)) break;
-		} else if (boot_type == BT_REACTOS) {
+		} else if (pbr_type == RUFUS_PBR_FAT16_REACTOS) {
 			if (!write_fat_16_ros_br(fp, 0)) break;
-		} else if ((boot_type == BT_IMAGE) && HAS_KOLIBRIOS(img_report)) {
+		} else if (pbr_type == RUFUS_PBR_UNSUPPORTED) {
 			uprintf("FAT16 is not supported for KolibriOS"); break;
 		} else {
 			if (!write_fat_16_br(fp, 0)) break;
@@ -1029,15 +950,15 @@ BOOL WritePBR(HANDLE hLogicalVolume)
 			}
 			uprintf("Confirmed new volume has a %s FAT32 boot sector", i ? "secondary" : "primary");
 			uprintf("Setting %s FAT32 boot sector for boot...", i ? "secondary" : "primary");
-			if (boot_type == BT_FREEDOS) {
+			if (pbr_type == RUFUS_PBR_FAT32_FREEDOS) {
 				if (!write_fat_32_fd_br(fp, 0)) break;
-			} else if (boot_type == BT_REACTOS) {
+			} else if (pbr_type == RUFUS_PBR_FAT32_REACTOS) {
 				if (!write_fat_32_ros_br(fp, 0)) break;
-			} else if ((boot_type == BT_IMAGE) && HAS_KOLIBRIOS(img_report)) {
+			} else if (pbr_type == RUFUS_PBR_FAT32_KOLIBRIOS) {
 				if (!write_fat_32_kos_br(fp, 0)) break;
-			} else if ((boot_type == BT_IMAGE) && HAS_BOOTMGR(img_report)) {
+			} else if (pbr_type == RUFUS_PBR_FAT32_PE) {
 				if (!write_fat_32_pe_br(fp, 0)) break;
-			} else if ((boot_type == BT_IMAGE) && HAS_WINPE(img_report)) {
+			} else if (pbr_type == RUFUS_PBR_FAT32_NT) {
 				if (!write_fat_32_nt_br(fp, 0)) break;
 			} else {
 				if (!write_fat_32_br(fp, 0)) break;
@@ -1470,26 +1391,10 @@ DWORD WINAPI FormatThread(void* param)
 		uprintf("Notice: Large drive detected (may produce short writes)");
 
 	// Find out if we need to add any extra partitions
-	extra_partitions = 0;
-	if ((boot_type == BT_IMAGE) && !write_as_image && HAS_PERSISTENCE(img_report) && persistence_size)
-		extra_partitions |= XP_PERSISTENCE;
-	// According to Microsoft, every GPT disk (we RUN Windows from) must have an MSR due to not having hidden sectors
-	// https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/windows-and-gpt-faq#disks-that-require-an-msr
-	if ((windows_to_go) && (target_type == TT_UEFI) && (partition_type == PARTITION_STYLE_GPT))
-		extra_partitions |= XP_ESP | XP_MSR;
-	// If we have a bootable image with UEFI bootloaders and the target file system is NTFS or exFAT
-	// or the UEFI:NTFS option is selected, we add the UEFI:NTFS partition...
-	else if ((((boot_type == BT_IMAGE) && IS_EFI_BOOTABLE(img_report)) && ((fs_type == FS_NTFS) || (fs_type == FS_EXFAT))) ||
-			 (boot_type == BT_UEFI_NTFS)) {
-		extra_partitions |= XP_UEFI_NTFS;
-		// ...but only if we're not dealing with a Windows image in installer mode with target
-		//  system set to BIOS and without dual BIOS+UEFI boot enabled.
-		if ((boot_type == BT_IMAGE) && HAS_BOOTMGR_BIOS(img_report) && (!windows_to_go) &&
-			(target_type == TT_BIOS) && (!allow_dual_uefi_bios))
-			extra_partitions &= ~XP_UEFI_NTFS;
-	}
-	if (IsChecked(IDC_OLD_BIOS_FIXES))
-		extra_partitions |= XP_COMPAT;
+	const RUFUS_PARTITION_OPTIONS partition_options = { boot_type, fs_type, target_type,
+		partition_type == PARTITION_STYLE_GPT, windows_to_go, write_as_image,
+		allow_dual_uefi_bios, IsChecked(IDC_OLD_BIOS_FIXES), persistence_size };
+	extra_partitions = GetExtraPartitions(&img_report, &partition_options);
 
 	// On pre 1703 platforms (and even on later ones), anything with ext2/ext3 doesn't sit
 	// too well with Windows. Same with ESPs. Relaxing our locking rules seems to help...
@@ -1792,7 +1697,7 @@ try_clear:
 	if (append_silent && strstr(label, " (SILENT)") == NULL)
 		static_strcat(label, " (SILENT)");
 	if (fs_type < FS_EXT2)
-		ToValidLabel(label, (fs_type == FS_FAT16) || (fs_type == FS_FAT32) || (fs_type == FS_EXFAT));
+		ToValidLabel(label, sizeof(label), (fs_type == FS_FAT16) || (fs_type == FS_FAT32) || (fs_type == FS_EXFAT));
 	ClusterSize = (DWORD)ComboBox_GetCurItemData(hClusterSize);
 	if ((ClusterSize < 0x200) || (write_as_esp))
 		ClusterSize = 0;	// 0 = default cluster size
@@ -1876,18 +1781,19 @@ try_clear:
 			static_strcpy(img_report.usb_label, label);
 	}
 
+	const RUFUS_BOOT_OPTIONS boot_options = { boot_type, fs_type, target_type,
+		partition_type == PARTITION_STYLE_GPT, allow_dual_uefi_bios, use_rufus_mbr, false };
+	const enum rufus_boot_install_type boot_install = GetBootInstallType(&img_report, &boot_options);
 	if (boot_type != BT_NON_BOOTABLE) {
-		if (boot_type == BT_UEFI_NTFS) {
+		if (boot_install == RUFUS_BOOT_INSTALL_NONE) {
 			// All good
-		} else if (target_type == TT_UEFI) {
+		} else if (boot_install == RUFUS_BOOT_INSTALL_EFI_CHECK) {
 			// For once, no need to do anything - just check our sanity
 			if_assert_fails((boot_type == BT_IMAGE) && IS_EFI_BOOTABLE(img_report) && (fs_type <= FS_NTFS)) {
 				ErrorStatus = RUFUS_ERROR(ERROR_INSTALL_FAILURE);
 				goto out;
 			}
-		} else if ( (boot_type == BT_SYSLINUX_V4) || (boot_type == BT_SYSLINUX_V6) ||
-			((boot_type == BT_IMAGE) && (HAS_SYSLINUX(img_report) || HAS_REACTOS(img_report)) &&
-				(!HAS_WINDOWS(img_report) || !allow_dual_uefi_bios)) ) {
+		} else if (boot_install == RUFUS_BOOT_INSTALL_SYSLINUX) {
 			if (!InstallSyslinux(DriveIndex, drive_name[0], fs_type)) {
 				ErrorStatus = RUFUS_ERROR(ERROR_INSTALL_FAILURE);
 				goto out;

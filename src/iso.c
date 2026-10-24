@@ -44,6 +44,7 @@
 
 #include "rufus.h"
 #include "image_file.h"
+#include "config_text.h"
 #include "iso_scan.h"
 #include "iso_read.h"
 #include "iso_bootloaders.h"
@@ -248,6 +249,7 @@ static void fix_config(const char* psz_fullpath, const char* psz_path, const cha
 	BOOL modified = FALSE, patched;
 	size_t nul_pos;
 	char *iso_label = NULL, *usb_label = NULL, *src, *dst;
+	char efi_config[ISO_SYSLINUX_CONFIG_NAME_CAPACITY];
 
 	src = safe_strdup(psz_fullpath);
 	if (src == NULL)
@@ -315,13 +317,14 @@ static void fix_config(const char* psz_fullpath, const char* psz_path, const cha
 		// Then Artix called in and decided they would use a "for kopt ..." loop.
 		// Finally, we're just shoving the known isolinux/syslinux tokens in there to process
 		// all config files equally.
-		static const char* cfg_token[] = { "options", "append", "linux", "linuxefi", "$linux", "search", "for"};
+		CONFIG_TEXT_PATCH patches[ISO_CONFIG_MAX_PATCHES];
 		iso_label = replace_char(img_report.label, ' ', "\\x20");
 		usb_label = replace_char(img_report.usb_label, ' ', "\\x20");
 		if ((iso_label != NULL) && (usb_label != NULL)) {
+			size_t count = GetIsoConfigPatches(iso_label, usb_label, img_report.rh8_derivative, image_path, patches);
 			patched = FALSE;
-			for (int i = 0; i < ARRAYSIZE(cfg_token); i++) {
-				if (replace_in_token_data(src, cfg_token[i], iso_label, usb_label, TRUE) != NULL) {
+			for (size_t i = 0; i < ISO_CONFIG_LABEL_PASSES; i++) {
+				if (replace_in_token_data(src, patches[i].token, patches[i].source, patches[i].replacement, TRUE) != NULL) {
 					modified = TRUE;
 					patched = TRUE;
 				}
@@ -336,9 +339,9 @@ static void fix_config(const char* psz_fullpath, const char* psz_path, const cha
 			// they introduced a kernel option to decide where the source packages should be picked from we're just going
 			// to *hope* that users didn't rename their ISOs and check whether it contains 'netinst' or not. Oh well...
 			patched = FALSE;
-			if (img_report.rh8_derivative && (strstr(image_path, "netinst") == NULL)) {
-				for (int i = 0; i < ARRAYSIZE(cfg_token); i++) {
-					if (replace_in_token_data(src, cfg_token[i], "inst.stage2", "inst.repo", TRUE) != NULL) {
+			if (count > ISO_CONFIG_LABEL_PASSES) {
+				for (size_t i = ISO_CONFIG_LABEL_PASSES; i < count; i++) {
+					if (replace_in_token_data(src, patches[i].token, patches[i].source, patches[i].replacement, TRUE) != NULL) {
 						modified = TRUE;
 						patched = TRUE;
 					}
@@ -352,10 +355,8 @@ static void fix_config(const char* psz_fullpath, const char* psz_path, const cha
 	}
 
 	// Fix dual BIOS + EFI support for tails and other ISOs
-	if ( (props->is_syslinux_cfg) && (safe_stricmp(psz_path, efi_dirname) == 0) &&
-		 (safe_stricmp(psz_basename, syslinux_cfg[0]) == 0) &&
-		 (!img_report.has_efi_syslinux) && (dst = safe_strdup(src)) ) {
-		dst[nul_pos-12] = 's'; dst[nul_pos-11] = 'y'; dst[nul_pos-10] = 's';
+	if (GetEfiSyslinuxConfigName(&img_report, props, psz_path, psz_basename, efi_config) && (dst = safe_strdup(src))) {
+		strcpy(&dst[nul_pos - strlen(efi_config)], efi_config);
 		CopyFileA(src, dst, TRUE);
 		uprintf("Duplicated %s to %s", src, dst);
 		free(dst);
@@ -363,12 +364,11 @@ static void fix_config(const char* psz_fullpath, const char* psz_path, const cha
 
 	// Workaround for FreeNAS
 	if (props->is_grub_cfg) {
-		iso_label = malloc(MAX_PATH);
-		usb_label = malloc(MAX_PATH);
+		iso_label = malloc(CONFIG_VOLUME_PATH_CAPACITY);
+		usb_label = malloc(CONFIG_VOLUME_PATH_CAPACITY);
 		if ((iso_label != NULL) && (usb_label != NULL)) {
-			safe_sprintf(iso_label, MAX_PATH, "cd9660:/dev/iso9660/%s", img_report.label);
-			safe_sprintf(usb_label, MAX_PATH, "msdosfs:/dev/msdosfs/%s", img_report.usb_label);
-			if (replace_in_token_data(src, "set", iso_label, usb_label, TRUE) != NULL) {
+			CONFIG_TEXT_PATCH patch = GetFreeNasConfigPatch(img_report.label, img_report.usb_label, iso_label, usb_label);
+			if (replace_in_token_data(src, patch.token, patch.source, patch.replacement, TRUE) != NULL) {
 				uprintf("  Patched %s: '%s' ➔ '%s'", src, iso_label, usb_label);
 				modified = TRUE;
 			}
@@ -906,16 +906,7 @@ BOOL ExtractISO(const char* src_iso, const char* dest_dir, BOOL scan)
 	goto out;
 
 try_iso:
-	// Perform our first scan with Joliet disabled (if Rock Ridge is enabled), so that we can find if
-	// there exists a Rock Ridge file with a name > 64 chars or if there are symlinks. If that is the
-	// case then we also disable Joliet during the extract phase.
-	if ((!enable_joliet) || (enable_rockridge && (scan_only || img_report.has_long_filename ||
-		(img_report.has_symlinks == SYMLINKS_RR)))) {
-		iso_extension_mask &= ~ISO_EXTENSION_JOLIET;
-	}
-	if (!enable_rockridge) {
-		iso_extension_mask &= ~ISO_EXTENSION_ROCK_RIDGE;
-	}
+	iso_extension_mask = GetIsoExtensionMask(enable_joliet, enable_rockridge, scan_only, &img_report);
 
 	p_iso = iso9660_open_ext(src_iso, iso_extension_mask);
 	if (p_iso == NULL) {
@@ -1020,29 +1011,25 @@ out:
 			DumpFatDir(p_iso, dest_dir, 0);
 		}
 		if (HAS_SYSLINUX(img_report)) {
+			ISO_SYSLINUX_CONFIG config;
 			static_sprintf(path, "%s\\syslinux.cfg", dest_dir);
 			// Create a /syslinux.cfg (if none exists) that points to the existing isolinux cfg
 			fd = fopen(path, "r");
-			if (fd != NULL && img_report.needs_syslinux_overwrite) {
+			GetIsoSyslinuxConfig(&img_report, fd != NULL, &config);
+			if (config.backup) {
 				fclose(fd);
 				fd = NULL;
 				static_sprintf(path2, "%s\\syslinux.org", dest_dir);
 				uprintf("Renaming: %s ➔ %s", path, path2);
 				IGNORE_RETVAL(rename(path, path2));
 			}
-			if (fd == NULL) {
+			if (config.create) {
 				fd = fopen(path, "w");	// No "/syslinux.cfg" => create a new one
 				if (fd == NULL) {
 					uprintf("Unable to create %s - booting from USB will not work", path);
 					r = 1;
 				} else {
-					fprintf(fd, "DEFAULT loadconfig\n\nLABEL loadconfig\n  CONFIG %s\n", img_report.cfg_path);
-					for (i = safe_strlen(img_report.cfg_path); (i > 0) && (img_report.cfg_path[i] != '/'); i--);
-					if (i > 0) {
-						img_report.cfg_path[i] = 0;
-						fprintf(fd, "  APPEND %s/\n", img_report.cfg_path);
-						img_report.cfg_path[i] = '/';
-					}
+					fputs(config.text, fd);
 					uprintf("Created: %s → %s", path, img_report.cfg_path);
 				}
 			}

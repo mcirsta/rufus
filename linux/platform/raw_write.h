@@ -43,6 +43,14 @@ extern "C" {
 int WriteRawImage(const IMAGE_FILE_SOURCE* source, const char* source_path,
 	int target_fd, RAW_WRITE_RESULT* result);
 
+/* Same regular-file copy/flush/verify operation, bounded to an explicit target
+ * extent. Require nonzero size and source bytes <= size; preserve all bytes
+ * before offset and after the copied source, including unused extent padding.
+ * The caller validates partition metadata and retains exclusive file ownership.
+ * No block-device support in this entry point. */
+int WriteRawImageToExtent(const IMAGE_FILE_SOURCE* source, const char* source_path,
+	int target_fd, uint64_t offset, uint64_t size, RAW_WRITE_RESULT* result);
+
 /* Kernel validation shared by native authorization and the write boundary.
  * Checks block identity, capacity, writable/buffered access and sector alignment.
  * It does not authorize, acquire exclusivity or open anything. Returns errno. */
@@ -55,6 +63,12 @@ int CheckRawBlockTarget(int fd, uint64_t device, uint64_t capacity, uint64_t ima
  * The Qt application supplies descriptors through native UDisks authorization. */
 int WriteRawImageToDevice(const IMAGE_FILE_SOURCE* source, const char* source_path,
 	int target_fd, uint64_t device, uint64_t capacity, RAW_WRITE_RESULT* result);
+
+/* Same authorized device operation, bounded to a nonempty sector-aligned extent.
+ * Offset/size must fit the expected capacity and contain the complete source.
+ * Retain whole-device exclusivity; preserve all bytes outside the payload. */
+int WriteRawImageToDeviceExtent(const IMAGE_FILE_SOURCE* source, const char* source_path,
+	int target_fd, uint64_t device, uint64_t capacity, uint64_t offset, uint64_t size, RAW_WRITE_RESULT* result);
 
 #ifdef __cplusplus
 }

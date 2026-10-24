@@ -1,0 +1,41 @@
+{
+  "source": "Original Rufus signed boot-resource service",
+  "files": [
+    {
+      "url": "https://rufus.ie/files/syslinux-6.03/ldlinux.sys",
+      "file": "ldlinux.sys",
+      "sha256": "3f1206e0cc45dbe180e73adaeb221bfc7d5a800095738549390379d7d0282ac3",
+      "bytes": 68599
+    },
+    {
+      "url": "https://rufus.ie/files/syslinux-6.03/ldlinux.sys.sig",
+      "file": "ldlinux.sys.sig",
+      "sha256": "f4322849cfb5170643e299df430222f87f27f146ab7493042894e5f180c626fb",
+      "bytes": 256
+    },
+    {
+      "url": "https://rufus.ie/files/syslinux-6.03/ldlinux.bss",
+      "file": "ldlinux.bss",
+      "sha256": "8814e576abc1aa44dde943b0caaee833a5810142614adeeb4cc725e78a5045b7",
+      "bytes": 512
+    },
+    {
+      "url": "https://rufus.ie/files/syslinux-6.03/ldlinux.bss.sig",
+      "file": "ldlinux.bss.sig",
+      "sha256": "81d7c90538afbc6d87d7be4878cfc070985b09e9b48b4578d03665418ffd07aa",
+      "bytes": 256
+    },
+    {
+      "url": "https://rufus.ie/files/syslinux-6.03/ldlinux.c32",
+      "file": "ldlinux.c32",
+      "sha256": "5cef9ad0d0ca04097262241686c6c3a7306ab9b9cdf24b9d4ee3b16af01a5af2",
+      "bytes": 122308
+    },
+    {
+      "url": "https://rufus.ie/files/syslinux-6.03/ldlinux.c32.sig",
+      "file": "ldlinux.c32.sig",
+      "sha256": "5275ac344c9889e7a41e3374552e2f04f44835775e536b9aea155d25a1dc3218",
+      "bytes": 256
+    }
+  ]
+}

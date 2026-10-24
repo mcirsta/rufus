@@ -15,7 +15,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-enum { SECTOR_BYTES = 512, DISK_BYTES = 64 * 1024 * 1024, INITIAL_POSITION = 17 };
+enum { SECTOR_BYTES = 512, DISK_BYTES = 64 * 1024 * 1024,
+	UEFI_NTFS_TEST_BYTES = 1024 * 1024, INITIAL_POSITION = 17 };
 static const char* fault = "none";
 static int cancelled, writes, syncs;
 
@@ -224,7 +225,7 @@ int main(void)
 	Require(fstat(fd, &info) == 0 && S_ISBLK(info.st_mode), "block descriptor");
 	Require(ioctl(fd, BLKGETSIZE64, &capacity) == 0 && capacity == DISK_BYTES, "fixture capacity");
 	Require(ioctl(fd, BLKSSZGET, &sector) == 0, "native sector size");
-	GPT_IMAGE_OPTIONS options = { DISK_BYTES, SECTOR_BYTES, 63, SECTOR_BYTES, (uint64_t)info.st_rdev };
+	GPT_IMAGE_OPTIONS options = { DISK_BYTES, SECTOR_BYTES, 63, SECTOR_BYTES, (uint64_t)info.st_rdev, 0 };
 	printf("RUFUS_GPT_DEVICE SECTOR=%d CAPACITY=%" PRIu64 "\n", sector, capacity);
 	if (sector == 4096) {
 		CheckRequest("native-4k", fd, options, ENOTSUP, false);
@@ -234,6 +235,9 @@ int main(void)
 	}
 	Require(sector == SECTOR_BYTES, "512-byte fixture");
 	GPT_IMAGE_OPTIONS changed = options;
+	changed.uefi_ntfs_size = UEFI_NTFS_TEST_BYTES;
+	CheckRequest("uefi-layout", fd, changed, 0, true);
+	changed = options;
 	changed.device = 0;
 	CheckRequest("missing-device", fd, changed, ENOTSUP, false);
 	changed.device = options.device + 1;

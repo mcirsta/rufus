@@ -33,6 +33,10 @@
     <ClCompile Include="..\src\bled\data_align.c" />
     <ClCompile Include="..\src\bled\data_extract_all.c" />
     <ClCompile Include="..\src\bled\data_skip.c" />
+    <None Include="..\src\bled\bunzip_core.inc" />
+    <None Include="..\src\bled\unlzma_core.inc" />
+    <None Include="..\src\bled\uncompress_core.inc" />
+    <None Include="..\src\bled\unzip_format.inc" />
     <ClCompile Include="..\src\bled\decompress_bunzip2.c" />
     <ClCompile Include="..\src\bled\decompress_gunzip.c" />
     <ClCompile Include="..\src\bled\decompress_uncompress.c" />
@@ -67,6 +71,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\bled\bb_archive.h" />
+    <ClInclude Include="..\src\bled\compression.h" />
     <ClInclude Include="..\src\bled\bled.h" />
     <ClInclude Include="..\src\bled\fse.h" />
     <ClInclude Include="..\src\bled\fse_bitstream.h" />

@@ -1,21 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "raw_write_controller.h"
+#include "device_policy.h"
 
+#include "platform/device_selection.h"
+#include "platform/prepare_source.h"
+#include <QFileInfo>
 #include <cerrno>
+#include <cstring>
+#include <unistd.h>
 
 namespace rufus
 {
 
 RawWriteController::RawWriteController(QObject* parent) : QObject(parent)
 {
-    connect(&thread_, &QThread::finished, this, &RawWriteController::workerFinished, Qt::QueuedConnection);
 }
 
 RawWriteController::~RawWriteController()
 {
-    thread_.requestInterruption();
-    thread_.quit();
-    thread_.wait();
+    if (process_)
+    {
+        disconnect(process_.get(), nullptr, this, nullptr);
+        process_.reset(); // EOF cancellation and helper exit precede plan destruction.
+    }
 }
 
 bool RawWriteController::isActive() const
@@ -35,7 +42,7 @@ bool RawWriteController::isActive() const
 
 bool RawWriteController::isAvailable() const
 {
-    return connection_ && connection_->isConnected();
+    return connection_ && connection_->isConnected() && helperAvailable();
 }
 
 void RawWriteController::setConnection(const QDBusConnection& connection)
@@ -47,16 +54,36 @@ void RawWriteController::setConnection(const QDBusConnection& connection)
     emit changed();
 }
 
+void RawWriteController::setHelper(const QString& path)
+{
+    if (!isActive())
+    {
+        helper_ = path;
+        emit changed();
+    }
+}
+
+bool RawWriteController::helperAvailable() const
+{
+    const QFileInfo helper(helper_);
+    return helper.isAbsolute() && helper.isFile() && helper.isExecutable();
+}
+
 void RawWriteController::reset()
 {
     if (isActive())
         return;
+    process_.reset();
+    helperActive_ = false;
+    sparseImage_ = false;
+    zeroMode_ = ZERO_NONE;
+    progressTotal_ = 0;
+    badBlocksProcessed_ = badBlocksTotal_ = 0;
     access_.reset();
     plan_.reset();
     status_ = {};
     invalidated_.clear();
     hasResult_ = false;
-    ++request_;
 }
 
 void RawWriteController::publish()
@@ -64,29 +91,51 @@ void RawWriteController::publish()
     emit logMessage(statusText());
     if (!isActive() && status_.outcome.io.bytes_written != 0)
         emit logMessage(tr("Written: %1 bytes; verified: %2 / %3 bytes.")
-            .arg(status_.outcome.io.bytes_written).arg(status_.outcome.io.bytes_verified).arg(status_.size));
+            .arg(status_.outcome.io.bytes_written).arg(status_.outcome.io.bytes_verified)
+            .arg(sparseImage_ ? status_.outcome.io.bytes_written : status_.size));
     emit changed();
 }
 
-void RawWriteController::prepare(const QString& path, const Device& device)
+void RawWriteController::prepare(const QString& path, const Device& device, const PrepareImageRequest* expected, bool allowFixedUsb)
 {
-    if (isActive() || !isAvailable())
+    if (isActive())
         return;
     reset();
+    if (!isAvailable())
+    {
+        status_.state = WriteState::Failed;
+        status_.outcome.problem = tr("The device service or preparation helper is unavailable. Try again after restoring it.");
+        publish();
+        return;
+    }
     plan_ = std::make_unique<RawWritePlan>();
-    status_.outcome.problem = plan_->prepare(path, device);
+    status_.outcome.problem = plan_->prepare(path, device, expected, allowFixedUsb);
     if (!status_.outcome.problem.isEmpty())
     {
         status_.state = WriteState::Failed;
         publish();
         return;
     }
-    status_.size = quint64(plan_->source().info.st_size);
+    diskSequence_ = plan_->targetDiskSequence();
+    zeroMode_ = plan_->imageMetadata().zeroMode;
+    sparseImage_ = zeroMode_ == ZERO_FAST || plan_->imageMetadata().imageCompression == BLED_COMPRESSION_VTSI
+        || plan_->imageMetadata().imageCompression == IMG_COMPRESSION_FFU;
+    if (diskSequence_ == 0) diskSequence_ = ReadDiskSequence(device.number);
+    status_.size = plan_->writeBytes();
+    progressTotal_ = plan_->imageMetadata().imageCompression == IMG_COMPRESSION_FFU ? device.size : status_.size;
     status_.state = WriteState::Checking;
     access_ = std::make_unique<UDisksTarget>(*connection_, *plan_);
     connect(access_.get(), &UDisksTarget::stateChanged, this, &RawWriteController::accessChanged);
     publish();
-    access_->check();
+    access_->check(true);
+}
+
+void RawWriteController::prepareZero(const Device& device, int mode, bool allowFixedUsb, int badBlocksPattern, bool detectFakes)
+{
+    PrepareImageRequest request;
+    request.zeroMode = mode;
+    request.badBlocksPattern = badBlocksPattern; request.detectFakes = detectFakes;
+    prepare({}, device, &request, allowFixedUsb);
 }
 
 void RawWriteController::accessChanged(UDisksTarget::State state)
@@ -99,12 +148,17 @@ void RawWriteController::accessChanged(UDisksTarget::State state)
         cancel();
     else if (state == UDisksTarget::State::Prepared)
     {
+        if (!helperAvailable())
+        {
+            invalidate(tr("The matching preparation helper is required for image writing."));
+            return;
+        }
         status_.state = WriteState::AwaitingConfirmation;
         publish();
         emit confirmationRequired();
     }
     else if (state == UDisksTarget::State::Ready && status_.state == WriteState::Authorizing)
-        startWorker();
+        startHelper();
 }
 
 void RawWriteController::confirm()
@@ -113,34 +167,81 @@ void RawWriteController::confirm()
         return;
     status_.state = WriteState::Authorizing;
     publish();
-    access_->authorize();
+    access_->recheck();
 }
 
-void RawWriteController::startWorker()
+void RawWriteController::startHelper()
 {
-    QDBusUnixFileDescriptor descriptor = access_->takeDescriptor();
-    if (!descriptor.isValid())
+    if (!helperAvailable())
     {
-        invalidate(tr("No authorized target descriptor is available."));
+        invalidate(tr("The preparation helper is required for this target."));
         return;
     }
-    RawWriteJob* job = new RawWriteJob(request_, *plan_, descriptor);
-    job->moveToThread(&thread_);
-    connect(&thread_, &QThread::started, job, &RufusJob::run);
-    connect(job, &RawWriteJob::writeProgress, this, &RawWriteController::acceptProgress, Qt::QueuedConnection);
-    connect(job, &RawWriteJob::writeResult, this, &RawWriteController::acceptResult, Qt::QueuedConnection);
-    connect(job, &RufusJob::finished, &thread_, &QThread::quit, Qt::DirectConnection);
-    connect(&thread_, &QThread::finished, job, &QObject::deleteLater);
-    workerActive_ = true;
-    status_.state = WriteState::Writing;
-    // Start before publishing: cancellation from a receiver must reach this run.
-    thread_.start();
-    publish();
+    const Device& target = plan_->target();
+    PrepareImageRequest request = plan_->imageMetadata();
+    request.rawWrite = request.isDevice = true;
+    request.allowFixedUsb = plan_->allowsFixedUsb();
+    request.path = target.path;
+    request.device = target.number;
+    request.size = target.size;
+    request.objectPath = target.objectPath;
+    request.serviceOwner = target.serviceOwner;
+    request.identity = target.identity;
+    request.diskSequence = diskSequence_;
+    FreezeDevicePolicy(request);
+    int error = 0;
+    if (zeroMode_ == ZERO_NONE)
+    {
+        error = CapturePrepareSource(plan_->sourcePath(), request);
+        if (error == 0) error = CheckPrepareSourceIdentity(request, plan_->source());
+    }
+    const bool sameDisk = diskSequence_ != 0 && ReadDiskSequence(target.number) == diskSequence_;
+    if (error == 0 && !sameDisk) error = ESTALE;
+    if (error == 0 && zeroMode_ == ZERO_NONE)
+    {
+        PrepareIsoSource source(request);
+        error = source.open(getuid()); // Same ownership/path checks as the authorized helper.
+    }
+    if (error != 0)
+    {
+        invalidate(tr("Cannot prepare the target: %1").arg(QString::fromLocal8Bit(strerror(error))));
+        return;
+    }
+    process_ = std::make_unique<PrepareImageProcess>(helper_);
+    process_->setReportDirectory(reportDirectory_);
+    connect(process_.get(), &PrepareImageProcess::progressChanged, this, &RawWriteController::badBlocksProgress);
+    connect(process_.get(), &PrepareImageProcess::badBlocksReviewRequired, this, &RawWriteController::badBlocksReviewRequired);
+    connect(process_.get(), &PrepareImageProcess::changed, this, &RawWriteController::helperChanged);
+    connect(process_.get(), &PrepareImageProcess::rawProgressChanged, this, &RawWriteController::helperProgress);
+    connect(process_.get(), &PrepareImageProcess::logMessage, this, &RawWriteController::logMessage);
+    connect(process_.get(), &PrepareImageProcess::finished, this, &RawWriteController::helperFinished);
+    helperActive_ = true;
+    if (!process_->start(request))
+    {
+        helperActive_ = false;
+        invalidate(process_->problem().isEmpty() ? tr("The DD helper request could not be started.") : process_->problem());
+    }
 }
 
-void RawWriteController::acceptProgress(quint64 request, int phase, quint64 processed)
+void RawWriteController::helperChanged()
 {
-    if (request != request_ || !workerActive_ || hasResult_)
+    if (process_->state() == PrepareImageProcess::State::Running && status_.state == WriteState::Authorizing)
+    {
+        status_.state = WriteState::Writing;
+        publish();
+    }
+}
+
+void RawWriteController::badBlocksProgress(int operation, quint64 processed, quint64 total)
+{
+    if (operation != OP_BADBLOCKS) return;
+    badBlocksProcessed_ = processed; badBlocksTotal_ = total;
+    emit changed();
+}
+
+void RawWriteController::helperProgress(int phase, quint64 processed, quint64)
+{
+    if (!helperActive_ || hasResult_)
         return;
     const RAW_WRITE_PHASE previous = status_.outcome.io.phase;
     status_.outcome.io.phase = RAW_WRITE_PHASE(phase);
@@ -153,19 +254,20 @@ void RawWriteController::acceptProgress(quint64 request, int phase, quint64 proc
     emit changed();
 }
 
-void RawWriteController::acceptResult(quint64 request, const RawWriteOutcome& outcome)
+void RawWriteController::helperFinished()
 {
-    if (request != request_ || !workerActive_)
-        return;
+    const PrepareImageOutcome& outcome = process_->outcome();
+    status_.outcome.io = outcome.raw;
+    status_.outcome.error = outcome.error;
+    status_.outcome.started = outcome.started;
+    status_.outcome.problem = process_->problem();
     hasResult_ = true;
-    status_.outcome = outcome;
-    // Remain busy until the thread and descriptor have actually been released.
+    helperActive_ = false;
+    finishWrite(); // The process client emits finished only after helper/launcher exit.
 }
 
-void RawWriteController::workerFinished()
+void RawWriteController::finishWrite()
 {
-    thread_.wait();
-    workerActive_ = false;
     if (!invalidated_.isEmpty())
     {
         status_.outcome.problem = invalidated_ + QLatin1Char(' ') + status_.outcome.problem;
@@ -180,8 +282,12 @@ void RawWriteController::workerFinished()
         status_.outcome.error = ECANCELED;
     const bool writeFailed = status_.outcome.error != 0 && status_.outcome.error != ECANCELED;
     const bool syncFailed = status_.outcome.io.sync_error != 0;
-    const bool fullyVerified = status_.outcome.io.bytes_written == status_.size
+    const bool sparseComplete = process_ && process_->state() == PrepareImageProcess::State::Complete
+        && (zeroMode_ == ZERO_FAST || status_.outcome.io.bytes_written > 0)
+        && status_.outcome.io.bytes_verified == status_.outcome.io.bytes_written;
+    const bool denseComplete = status_.outcome.io.bytes_written == status_.size
         && status_.outcome.io.bytes_verified == status_.size;
+    const bool fullyVerified = sparseImage_ ? sparseComplete : denseComplete;
     if (writeFailed || syncFailed)
         status_.state = WriteState::Failed;
     else if (status_.outcome.error == ECANCELED)
@@ -203,9 +309,9 @@ void RawWriteController::cancel()
 {
     if (!isActive() || status_.state == WriteState::Cancelling)
         return;
-    status_.state = workerActive_ ? WriteState::Cancelling : WriteState::Cancelled;
-    if (workerActive_)
-        thread_.requestInterruption();
+    status_.state = helperActive_ ? WriteState::Cancelling : WriteState::Cancelled;
+    if (helperActive_)
+        process_->cancel();
     else if (access_)
         access_->cancel();
     publish();
@@ -216,10 +322,10 @@ void RawWriteController::invalidate(const QString& problem)
     if (!isActive())
         return;
     invalidated_ = problem;
-    if (workerActive_)
+    if (helperActive_)
     {
         status_.state = WriteState::Cancelling;
-        thread_.requestInterruption();
+        process_->cancel();
     }
     else
     {
@@ -235,12 +341,15 @@ int RawWriteController::percent() const
 {
     if (status_.state == WriteState::Complete)
         return 100;
-    if (status_.size == 0)
+    if (progressTotal_ == 0)
         return 0;
     const double bytes = double(status_.outcome.io.bytes_written) + double(status_.outcome.io.bytes_verified);
     // Copying and verification each account for half; reserve 100% for completion.
     constexpr double percentPerPass = 50.0;
-    return qBound(0, int(percentPerPass * bytes / double(status_.size)), 99);
+    const bool tested = plan_ && plan_->imageMetadata().badBlocksPattern >= 0;
+    if (!tested) return qBound(0, int(percentPerPass * bytes / double(progressTotal_)), 99);
+    const double test = badBlocksTotal_ == 0 ? 0 : 50.0 * double(badBlocksProcessed_) / double(badBlocksTotal_);
+    return qBound(0, int(test + 25.0 * bytes / double(progressTotal_)), 99);
 }
 
 QString RawWriteController::statusText() const
@@ -248,21 +357,25 @@ QString RawWriteController::statusText() const
     switch (status_.state)
     {
     case WriteState::Idle: return {};
-    case WriteState::Checking: return tr("Checking the selected image and device...");
+    case WriteState::Checking: return zeroMode_ != ZERO_NONE ? tr("Checking the selected device...") : tr("Checking the selected image and device...");
     case WriteState::AwaitingConfirmation: return tr("Waiting for confirmation...");
     case WriteState::Authorizing: return tr("Waiting for device authorization...");
     case WriteState::Cancelling: return tr("Cancelling... Waiting for device I/O to finish.");
-    case WriteState::Complete: return tr("Image written and verified.");
+    case WriteState::Complete: return zeroMode_ != ZERO_NONE ? tr("Device cleared and verified.") : tr("Image written and verified.");
     case WriteState::Failed: return status_.outcome.problem;
     case WriteState::Cancelled:
-        return status_.outcome.io.bytes_written == 0 ? tr("Image writing cancelled.")
+        if (zeroMode_ != ZERO_NONE) return tr("Device clearing cancelled. Unverified data may remain.");
+        return !status_.outcome.started && status_.outcome.io.bytes_written == 0 ? tr("Image writing cancelled.")
             : tr("Image writing cancelled. The device contains an incomplete or unverified image.");
     case WriteState::Writing:
+        if (badBlocksTotal_ != 0 && status_.outcome.io.phase == RAW_WRITE_PREPARE)
+            return tr("Checking for bad blocks and fake capacity...");
         if (status_.outcome.io.phase == RAW_WRITE_SYNC)
             return tr("Flushing written data...");
         if (status_.outcome.io.phase == RAW_WRITE_VERIFY)
-            return tr("Verifying image: %1 / %2 bytes").arg(status_.outcome.io.bytes_verified).arg(status_.size);
-        return tr("Writing image: %1 / %2 bytes").arg(status_.outcome.io.bytes_written).arg(status_.size);
+            return tr("Verifying image: %1 / %2 bytes").arg(status_.outcome.io.bytes_verified).arg(progressTotal_);
+        return (zeroMode_ != ZERO_NONE ? tr("Clearing device: %1 / %2 bytes") : tr("Writing image: %1 / %2 bytes"))
+            .arg(status_.outcome.io.bytes_written).arg(progressTotal_);
     }
     return {};
 }

@@ -130,6 +130,11 @@ struct xz_dec {
 
 	struct xz_dec_lzma2 *lzma2;
 
+/* Optional native integrity checks; absent in the original Windows build. */
+#ifdef XZ_DEC_EXTENDED_CHECK
+	XZ_DEC_EXTENDED_CHECK extended_check;
+#endif
+
 #ifdef XZ_DEC_BCJ
 	struct xz_dec_bcj *bcj;
 	bool bcj_active;
@@ -244,6 +249,11 @@ static enum xz_ret XZ_FUNC dec_block(struct xz_dec *s, struct xz_buf *b)
 	if (s->check_type == XZ_CHECK_CRC32)
 		s->crc32 = xz_crc32(b->out + s->out_start,
 				b->out_pos - s->out_start, s->crc32);
+#ifdef XZ_DEC_EXTENDED_CHECK
+	else if (s->check_type > XZ_CHECK_CRC32)
+		xz_check_update(&s->extended_check, s->check_type,
+				b->out + s->out_start, b->out_pos - s->out_start);
+#endif
 
 	if (ret == XZ_STREAM_END) {
 		if (s->block_header.compressed != VLI_UNKNOWN
@@ -648,6 +658,13 @@ static NOINLINE enum xz_ret XZ_FUNC dec_main(struct xz_dec *s, struct xz_buf *b)
 				if (ret != XZ_STREAM_END)
 					return ret;
 			}
+#ifdef XZ_DEC_EXTENDED_CHECK
+			else if (s->check_type > XZ_CHECK_CRC32) {
+				ret = xz_check_validate(&s->extended_check, s->check_type, b);
+				if (ret != XZ_STREAM_END)
+					return ret;
+			}
+#endif
 #ifdef XZ_DEC_ANY_CHECK
 			else if (!check_skip(s, b)) {
 				return XZ_OK;
@@ -802,6 +819,9 @@ XZ_EXTERN void XZ_FUNC xz_dec_reset(struct xz_dec *s)
 	s->allow_buf_error = false;
 	s->pos = 0;
 	s->crc32 = 0;
+#ifdef XZ_DEC_EXTENDED_CHECK
+	memzero(&s->extended_check, sizeof(s->extended_check));
+#endif
 	memzero(&s->block, sizeof(s->block));
 	memzero(&s->index, sizeof(s->index));
 	s->temp.pos = 0;

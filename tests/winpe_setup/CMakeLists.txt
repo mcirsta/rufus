@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+cmake_minimum_required(VERSION 3.21)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    project(RufusWinPeSetupTests LANGUAGES C)
+    include(CTest)
+endif()
+
+add_executable(test_winpe_setup test_winpe_setup.c reference_winpe.c ../../src/winpe_setup.c)
+target_include_directories(test_winpe_setup PRIVATE ../../src)
+target_compile_features(test_winpe_setup PRIVATE c_std_11)
+if(MSVC)
+    target_compile_options(test_winpe_setup PRIVATE /W4)
+    target_compile_definitions(test_winpe_setup PRIVATE _CRT_SECURE_NO_WARNINGS)
+else()
+    target_compile_options(test_winpe_setup PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+if(NOT WIN32)
+    target_compile_definitions(test_winpe_setup PRIVATE _GNU_SOURCE)
+    target_compile_options(test_winpe_setup PRIVATE
+        -include "${CMAKE_CURRENT_SOURCE_DIR}/../../linux/platform/crt_strings.h")
+endif()
+add_test(NAME rufus_winpe_setup COMMAND test_winpe_setup)
+set_tests_properties(rufus_winpe_setup PROPERTIES LABELS "component;image;no-hardware" TIMEOUT 30)

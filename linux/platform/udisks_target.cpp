@@ -6,7 +6,6 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusServiceWatcher>
-#include <fcntl.h>
 
 namespace rufus
 {
@@ -18,9 +17,8 @@ constexpr int requestTimeoutMs = 5000;
 }
 
 UDisksTarget::UDisksTarget(const QDBusConnection& connection, const RawWritePlan& plan,
-    int authorizationTimeout, QObject* parent)
-    : QObject(parent), connection_(connection), plan_(plan),
-      authorizationTimeout_(authorizationTimeout > 0 ? authorizationTimeout : DefaultAuthorizationTimeoutMs)
+    QObject* parent)
+    : QObject(parent), connection_(connection), plan_(plan)
 {
     qDBusRegisterMetaType<UDisksInterfaces>();
     qDBusRegisterMetaType<UDisksObjects>();
@@ -53,21 +51,20 @@ void UDisksTarget::discardPending()
 void UDisksTarget::fail(const QString& problem)
 {
     discardPending();
-    descriptor_ = {};
     problem_ = problem;
     setState(State::Failed);
 }
 
-void UDisksTarget::check()
+void UDisksTarget::check(bool allowMounted)
 {
     if (state_ != State::Idle)
         return;
-    const bool passesDescriptors = connection_.connectionCapabilities() & QDBusConnection::UnixFileDescriptorPassing;
-    if (!connection_.isConnected() || !watchesDisconnect_ || !passesDescriptors)
+    if (!connection_.isConnected() || !watchesDisconnect_)
     {
-        fail(tr("D-Bus with Unix descriptor passing is required for target access."));
+        fail(tr("D-Bus is required to check the selected target."));
         return;
     }
+    allowMounted_ = allowMounted;
     snapshot(State::Checking);
 }
 
@@ -113,10 +110,14 @@ void UDisksTarget::snapshotFinished(QDBusPendingCallWatcher* watcher)
         return;
     }
     // The request was sent to this unique owner after resolving the service;
-    // owner-change notifications invalidate pending acquisition.
-    QString problem = plan_.checkSnapshot(reply.value(), plan_.target().serviceOwner);
-    if (problem.isEmpty() && state_ == State::Rechecking)
-        problem = CheckRawTargetDescriptor(descriptor_.fileDescriptor(), plan_);
+    // owner-change notifications invalidate the pending check.
+    QStringList mounts;
+    int partitions = 0;
+    QString problem = plan_.checkSnapshot(reply.value(), plan_.target().serviceOwner, allowMounted_ ? &mounts : nullptr, &partitions);
+    const bool newWarning = state_ != State::Checking && partitionCount_ <= 1 && partitions > 1;
+    if (problem.isEmpty() && newWarning)
+        problem = tr("The device now contains multiple partitions. Start again to review the warnings.");
+    if (state_ == State::Checking) partitionCount_ = partitions;
     if (!problem.isEmpty())
     {
         fail(problem);
@@ -124,78 +125,22 @@ void UDisksTarget::snapshotFinished(QDBusPendingCallWatcher* watcher)
     }
     if (state_ == State::Checking)
         setState(State::Prepared);
-    else if (state_ == State::BeforeAuthorization)
-        open();
     else if (state_ == State::Rechecking)
         setState(State::Ready);
 }
 
-void UDisksTarget::authorize()
+void UDisksTarget::recheck()
 {
     if (state_ == State::Prepared)
-        snapshot(State::BeforeAuthorization);
-}
-
-void UDisksTarget::open()
-{
-    QDBusMessage request = QDBusMessage::createMethodCall(plan_.target().serviceOwner,
-        plan_.target().objectPath, QStringLiteral("org.freedesktop.UDisks2.Block"),
-        QStringLiteral("OpenDevice"));
-    const QVariantMap options = {
-        {QStringLiteral("flags"), int(O_EXCL | O_SYNC | O_CLOEXEC)},
-        {QStringLiteral("auth.no_user_interaction"), false}
-    };
-    request.setArguments({QStringLiteral("rw"), options});
-    request.setInteractiveAuthorizationAllowed(true);
-    state_ = State::Authorizing;
-    pending_ = new QDBusPendingCallWatcher(connection_.asyncCall(request, authorizationTimeout_), this);
-    connect(pending_, &QDBusPendingCallWatcher::finished, this, &UDisksTarget::openFinished);
-    emit stateChanged(state_);
-}
-
-void UDisksTarget::openFinished(QDBusPendingCallWatcher* watcher)
-{
-    if (watcher != pending_)
-        return;
-    pending_ = nullptr;
-    watcher->deleteLater();
-    const QDBusPendingReply<QDBusUnixFileDescriptor> reply = *watcher;
-    if (reply.isError())
-    {
-        const QString name = reply.error().name();
-        if (name.endsWith(QStringLiteral("NotAuthorizedDismissed")))
-            cancel();
-        else
-            fail(tr("Target authorization/open failed: %1").arg(reply.error().message()));
-        return;
-    }
-    descriptor_ = reply.value();
-    if (!descriptor_.isValid())
-    {
-        fail(tr("UDisks returned no usable target descriptor."));
-        return;
-    }
-    snapshot(State::Rechecking);
+        snapshot(State::Rechecking);
 }
 
 void UDisksTarget::cancel()
 {
     if (state_ == State::Cancelled || state_ == State::Failed)
         return;
-    // OpenDevice has no RPC cancellation API. Discarding this call prevents
-    // late replies from starting work; the system prompt may remain briefly.
     discardPending();
-    descriptor_ = {};
     setState(State::Cancelled);
-}
-
-QDBusUnixFileDescriptor UDisksTarget::takeDescriptor()
-{
-    if (state_ != State::Ready)
-        return {};
-    QDBusUnixFileDescriptor result = descriptor_;
-    descriptor_ = {};
-    return result;
 }
 
 void UDisksTarget::ownerChanged(const QString&, const QString&, const QString&)
@@ -207,7 +152,7 @@ void UDisksTarget::ownerChanged(const QString&, const QString&, const QString&)
 void UDisksTarget::busDisconnected()
 {
     if (state_ != State::Cancelled && state_ != State::Failed)
-        fail(tr("D-Bus disconnected during target acquisition."));
+        fail(tr("D-Bus disconnected during target checking."));
 }
 
 } // namespace rufus

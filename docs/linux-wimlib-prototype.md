@@ -176,3 +176,20 @@ qualifies bounded single-file extraction without changing this patch; see the
 Retained resources, Secure Boot and actual booting remain separate checkpoints.
 Keep the reader patch separately reviewable; a dedicated fork
 remains optional, and this release upgrade did not require one.
+
+## Synchronous split operation (CP11ac, 2026-09-21)
+
+The existing reader extension also supports upstream `wimlib_split` directly;
+no further patch is needed. Generated ISO9660/UDF fixtures cover uncompressed,
+LZX and pipable WIMs, two editions with shared resources, UTF-8 metadata and
+full file readback after releasing the input WIM/reader/filesystem chain.
+The operation remains synchronous; keep that complete chain alive through
+`wimlib_free`. This does not qualify exports that retain input references longer.
+
+Tests exercise Rufus's 4094 MiB request with FSYNC and smaller part targets to
+force multi-part output cheaply. Progress matches the existing Rufus aggregate
+resource counter. The upstream API's part-size argument is not a strict output
+limit, solid resources cannot be split, and failures may leave partial files.
+FAT32 integration must handle those constraints and output collisions explicitly.
+The production extractor and GUI remain unchanged at this checkpoint. See the
+[native split contract](linux-windows-installer.md#native-wim-split-qualification-cp11ac).

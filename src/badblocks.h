@@ -33,8 +33,7 @@ typedef struct bb_struct_u64_iterate      *bb_u64_iterate;
 #define BB_ET_MAGIC_BADBLOCKS_ITERATE     RUFUS_ERROR(ERROR_INVALID_BLOCK)
 
 #define BB_CHECK_MAGIC(struct, code)      if ((struct)->magic != (code)) return (code)
-#define BB_BAD_BLOCKS_THRESHOLD           256
-#define BB_BLOCKS_AT_ONCE                 64
+#include "badblocks_policy.h"
 #define BB_SYS_PAGE_SIZE                  4096
 
 enum error_types { READ_ERROR, WRITE_ERROR, CORRUPTION_ERROR };

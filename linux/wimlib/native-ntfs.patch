@@ -1,0 +1,105 @@
+--- a/ntfs-3g_apply.c
++++ b/ntfs-3g_apply.c
+@@ -39,6 +39,8 @@
+ #include <ntfs-3g/reparse.h>
+ #include <ntfs-3g/security.h>
+ 
++#include "native_ntfs_ea.h"
++#include "native_ntfs_efs.h"
+ #include "wimlib/assert.h"
+ #include "wimlib/apply.h"
+ #include "wimlib/blob_table.h"
+@@ -69,6 +71,9 @@
+ 	supported_features->short_names               = 1;
+ 	supported_features->object_ids                = 1;
+ 	supported_features->timestamps                = 1;
++	supported_features->xattrs                    = 1;
++	supported_features->encrypted_files           = 1;
++	supported_features->encrypted_directories     = 1;
+ 	supported_features->case_sensitive_filenames  = 1;
+ 	return 0;
+ }
+@@ -91,6 +96,9 @@
+ 
+ 	/* Whether is_sparse_attr[] is true for any currently open attribute  */
+ 	bool any_sparse_attrs;
++
++	struct WimNtfsEfs *efs[MAX_OPEN_FILES];
++	unsigned num_efs;
+ 
+ 	struct reparse_buffer_disk rpbuf;
+ 	u8 *reparse_ptr;
+@@ -333,7 +341,7 @@
+ 
+ 	/* Attributes  */
+ 	if (!(extract_flags & WIMLIB_EXTRACT_FLAG_NO_ATTRIBUTES)) {
+-		u32 attrib = inode->i_attributes;
++		u32 attrib = inode->i_attributes & ~FILE_ATTRIBUTE_ENCRYPTED;
+ 
+ 		if (ntfs_set_ntfs_attrib(ni, (const char *)&attrib,
+ 					 sizeof(attrib), 0))
+@@ -379,6 +387,10 @@
+ 		}
+ 	}
+ 
++	ret = SetWimNtfsExtendedAttributes(ni, inode);
++	if (ret)
++		return ret;
++
+ 	/* Timestamps  */
+ 	ret = ntfs_3g_set_timestamps(ni, inode);
+ 	if (ret) {
+@@ -698,6 +710,15 @@
+ 		ctx->ntfs_reparse_inodes[ctx->num_reparse_inodes] = ni;
+ 		ctx->wim_reparse_inodes[ctx->num_reparse_inodes] = inode;
+ 		ctx->num_reparse_inodes++;
++		return 0;
++	}
++
++	if (strm->stream_type == STREAM_TYPE_EFSRPC_RAW_DATA) {
++		wimlib_assert(ctx->num_efs < MAX_OPEN_FILES);
++		int error = BeginWimNtfsEfs(ni, blob->size, &ctx->efs[ctx->num_efs]);
++		if (error)
++			return error;
++		ctx->num_efs++;
+ 		return 0;
+ 	}
+ 
+@@ -769,6 +790,11 @@
+ 
+ 	ctx->num_open_attrs = 0;
+ 
++	for (unsigned i = 0; i < ctx->num_efs; i++)
++		if (CloseWimNtfsEfs(ctx->efs[i]))
++			ret = -1;
++	ctx->num_efs = 0;
++
+ 	for (unsigned i = 0; i < ctx->num_open_inodes; i++) {
+ 		if (ntfs_inode_close(ctx->open_inodes[i]))
+ 			ret = -1;
+@@ -870,6 +896,12 @@
+ 	bool zeroes;
+ 	size_t len;
+ 	unsigned i;
++
++	for (i = 0; i < ctx->num_efs; i++) {
++		int error = ConsumeWimNtfsEfs(ctx->efs[i], offset, chunk, size);
++		if (error)
++			return error;
++	}
+ 
+ 	/*
+ 	 * For sparse attributes, only write nonzero regions.  This lets the
+@@ -907,6 +939,12 @@
+ 		goto out;
+ 	}
+ 
++	for (unsigned i = 0; i < ctx->num_efs; i++) {
++		ret = FinishWimNtfsEfs(ctx->efs[i]);
++		if (ret)
++			goto out;
++	}
++
+ 	/* Extend sparse attributes to their final size. */
+ 	if (ctx->any_sparse_attrs) {
+ 		for (unsigned i = 0; i < ctx->num_open_attrs; i++) {

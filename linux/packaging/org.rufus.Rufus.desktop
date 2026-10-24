@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Desktop Entry]
+Type=Application
+Name=Rufus (Linux preview)
+GenericName=Bootable USB Creator
+Comment=Create bootable USB drives from disk and ISO images
+Exec=rufus-linux %f
+TryExec=rufus-linux %f
+Icon=org.rufus.Rufus
+Terminal=false
+Categories=System;
+Keywords=USB;boot;bootable;ISO;image;format;Windows;Linux;
+StartupNotify=true
+StartupWMClass=rufus-linux

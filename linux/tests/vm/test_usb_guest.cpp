@@ -145,6 +145,7 @@ private slots:
     {
         QVERIFY(fixtureGuest());
         controller_.writer().setConnection(QDBusConnection::systemBus());
+        controller_.writer().setHelper(QStringLiteral("/opt/rufus/rufus-prepare-helper"));
         connect(&devices_, &rufus::UDisksClient::devicesChanged,
             &controller_, &rufus::SelectionController::setDiscovery);
         connect(&controller_, &rufus::SelectionController::logMessage, this, &TestUsbGuest::logMessage);

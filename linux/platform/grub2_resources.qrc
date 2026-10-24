@@ -1,0 +1,8 @@
+<RCC>
+ <qresource prefix="/rufus/grub2">
+  <file alias="core.img">../../res/grub2/core.img</file>
+ </qresource>
+ <qresource prefix="/rufus/grub">
+  <file alias="grldr.mbr">../../res/grub/grldr.mbr</file>
+ </qresource>
+</RCC>

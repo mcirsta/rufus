@@ -1,0 +1,60 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -eu
+[[ $$ == 1 ]] || exit 77
+export PATH=/usr/bin LC_ALL=C
+
+finish()
+{
+    result=$?
+    trap - EXIT
+    echo "RUFUS_UEFI_NTFS_EXIT $result"
+    echo o > /proc/sysrq-trigger
+    while :; do sleep 1; done
+}
+
+mount -t devtmpfs devtmpfs /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+product=$(< /sys/class/dmi/id/product_name)
+[[ $product == RufusNtfsPrepareFixture || $product == RufusNtfsBootFixture ]]
+trap finish EXIT
+trap 'echo "RUFUS_UEFI_NTFS_FAILED_AT_LINE $LINENO"' ERR
+[[ $(< /proc/sys/kernel/osrelease) == "$(< /etc/rufus-expected-kernel)" ]]
+for module in xhci_pci usb_storage sd_mod ntfs3 nls_utf8; do
+    modprobe "$module"
+done
+for attempt in {1..100}; do
+    [[ -b /dev/sda2 ]] && break
+    sleep .1
+done
+[[ -b /dev/sda1 && -b /dev/sda2 ]]
+[[ $(< /sys/block/sda/device/model) == "QEMU HARDDISK "* ]]
+if [[ $product == RufusNtfsPrepareFixture ]]; then
+    [[ " $(< /proc/cmdline) " == *" rufus.ntfs_prepare=1 "* ]]
+    mount -t ntfs3 /dev/sda1 /target
+    cp -R /payload/. /target/
+    cd /target
+    sha256sum -c payload.sha256
+    if [[ " $(< /proc/cmdline) " == *" rufus.ntfs_missing=1 "* ]]; then
+        rm rufus-ntfs-payload
+    fi
+    cd /
+    umount /target
+    echo RUFUS_UEFI_NTFS_PREPARED
+else
+    [[ -d /sys/firmware/efi ]]
+    [[ " $(< /proc/cmdline) " == *" rufus.ntfs_boot=1 "* ]]
+    mount -t ntfs3 -o ro,nodev,nosuid,noexec /dev/sda1 /target
+    if [[ ! -f /target/rufus-ntfs-payload ]]; then
+        echo RUFUS_UEFI_NTFS_MISSING_PAYLOAD
+        umount /target
+        exit 1
+    fi
+    [[ $(< /target/rufus-ntfs-payload) == RUFUS-NTFS-EFI-TREE ]]
+    cd /target
+    sha256sum -c payload.sha256
+    cd /
+    umount /target
+    echo RUFUS_UEFI_NTFS_BOOT_OK
+fi

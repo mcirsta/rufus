@@ -1,0 +1,5 @@
+<RCC>
+ <qresource prefix="/rufus">
+  <file alias="rufus.loc">../../res/loc/rufus.loc</file>
+ </qresource>
+</RCC>

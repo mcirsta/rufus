@@ -82,6 +82,12 @@ int AnalyzeIsoImageWithSource(const char* image, uint64_t image_size,
 	const ISO_ANALYSIS_OPTIONS* options, ISO_ANALYSIS* analysis, ISO_ANALYSIS_SOURCE* source);
 void CloseIsoAnalysisSource(ISO_ANALYSIS_SOURCE* source);
 
+/* Original Windows selection: scan with Rock Ridge first; extraction can use
+ * Joliet unless Rock Ridge has long names or symlinks. NULL report selects the
+ * ordinary content-reader mask, without the extraction exceptions. */
+iso_extension_mask_t GetIsoExtensionMask(bool joliet, bool rockridge, bool scan,
+	const RUFUS_IMG_REPORT* report);
+
 #ifdef __cplusplus
 }
 #endif

@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: 0BSD
+# Maintainer: Set the release owner's name and contact before AUR submission.
+# This builds the Linux port; it does not run the Windows Rufus executable.
+pkgname=rufus-linux-preview
+pkgver=@PACKAGE_VERSION@
+pkgrel=1
+pkgdesc='Create bootable USB drives from disk and ISO images (Linux preview)'
+arch=('x86_64')
+url='https://github.com/mcirsta/rufus'
+license=('GPL-3.0-or-later')
+depends=('qt6-base>=6.2' 'udisks2' 'polkit' 'util-linux-libs' 'e2fsprogs'
+         'libntfs-3g' 'hivex' 'openssl' 'zlib' 'libgcc' 'libstdc++' 'glibc'
+         'hicolor-icon-theme')
+makedepends=('cmake>=3.21' 'ninja' 'perl')
+optdepends=('cdrtools: ISO filesystem export'
+            'dosfstools: FAT16 and FAT32 formatting'
+            'exfatprogs: exFAT formatting'
+            'udftools: UDF 1.02, 1.50, 2.00 and 2.01 formatting'
+            'ntfsprogs: NTFS formatting and optimized FFU resizing'
+            'ntfsprogs-plus: preferred NTFS utilities where available'
+            'ntfs-3g: NTFS FUSE fallback, compression and Windows symbolic links'
+            'mtools: native Syslinux installation')
+options=('!debug')
+_source_root='@SOURCE_ROOT@'
+source=('@SOURCE_FILENAME@::@SOURCE_URL@'
+        'https://wimlib.net/downloads/wimlib-1.14.5.tar.gz'
+        'https://www.kernel.org/pub/linux/utils/boot/syslinux/Testing/6.04/syslinux-6.04-pre1.tar.xz'
+        'https://www.kernel.org/pub/linux/utils/boot/syslinux/4.xx/syslinux-4.07.tar.xz')
+sha256sums=('@SOURCE_SHA256@'
+            '84221a3abd5b91228f15f8e6065c335a336237b5738197b75bf419eea561a194'
+            '3f6d50a57f3ed47d8234fd0ab4492634eb7c9aaf7dd902f33d3ac33564fd631d'
+            '8e228c34b8a98166a4d42bf0c8ad0ff767ea9ff38dc03b6543248944be6e1887')
+
+build() {
+    # Pin the library ABI to the declared Arch dependency even on hosts which
+    # also have ntfsprogs-plus. The preferred formatter may still supply mkntfs.
+    # Cache tool paths independently of which optional formatters are installed
+    # on the build host. Missing runtime tools are checked before device writes.
+    cmake -S "$_source_root/linux" -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_INSTALL_LIBEXECDIR=lib/rufus-linux-preview \
+        -DBUILD_TESTING=OFF \
+        -DRUFUS_WIMLIB_UPSTREAM="$srcdir/wimlib-1.14.5" \
+        -DRUFUS_SYSLINUX_UPSTREAM="$srcdir/syslinux-6.04-pre1" \
+        -DRUFUS_SYSLINUX4_UPSTREAM="$srcdir/syslinux-4.07" \
+        -DRUFUS_WIM_NTFS_PLUS_INCLUDE:PATH= \
+        -DRUFUS_WIM_NTFS_PLUS_LIBRARY:FILEPATH= \
+        -DRUFUS_MKFS_FAT:FILEPATH=/usr/bin/mkfs.fat \
+        -DRUFUS_MKNTFS:FILEPATH=/usr/bin/mkntfs \
+        -DRUFUS_MKE2FS:FILEPATH=/usr/bin/mke2fs \
+        -DRUFUS_MKFS_EXFAT:FILEPATH=/usr/bin/mkfs.exfat \
+        -DRUFUS_MKUDFFS:FILEPATH=/usr/bin/mkudffs \
+        -DRUFUS_MKISOFS:FILEPATH=/usr/bin/mkisofs \
+        -DRUFUS_NTFSRESIZE:FILEPATH=/usr/bin/ntfsresize \
+        -DRUFUS_NTFS_3G:FILEPATH=/usr/bin/lowntfs-3g \
+        -DRUFUS_NATIVE_MCOPY:FILEPATH=/usr/bin/mcopy \
+        -DRUFUS_NATIVE_MATTRIB:FILEPATH=/usr/bin/mattrib
+    cmake --build build
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install build
+}

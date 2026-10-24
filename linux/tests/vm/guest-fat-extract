@@ -38,12 +38,13 @@ extract_case()
 {
     local name=$1 image=$2 view=$3 fault=$4
     echo "RUFUS_FAT_CASE $name"
-    iso_extract_probe "/images/$image.iso" "/target/$name" "$view" "$fault"
+    iso_extract_probe "/images/$image.iso" "/target/$name" "$view" "$fault" "${@:5}"
     echo "RUFUS_FAT_END $name"
 }
 
 for name in rr joliet udf names-rr names-udf merge-rr merge-udf collision replace-zero invalid \
-    write-fail cancel sync-fail full readonly recovery; do
+    write-fail cancel sync-fail full readonly recovery config-keep config-backup config-conflict config-patch \
+    label-patch repo-patch netinst-patch invalid-patch freenas efi-copy efi-keep efi-failed-copy; do
     mkdir "/target/$name"
 done
 extract_case rr TREE rr none
@@ -59,6 +60,30 @@ extract_case invalid INVALID rr none
 extract_case write-fail DATA rr write-fail
 extract_case cancel DATA rr write-cancel
 extract_case sync-fail DATA rr sync-fail
+extract_case config-keep CONFIGKEEP rr none
+extract_case config-backup CONFIGBACKUP rr none
+extract_case config-conflict CONFIGCONFLICT rr none
+extract_case config-patch CONFIGPATCH rr none
+extract_case label-patch 'OLD LABEL' rr none 'NEW USB' /original/dvd.iso
+extract_case repo-patch RHEL-9 rr none 'NEW USB' /original/dvd.iso
+extract_case netinst-patch RHEL-9 rr none 'NEW USB' /original/netinst.iso
+extract_case invalid-patch BADCONFIG rr none 'NEW USB' /original/dvd.iso
+extract_case freenas FREENAS rr none 'NEW USB' /original/dvd.iso
+extract_case efi-copy EFICONFIG rr none 'NEW USB' /original/dvd.iso
+extract_case efi-keep EFIKEEP rr none
+extract_case efi-failed-copy EFICONFIG rr duplicate-write-fail 'NEW USB' /original/dvd.iso
+
+patch_config_case()
+{
+    local name=$1 source=$2 replacement=$3
+    echo "RUFUS_CONFIG_PATCH $name"
+    config_patch_probe /target/config-patch "$name" append "$source" "$replacement"
+    echo RUFUS_CONFIG_END
+}
+patch_config_case boot.cfg 'OLD\x20LABEL' 'NEW\x20USB'
+patch_config_case unicode.cfg OLD NEW
+patch_config_case keep.cfg OLD NEW
+patch_config_case invalid.cfg OLD NEW
 
 # Leave half a MiB available: the real FAT driver must accept some data before
 # ENOSPC. The extractor must remove that partial file and retain no descriptor.

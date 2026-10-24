@@ -39,7 +39,9 @@
 #include <limits.h>
 #include <stddef.h>
 #include <string.h>
+#ifndef RUFUS_NATIVE_ZSTD
 #include <crtdefs.h>
+#endif
 #include "zstd_config.h"
 
 #if defined(__GNUC__) && __GNUC__ >= 4
@@ -133,7 +135,9 @@
 
 #define DEBUG_STATIC_ASSERT(c) (void)sizeof(char[(c) ? 1 : -1])
 
+#ifndef RUFUS_NATIVE_ZSTD
 #include "libbb.h"
+#endif
 
 #if (DEBUGLEVEL >= 1)
 #define RAWLOG(l, ...)         { if (l <= ZSTD_DEBUGLEVEL) bb_printf(__VA_ARGS__); }

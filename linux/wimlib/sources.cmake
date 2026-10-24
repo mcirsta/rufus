@@ -33,6 +33,8 @@ set(wim_sources
     lzx_decompress.c
     metadata_resource.c
     mount_image.c
+    ntfs-3g_apply.c
+    ntfs-3g_capture.c
     pathlist.c
     paths.c
     pattern.c

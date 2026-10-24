@@ -19,7 +19,7 @@ def payload(version, marker="GRUB  version %s", filesystems=(), debug=False):
     return data
 
 
-def inspect(executable, image, paths, expected, flags=1, label="Demo-Live-x86_64"):
+def inspect(executable, image, paths, expected, flags=1, label="Demo-Live-x86_64", names=()):
     result = subprocess.run([str(executable), str(image), str(flags), label, *paths],
                             capture_output=True, text=True, timeout=10)
     code = 1 if expected is None else 0
@@ -30,7 +30,8 @@ def inspect(executable, image, paths, expected, flags=1, label="Demo-Live-x86_64
         return
     values = dict(line.split("=", 1) for line in result.stdout.splitlines())
     assert values == {"VERSION": expected[0], "FS_MASK": str(expected[1]),
-                      "FILESYSTEMS": expected[2]}, (paths, values, expected)
+                      "FILESYSTEMS": expected[2], "CORE_LOOKUP": str(int(bool(names))),
+                      "DOWNLOAD_NAMES": ",".join(names)}, (paths, values, expected, names)
 
 
 def main():
@@ -69,24 +70,27 @@ def main():
                         "-C", str(tree), "."], check=True, capture_output=True, timeout=10)
         normal = "/boot/grub/i386-pc/normal.mod"
         efi = "/EFI/BOOT/grubx64.efi"
-        inspect(args.executable, image, [normal], ("2.12", 0, ""))
+        inspect(args.executable, image, [normal], ("2.12", 0, ""), names=("2.12", "2"))
         inspect(args.executable, image, ["/boot/grub2/i386-pc/normal.mod"],
-                ("2.06-nonstandard-gdie-demo", 0, ""), flags=2)
-        inspect(args.executable, image, [efi], ("2.06-gdie-demo", 5, "fat,ntfs,ext2"), flags=128)
-        inspect(args.executable, image, ["/centos/normal.mod"], ("2.04", 0, ""))
+                ("2.06-nonstandard-gdie-demo", 0, ""), flags=2,
+                names=("2.06-nonstandard-gdie-demo", "2.06-nonstandard-gdie", "2.06-nonstandard", "2.06", "2"))
+        inspect(args.executable, image, [efi], ("2.06-gdie-demo", 5, "fat,ntfs,ext2"), flags=128,
+                names=("2.06-gdie-demo", "2.06-gdie", "2.06", "2"))
+        inspect(args.executable, image, ["/centos/normal.mod"], ("2.04", 0, ""), names=("2.04", "2"))
+        inspect(args.executable, image, ["/extra/grub.efi"], ("2.14", 7, "exfat,FAT,ntfs"))
         inspect(args.executable, image, [normal, efi, "/extra/grub.efi"],
-                ("2.12", 7, "fat,ntfs,ext2,exfat,FAT"), flags=129)
-        inspect(args.executable, image, ["/two/normal.mod"], ("2.12", 0, ""))
-        inspect(args.executable, image, ["/eof/normal.mod"], (eof_version, 0, ""))
+                ("2.12", 7, "fat,ntfs,ext2,exfat,FAT"), flags=129, names=("2.12", "2"))
+        inspect(args.executable, image, ["/two/normal.mod"], ("2.12", 0, ""), names=("2.12", "2"))
+        inspect(args.executable, image, ["/eof/normal.mod"], (eof_version, 0, ""), names=(eof_version, "2.12", "2"))
         for kind in ("zero", "unknown", "small"):
             inspect(args.executable, image, [f"/{kind}/normal.mod"], ("", 0, ""))
-        inspect(args.executable, image, ["/zero/normal.mod", normal], ("2.12", 0, ""))
+        inspect(args.executable, image, ["/zero/normal.mod", normal], ("2.12", 0, ""), names=("2.12", "2"))
         for name in ("/empty/normal.mod", "/missing", "/boot/grub"):
             inspect(args.executable, image, [name], None)
         invalid = directory / "plain.iso"
         invalid.write_text("Not an image")
         inspect(args.executable, invalid, [normal], None)
-    print("GRUB image reads: version/build rules, filesystem union, selection order and read failures pass.")
+    print("GRUB image reads: version/build rules, core lookup names, filesystem union, selection order and read failures pass.")
     print("Synthetic content only: no PE validation, installer, media writes or boot validation.")
 
 

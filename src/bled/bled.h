@@ -21,19 +21,7 @@ typedef int (*read_t)(int fd, void* buf, unsigned int count);
 typedef int (*write_t)(int fd, const void* buf, unsigned int count);
 typedef void (*switch_t)(const char* filename, const uint64_t size);
 
-typedef enum {
-	BLED_COMPRESSION_NONE = 0,
-	BLED_COMPRESSION_ZIP,		// .zip
-	BLED_COMPRESSION_LZW,		// .Z
-	BLED_COMPRESSION_GZIP,		// .gz
-	BLED_COMPRESSION_LZMA,		// .lzma
-	BLED_COMPRESSION_BZIP2,		// .bz2
-	BLED_COMPRESSION_XZ,		// .xz
-	BLED_COMPRESSION_7ZIP,		// .7z
-	BLED_COMPRESSION_VTSI,		// .vtsi
-	BLED_COMPRESSION_ZSTD,		// .zst
-	BLED_COMPRESSION_MAX
-} bled_compression_type;
+#include "compression.h"
 
 /* (Where possible) get the uncompressed size of file 'src', compressed using 'type' */
 int64_t bled_get_uncompressed_size(const char* src, int type);

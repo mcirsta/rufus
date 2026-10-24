@@ -32,12 +32,15 @@
 *.org
 *.p7x
 *.patch
+!linux/wimlib/native-ntfs.patch
 *.pc
 *.pdb
 *.pdf
 *.plg
 *.res
 *.sig
+!linux/tests/fixtures/download/**/*.sig
+!linux/tests/fixtures/fido/Fido.ps1.lzma.sig
 *.sdf
 *.suo
 *.swp

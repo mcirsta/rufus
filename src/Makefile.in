@@ -89,10 +89,10 @@ CONFIG_CLEAN_VPATH_FILES =
 PROGRAMS = $(noinst_PROGRAMS)
 am_rufus_OBJECTS = rufus-badblocks.$(OBJEXT) rufus-darkmode.$(OBJEXT) \
 	rufus-dev.$(OBJEXT) rufus-dos.$(OBJEXT) \
-	rufus-dos_locale.$(OBJEXT) rufus-drive.$(OBJEXT) \
+	rufus-dos_locale.$(OBJEXT) rufus-dos_locale_policy.$(OBJEXT) rufus-freedos_files.$(OBJEXT) rufus-msdos_files.$(OBJEXT) rufus-drive_label.$(OBJEXT) rufus-locale_text.$(OBJEXT) rufus-drive.$(OBJEXT) \
 	rufus-format.$(OBJEXT) rufus-format_ext.$(OBJEXT) \
 	rufus-format_fat32.$(OBJEXT) rufus-hash.$(OBJEXT) \
-	rufus-icon.$(OBJEXT) rufus-image_file.$(OBJEXT) rufus-image_policy.$(OBJEXT) rufus-partition_layout.$(OBJEXT) rufus-iso.$(OBJEXT) rufus-iso_analyze.$(OBJEXT) rufus-iso_bootloaders.$(OBJEXT) rufus-embedded_efi.$(OBJEXT) rufus-iso_file.$(OBJEXT) rufus-winpe_scan.$(OBJEXT) rufus-wim_metadata.$(OBJEXT) rufus-pe_arch.$(OBJEXT) rufus-iso_read.$(OBJEXT) rufus-iso_scan.$(OBJEXT) \
+	rufus-icon.$(OBJEXT) rufus-config_text.$(OBJEXT) rufus-format_policy.$(OBJEXT) rufus-progress_policy.$(OBJEXT) rufus-hdd_score.$(OBJEXT) rufus-unattend.$(OBJEXT) rufus-image_file.$(OBJEXT) rufus-image_policy.$(OBJEXT) rufus-partition_layout.$(OBJEXT) rufus-iso.$(OBJEXT) rufus-iso_analyze.$(OBJEXT) rufus-iso_bootloaders.$(OBJEXT) rufus-embedded_efi.$(OBJEXT) rufus-iso_file.$(OBJEXT) rufus-winpe_scan.$(OBJEXT) rufus-winpe_setup.$(OBJEXT) rufus-wim_metadata.$(OBJEXT) rufus-pe_arch.$(OBJEXT) rufus-iso_read.$(OBJEXT) rufus-iso_scan.$(OBJEXT) \
 	rufus-localization.$(OBJEXT) rufus-net.$(OBJEXT) \
 	rufus-parser.$(OBJEXT) rufus-pki.$(OBJEXT) \
 	rufus-process.$(OBJEXT) rufus-cregex_compile.$(OBJEXT) \
@@ -285,8 +285,8 @@ AM_V_WINDRES_0 = @echo "  RC     $@";$(WINDRES)
 AM_V_WINDRES_1 = $(WINDRES)
 AM_V_WINDRES_ = $(AM_V_WINDRES_$(AM_DEFAULT_VERBOSITY))
 AM_V_WINDRES = $(AM_V_WINDRES_$(V))
-rufus_SOURCES = badblocks.c darkmode.c dev.c dos.c dos_locale.c drive.c format.c format_ext.c format_fat32.c hash.c icon.c image_file.c image_file.h image_policy.c image_policy.h partition_layout.c partition_layout.h image_report.h iso.c iso_analyze.c iso_analyze.h iso_bootloaders.c iso_bootloaders.h embedded_efi.c embedded_efi.h iso_file.c iso_file.h winpe_scan.c winpe_scan.h wim_metadata.c wim_metadata.h pe_arch.c pe_arch.h iso_read.c iso_read.h iso_scan.c iso_scan.h localization.c \
-	 net.c parser.c pki.c process.c cregex_compile.c cregex_parse.c cregex_vm.c rufus.c smart.c stdfn.c strarray.c strarray.h stdio.c stdlg.c syslinux.c syslinux_version.c syslinux_version.h grub_inspect.c grub_inspect.h efi_boot_info.c efi_boot_info.h syslinux_scan.c syslinux_scan.h ui.c vhd.c wue.c xml.c
+rufus_SOURCES = badblocks.c darkmode.c dev.c dos.c dos_locale.c dos_locale_policy.c dos_locale_policy.h freedos_files.c freedos_files.h freedos_files.inc msdos_files.c msdos_files.h drive_label.c drive_label.h locale_text.c locale_text.h drive.c format.c format_ext.c format_fat32.c hash.c hash_core.h hash_core.inc icon.c config_text.c config_text.h format_policy.c format_policy.h progress_policy.c progress_policy.h hdd_score.c hdd_score.h hdd_score_strings.h unattend.c unattend.h image_file.c image_file.h image_compression.h image_policy.c image_policy.h partition_layout.c partition_layout.h image_report.h iso.c iso_analyze.c iso_analyze.h iso_bootloaders.c iso_bootloaders.h embedded_efi.c embedded_efi.h iso_file.c iso_file.h winpe_scan.c winpe_scan.h winpe_setup.c winpe_setup.h wim_metadata.c wim_metadata.h pe_arch.c pe_arch.h iso_read.c iso_read.h iso_scan.c iso_scan.h localization.c \
+	 net.c parser.c pki.c secure_boot_db.h download_key.h download_urls.h process.c cregex_compile.c cregex_parse.c cregex_vm.c rufus.c smart.c stdfn.c strarray.c strarray.h stdio.c stdlg.c syslinux.c syslinux_version.c syslinux_version.h grub_inspect.c grub_inspect.h efi_boot_info.c efi_boot_info.h syslinux_scan.c syslinux_scan.h ui.c vhd.c wue.c xml.c
 
 rufus_CFLAGS = -I$(srcdir)/ms-sys/inc -I$(srcdir)/syslinux/libfat -I$(srcdir)/syslinux/libinstaller -I$(srcdir)/syslinux/win -I$(srcdir)/libcdio -I$(srcdir)/wimlib -I$(srcdir)/../res $(AM_CFLAGS) \
 	-DEXT2_FLAT_INCLUDES=0 -D_RUFUS -DSOLUTION=rufus
@@ -379,6 +379,36 @@ rufus-dos_locale.o: dos_locale.c
 rufus-dos_locale.obj: dos_locale.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-dos_locale.obj `if test -f 'dos_locale.c'; then $(CYGPATH_W) 'dos_locale.c'; else $(CYGPATH_W) '$(srcdir)/dos_locale.c'; fi`
 
+rufus-dos_locale_policy.o: dos_locale_policy.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-dos_locale_policy.o `test -f 'dos_locale_policy.c' || echo '$(srcdir)/'`dos_locale_policy.c
+
+rufus-dos_locale_policy.obj: dos_locale_policy.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-dos_locale_policy.obj `if test -f 'dos_locale_policy.c'; then $(CYGPATH_W) 'dos_locale_policy.c'; else $(CYGPATH_W) '$(srcdir)/dos_locale_policy.c'; fi`
+
+rufus-freedos_files.o: freedos_files.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-freedos_files.o `test -f 'freedos_files.c' || echo '$(srcdir)/'`freedos_files.c
+
+rufus-freedos_files.obj: freedos_files.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-freedos_files.obj `if test -f 'freedos_files.c'; then $(CYGPATH_W) 'freedos_files.c'; else $(CYGPATH_W) '$(srcdir)/freedos_files.c'; fi`
+
+rufus-msdos_files.o: msdos_files.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-msdos_files.o `test -f 'msdos_files.c' || echo '$(srcdir)/'`msdos_files.c
+
+rufus-msdos_files.obj: msdos_files.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-msdos_files.obj `if test -f 'msdos_files.c'; then $(CYGPATH_W) 'msdos_files.c'; else $(CYGPATH_W) '$(srcdir)/msdos_files.c'; fi`
+
+rufus-drive_label.o: drive_label.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-drive_label.o `test -f 'drive_label.c' || echo '$(srcdir)/'`drive_label.c
+
+rufus-drive_label.obj: drive_label.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-drive_label.obj `if test -f 'drive_label.c'; then $(CYGPATH_W) 'drive_label.c'; else $(CYGPATH_W) '$(srcdir)/drive_label.c'; fi`
+
+rufus-locale_text.o: locale_text.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-locale_text.o `test -f 'locale_text.c' || echo '$(srcdir)/'`locale_text.c
+
+rufus-locale_text.obj: locale_text.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-locale_text.obj `if test -f 'locale_text.c'; then $(CYGPATH_W) 'locale_text.c'; else $(CYGPATH_W) '$(srcdir)/locale_text.c'; fi`
+
 rufus-drive.o: drive.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-drive.o `test -f 'drive.c' || echo '$(srcdir)/'`drive.c
 
@@ -445,6 +475,12 @@ rufus-winpe_scan.o: winpe_scan.c
 rufus-winpe_scan.obj: winpe_scan.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-winpe_scan.obj `if test -f 'winpe_scan.c'; then $(CYGPATH_W) 'winpe_scan.c'; else $(CYGPATH_W) '$(srcdir)/winpe_scan.c'; fi`
 
+rufus-winpe_setup.o: winpe_setup.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-winpe_setup.o `test -f 'winpe_setup.c' || echo '$(srcdir)/'`winpe_setup.c
+
+rufus-winpe_setup.obj: winpe_setup.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-winpe_setup.obj `if test -f 'winpe_setup.c'; then $(CYGPATH_W) 'winpe_setup.c'; else $(CYGPATH_W) '$(srcdir)/winpe_setup.c'; fi`
+
 rufus-wim_metadata.o: wim_metadata.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-wim_metadata.o `test -f 'wim_metadata.c' || echo '$(srcdir)/'`wim_metadata.c
 
@@ -474,6 +510,36 @@ rufus-strarray.o: strarray.c
 
 rufus-strarray.obj: strarray.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-strarray.obj `if test -f 'strarray.c'; then $(CYGPATH_W) 'strarray.c'; else $(CYGPATH_W) '$(srcdir)/strarray.c'; fi`
+
+rufus-config_text.o: config_text.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-config_text.o `test -f 'config_text.c' || echo '$(srcdir)/'`config_text.c
+
+rufus-config_text.obj: config_text.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-config_text.obj `if test -f 'config_text.c'; then $(CYGPATH_W) 'config_text.c'; else $(CYGPATH_W) '$(srcdir)/config_text.c'; fi`
+
+rufus-format_policy.o: format_policy.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-format_policy.o `test -f 'format_policy.c' || echo '$(srcdir)/'`format_policy.c
+
+rufus-format_policy.obj: format_policy.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-format_policy.obj `if test -f 'format_policy.c'; then $(CYGPATH_W) 'format_policy.c'; else $(CYGPATH_W) '$(srcdir)/format_policy.c'; fi`
+
+rufus-progress_policy.o: progress_policy.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-progress_policy.o `test -f 'progress_policy.c' || echo '$(srcdir)/'`progress_policy.c
+
+rufus-progress_policy.obj: progress_policy.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-progress_policy.obj `if test -f 'progress_policy.c'; then $(CYGPATH_W) 'progress_policy.c'; else $(CYGPATH_W) '$(srcdir)/progress_policy.c'; fi`
+
+rufus-hdd_score.o: hdd_score.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-hdd_score.o `test -f 'hdd_score.c' || echo '$(srcdir)/'`hdd_score.c
+
+rufus-hdd_score.obj: hdd_score.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-hdd_score.obj `if test -f 'hdd_score.c'; then $(CYGPATH_W) 'hdd_score.c'; else $(CYGPATH_W) '$(srcdir)/hdd_score.c'; fi`
+
+rufus-unattend.o: unattend.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-unattend.o `test -f 'unattend.c' || echo '$(srcdir)/'`unattend.c
+
+rufus-unattend.obj: unattend.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-unattend.obj `if test -f 'unattend.c'; then $(CYGPATH_W) 'unattend.c'; else $(CYGPATH_W) '$(srcdir)/unattend.c'; fi`
 
 rufus-image_file.o: image_file.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(rufus_CFLAGS) $(CFLAGS) -c -o rufus-image_file.o `test -f 'image_file.c' || echo '$(srcdir)/'`image_file.c

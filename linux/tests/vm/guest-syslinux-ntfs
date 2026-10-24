@@ -1,0 +1,124 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -eu
+[[ $$ == 1 ]] || exit 77
+export PATH=/usr/bin LC_ALL=C.UTF-8
+export ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 UBSAN_OPTIONS=halt_on_error=1
+mount -t devtmpfs devtmpfs /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+[[ $(< /sys/class/dmi/id/product_name) == RufusExtlinuxFixture ]] || exit 77
+[[ $(< /etc/rufus-extlinux-fixture) == extlinux-ntfs ]] || exit 77
+finish() {
+    result=$?
+    trap - EXIT
+    echo "RUFUS_EXTLINUX_EXIT $result"
+    echo o > /proc/sysrq-trigger
+    while :; do sleep 1; done
+}
+trap finish EXIT
+for module in xhci_pci usb_storage sd_mod ntfs fuse nls_utf8; do modprobe "$module"; done
+for attempt in {1..100}; do
+    [[ -b /dev/sdb1 ]] && break
+    sleep .1
+done
+[[ -b /dev/sda1 && -b /dev/sdb1 ]]
+fixture_disk() {
+    local block device
+    for block in /sys/class/block/sd*; do
+        [[ -f $block/partition ]] && continue
+        device=$(readlink -f "$block/device")
+        while [[ -n $device && $device != / ]]; do
+            if [[ -f $device/serial && $(< "$device/serial") == "$1" ]]; then
+                echo "/dev/${block##*/}"
+                return
+            fi
+            device=${device%/*}
+        done
+    done
+    return 1
+}
+if [[ -f /proc/sys/fs/bdev_allow_write_mounted ]]; then
+    echo "RUFUS_EXTLINUX_RAW_WRITE_POLICY $(< /proc/sys/fs/bdev_allow_write_mounted)"
+fi
+for driver in ntfs lowntfs-3g; do
+    serial=RUFUS-EXTLINUX-0
+    if [[ $driver == lowntfs-3g ]]; then serial=RUFUS-EXTLINUX-1; fi
+    disk=$(fixture_disk "$serial")
+    echo "RUFUS_EXTLINUX_BEGIN $driver"
+    echo "RUFUS_EXTLINUX_DISK $driver $disk $serial"
+    # Reproduce the helper's retained partition descriptor and private-mount
+    # options. The mount owns the claim; no second authorization is involved.
+    exec 3<>"${disk}1"
+    child=0
+    if [[ $driver == ntfs ]]; then
+        mount -i -t ntfs -o rw,nodev,nosuid,noexec,iocharset=utf8,umask=0077,windows_names,nocase,errors=remount-ro \
+            /proc/1/fd/3 /target
+    else
+        lowntfs-3g /proc/1/fd/3 /target \
+            -o rw,no_detach,no_def_opts,norecover,windows_names,ignore_case,umask=0077,nodev,nosuid,noexec &
+        child=$!
+        for attempt in {1..100}; do
+            [[ $(stat -c %d /target) != $(stat -c %d /) ]] && break
+            kill -0 "$child"
+            sleep .1
+        done
+    fi
+    syslinux_extlinux_facts /target "${disk}1" "$disk" "$driver"
+    if [[ -f /etc/rufus-extlinux-iso ]]; then
+        copied=$(iso_extract_probe /source.iso /target rr none RUFUS_EXT /source.iso)
+        echo "$copied"
+        [[ $copied == ERROR=0\ * && $copied == *" FDS=0 "* && $copied == *"PROGRESS_INVALID=0 "* ]]
+        [[ ! -e /target/ldlinux.sys && -f /target/ldlinux.c32 && -f /target/syslinux.org ]]
+        sha256sum /source.iso
+        echo "RUFUS_EXTLINUX_ISO $driver PASS"
+    fi
+    result=0
+    if [[ -f /etc/rufus-extlinux-adapter ]]; then
+        source_args=()
+        if [[ -f /etc/rufus-extlinux-iso ]]; then source_args=(/source.iso); fi
+        syslinux_ntfs_probe /target "${disk}1" /usr/bin/rufus-extlinux "${source_args[@]}" || result=$?
+    else
+        rufus-extlinux --install --reset-adv --device /proc/self/fd/3 /target || result=$?
+    fi
+    echo "RUFUS_EXTLINUX_INSTALL $driver RESULT=$result"
+    if [[ -f /etc/rufus-extlinux-adapter && $result != 0 ]]; then exit "$result"; fi
+    if [[ -f /etc/rufus-extlinux-iso ]]; then
+        [[ $result == 0 ]]
+        # Keep the extractor's empty-target contract; no installer files may be
+        # silently accepted by a second extraction into this populated mount.
+        target_not_empty=39
+        rejected=$(iso_extract_probe /source.iso /target rr none RUFUS_EXT /source.iso)
+        echo "$rejected"
+        [[ $rejected == ERROR=$target_not_empty\ * && $rejected == *" WRITES=0 "* && $rejected == *" FDS=0 "* ]]
+        sha256sum /source.iso
+    fi
+    if [[ -f /etc/rufus-extlinux-adapter ]]; then syslinux_ntfs_probe --attributes /target; fi
+    # If raw-device access was refused, still measure driver mapping support on
+    # a clearly labelled, unpatched payload copy. This is not an installation.
+    if [[ ! -f /target/ldlinux.sys ]]; then
+        cp /loader.bin /target/ldlinux.sys
+        echo "RUFUS_EXTLINUX_MAPPING_ONLY $driver"
+    fi
+    sync
+    syslinux_extlinux_facts /target "${disk}1" "$disk" "$driver"
+    for name in ldlinux.sys ldlinux.c32; do
+        if [[ -f /target/$name ]]; then
+            stat -c 'FILE %n SIZE=%s MODE=%a' "/target/$name"
+            sha256sum "/target/$name"
+        fi
+    done
+    umount /target
+    if [[ $child != 0 ]]; then wait "$child"; fi
+    result=0
+    mount -i -t ntfs -o ro,nodev,nosuid,noexec /proc/1/fd/3 /target || result=$?
+    echo "RUFUS_EXTLINUX_KERNEL_REMOUNT $driver RESULT=$result"
+    if [[ $result == 0 ]]; then
+        if [[ -f /etc/rufus-extlinux-adapter ]]; then syslinux_ntfs_probe --attributes /target; fi
+        sha256sum /target/ldlinux.sys
+        umount /target
+    fi
+    exec 3>&-
+    echo "RUFUS_EXTLINUX_END $driver"
+done
+echo RUFUS_EXTLINUX_DONE

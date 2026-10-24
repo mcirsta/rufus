@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "rufus_job.h"
+#include "job_priority.h"
 #include "platform/rufus_reporting.h"
 
 #include <QDebug>
@@ -94,6 +95,9 @@ void RufusJob::run()
     std::optional<QString> failure;
     {
         ActiveJobScope scope(*this);
+        JobPriorityScope priority;
+        if (priority.error() != 0)
+            emit logMessage(QStringLiteral("Cannot apply all native job scheduling preferences: %1").arg(priority.error()));
         try
         {
             execute();

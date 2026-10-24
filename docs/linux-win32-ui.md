@@ -17,14 +17,14 @@ Windows; this checkpoint does not claim pixel-identical Win32 rendering.
 | Win32 control/behavior | Qt form or implementation |
 | --- | --- |
 | Drive Properties, Format Options, Status | Same captions, 14-point semibold headings and horizontal rules; no enclosing group boxes. |
-| `IDC_DEVICE` | `deviceCombo`, full-width while advanced drive options are collapsed; explicit selection uses device identity. |
+| `IDC_DEVICE` | `deviceCombo`, full-width while advanced drive options are collapsed; capacity order and initial smallest-device selection match Win32. Selection uses device identity; invalidated targets require reselection. |
 | `IDC_SAVE_TOOLBAR` | `saveDeviceButton`, original save icon, shown with advanced drive options; disabled until implemented. |
 | `IDC_BOOT_SELECTION` | `bootCombo`, showing `Disk or ISO image (Please select)` initially and the chosen filename afterward. No separate image-path row. Other boot modes await media support. |
 | `IDC_HASH_TOOLBAR`, `IDC_SELECT` | Original hash icon, then SELECT at the right of the same row. Checksums remain disabled. |
 | Image option and persistence controls | Present in the form in the original position; hidden until image analysis determines applicability. |
 | Partition scheme / Target system | Side-by-side labels and combos. Disabled pending analysis/planning. |
 | Advanced drive toolbar | Show/Hide advanced drive properties, initially collapsed; expands without animations. |
-| Advanced drive options | List USB Hard Drives; old BIOS fixes; runtime UEFI media validation, in original order. Disabled. |
+| Advanced drive options | List USB Hard Drives enabled at CP17d3, with Alt+F, original warning tooltip and temporary status. Old BIOS fixes and runtime UEFI media validation remain disabled, in original order. |
 | Volume label | Full-width text field; displays the completed scan label in CP3d. Editing stays disabled. |
 | File system / Cluster size | Side-by-side labels and combos aligned with partition/target fields. Disabled. |
 | Advanced format toolbar | Show/Hide advanced format options, initially collapsed. |
@@ -45,8 +45,10 @@ directly from `res/` and retain their [license notices](../res/icons/license.txt
 CP2 feeds the existing device combo and status/log areas from read-only UDisks2
 discovery; it does not change the form, control order or advanced defaults.
 The initial conservative removable-USB filter is documented in the
-[Linux README](../linux/README.md#read-only-device-discovery). Fixed USB listing
-and all media operations remain unavailable.
+[Linux README](../linux/README.md#read-only-device-discovery). At CP2, fixed USB listing
+and all media operations remained unavailable. CP17d3 now enables explicit fixed
+USB listing and carries that policy through the qualified creation routes; see
+[the current support limits](linux-support.md).
 
 ## CP3d analysis behavior
 
@@ -151,3 +153,59 @@ Add image-specific options and additional modes at their backend checkpoints,
 retaining the original conditional layout and interaction. Do not introduce a
 new summary panel, rearrange the fields, or redesign the workflow while adding
 Linux service support.
+
+
+## CP18e — standalone UEFI:NTFS behavior (2026-09-28)
+
+`SetBootOptions` adds UEFI:NTFS only in advanced drive mode and restores the
+image selection when that section is collapsed. Qt follows that behavior while
+retaining an already loaded image. `EnableControls` keeps SELECT enabled in all
+idle modes, including Non bootable and UEFI:NTFS; selecting a new image switches
+back to image mode. No additional summary panel or form field is introduced.
+
+`SetPartitionSchemeAndTargetSystem` defaults standalone UEFI:NTFS to GPT and
+remembers explicit MBR/GPT choices, with UEFI (non CSM) as its only target. An
+inapplicable prior SFD preference falls back to MBR as the first allowed entry.
+Above 2 TiB, native MBR cannot represent the whole device, so Qt retains its
+existing GPT-only gate. `GetAllowedFileSystems` supplies the NTFS/exFAT mask;
+native geometry filters cluster sizes using the same reserved loader extent as
+the helper. The default filesystem marker is determined before boot filtering,
+so it need not appear beside either offered filesystem. Existing/manual format
+selection and the original cluster defaults apply.
+
+The label follows `SetProposedLabel`: an ISO label applies only in image mode;
+standalone selection uses the device/proposed label unless manually edited.
+Windows image options and ISO/DD dialogs remain hidden for a standalone job.
+The confirmation names UEFI:NTFS, the selected partition scheme, filesystem,
+normalized label and cluster size, without claiming an image will be copied.
+Shared progress uses BT_UEFI_NTFS, with success only after helper exit.
+
+The window and simulated-device lifecycle tests cover these transitions at
+normal scale, with focused 2×-scale checks and a retained offscreen screenshot.
+Source tracing and Qt fixtures do not replace a future live Windows comparison
+or physical-device/desktop authorization qualification.
+
+
+## CP19e — normal FreeDOS choice (2026-09-29)
+
+`SetBootOptions` offers FreeDOS outside advanced drive properties. Qt now does
+the same for the qualified backend; expanding/collapsing that section preserves
+FreeDOS. `SetPartitionSchemeAndTargetSystem` restricts it to MBR and BIOS
+(or UEFI-CSM). Shared Rufus rules supply FAT16/FAT32 eligibility and native
+geometry filters the clusters. Source ISO/Windows options are not applied;
+SELECT still works, and a retained ISO can be selected again.
+
+The explicit Linux difference is the user-requested DOS settings dialog before
+authorization: choose from Rufus's own keyboard/code-page tables, default US/437,
+without Linux host detection. Cancel stops preparation, accepted settings are
+frozen, and the ordinary erase/partition warnings still precede one helper job.
+The main form acquires no extra fields or summary panel.
+
+Windows's `format.c` advances one preceding DOS copy step and `ExtractDOS`
+advances five more; MSG_230 is “Copying DOS files...”. Qt consumes all six through
+the shared original progress policy, preserving its discrete weighting and float
+rounding. The caption does not add an ISO-style percentage. Both ordinary and
+large FAT32 progress are covered. READY remains full only after successful sync,
+cleanup and helper exit, and remains full if the completed USB is unplugged.
+Offscreen workflow and normal/scaled window tests do not replace future live
+Windows/desktop comparison or physical-device qualification.

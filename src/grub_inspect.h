@@ -19,6 +19,21 @@ extern "C" {
 void GetGrubVersion(const char* buf, size_t buf_size, const char* source,
 	RUFUS_IMG_REPORT* report);
 
+/* BootCheckThread's BIOS/MBR image lookup gate. A missing detection does not
+ * become an embedded-version detection. Syslinux precedence does not suppress
+ * this check on Windows; it is applied later when choosing boot records.
+ * embedded_version is a terminated version string. No I/O or compatibility
+ * certification is performed; unreadable cache/downloads still fall back. */
+bool NeedsGrub2CoreLookup(const RUFUS_IMG_REPORT* report, bool mbr, bool bios,
+	const char* embedded_version);
+
+/* Next core.img server lookup uses the full detected name, then successively
+ * shorter prefixes at dots/dashes, preserving BootCheckThread's order. Start
+ * with sizeof(report->grub2_version), then pass the returned length to advance.
+ * Zero means exhausted or missing/unterminated detection. Does not modify the
+ * report, select a core or claim shortened names identify compatible modules. */
+size_t GetGrub2DownloadVersionLength(const RUFUS_IMG_REPORT* report, size_t before);
+
 /* Add discovered filesystem names to an initialized caller-owned string array,
  * preserving order and case-sensitive uniqueness. Names are copied. Returns
  * false on allocation failure, retaining any names collected before failure.

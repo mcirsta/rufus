@@ -151,6 +151,81 @@ static void CheckSelectionAndBounds(void)
 	CheckVersion(long_version, "ignored", 2, true, expected);
 }
 
+static void CheckCoreLookup(void)
+{
+	static const struct { const char* version; bool different; } versions[] = {
+		{ "", false }, { "2.14", false }, { "2.14-nonstandard", true },
+		{ "2.14-gdie", true }, { "2.06-ubuntu-22.04.4", true }, { "2.12", true }
+	};
+	RUFUS_IMG_REPORT report = { 0 };
+	for (size_t row = 0; row < sizeof(versions) / sizeof(versions[0]); row++) {
+		strcpy(report.grub2_version, versions[row].version);
+		for (unsigned int flags = 0; flags < 16; flags++) {
+			const bool mbr = (flags & 1) != 0, bios = (flags & 2) != 0;
+			report.has_grub2 = (flags & 4) != 0;
+			report.has_syslinux = (flags & 8) != 0;
+			RUFUS_IMG_REPORT before;
+			memcpy(&before, &report, sizeof(before));
+			cases++;
+			CHECK(NeedsGrub2CoreLookup(&report, mbr, bios, "2.14") ==
+				(mbr && bios && report.has_grub2 && versions[row].different));
+			CHECK(memcmp(&report, &before, sizeof(report)) == 0);
+		}
+	}
+	report.has_grub2 = 2; // /boot/grub2's existing prefix distinction.
+	strcpy(report.grub2_version, "2.14-nonstandard");
+	cases++;
+	CHECK(NeedsGrub2CoreLookup(&report, true, true, "2.14"));
+	CHECK(!NeedsGrub2CoreLookup(NULL, true, true, "2.14"));
+	CHECK(!NeedsGrub2CoreLookup(&report, true, true, NULL));
+	memset(report.grub2_version, 'x', sizeof(report.grub2_version));
+	CHECK(!NeedsGrub2CoreLookup(&report, true, true, "2.14"));
+}
+
+static void CheckDownloadVersions(void)
+{
+	static const struct { const char* version; const char* names[8]; } rows[] = {
+		{ "", { NULL } },
+		{ "2.14", { "2.14", "2", NULL } },
+		{ "2.14-nonstandard-gdie", { "2.14-nonstandard-gdie", "2.14-nonstandard", "2.14", "2", NULL } },
+		{ "2.06-ubuntu-22.04.4", { "2.06-ubuntu-22.04.4", "2.06-ubuntu-22.04", "2.06-ubuntu-22",
+			"2.06-ubuntu", "2.06", "2", NULL } },
+		{ "2.02-beta2", { "2.02-beta2", "2.02", "2", NULL } },
+		{ "2.12-rc1", { "2.12-rc1", "2.12", "2", NULL } },
+		{ "abc", { "abc", NULL } },
+		{ "-2.", { "-2.", "-2", NULL } }
+	};
+	for (size_t row = 0; row < sizeof(rows) / sizeof(rows[0]); row++) {
+		RUFUS_IMG_REPORT report = { 0 };
+		strcpy(report.grub2_version, rows[row].version);
+		RUFUS_IMG_REPORT before;
+		memcpy(&before, &report, sizeof(before));
+		size_t prefix = sizeof(report.grub2_version), index = 0;
+		cases++;
+		while ((prefix = GetGrub2DownloadVersionLength(&report, prefix)) != 0) {
+			CHECK(index < sizeof(rows[row].names) / sizeof(rows[row].names[0]));
+			if (index >= sizeof(rows[row].names) / sizeof(rows[row].names[0])) break;
+			const char* expected = rows[row].names[index++];
+			CHECK(expected != NULL);
+			if (expected == NULL) break;
+			CHECK(prefix == strlen(expected));
+			CHECK(strncmp(report.grub2_version, expected, prefix) == 0);
+			CHECK(memcmp(&report, &before, sizeof(report)) == 0);
+		}
+		CHECK(index < sizeof(rows[row].names) / sizeof(rows[row].names[0]) && rows[row].names[index] == NULL);
+		CHECK(GetGrub2DownloadVersionLength(&report, 0) == 0);
+	}
+	RUFUS_IMG_REPORT report = { 0 };
+	memset(report.grub2_version, 'x', sizeof(report.grub2_version));
+	cases++;
+	CHECK(GetGrub2DownloadVersionLength(&report, sizeof(report.grub2_version)) == 0);
+	CHECK(GetGrub2DownloadVersionLength(NULL, 1) == 0);
+	// The complete terminated field is accepted; the loop still never returns 0 as a name.
+	report.grub2_version[sizeof(report.grub2_version) - 1] = 0;
+	CHECK(GetGrub2DownloadVersionLength(&report, sizeof(report.grub2_version)) == sizeof(report.grub2_version) - 1);
+	CHECK(GetGrub2DownloadVersionLength(&report, sizeof(report.grub2_version) - 1) == 0);
+}
+
 static void CheckFilesystems(void)
 {
 	char buf[1024] = { 0 };
@@ -230,6 +305,8 @@ int main(void)
 {
 	CheckVersionRules();
 	CheckSelectionAndBounds();
+	CheckCoreLookup();
+	CheckDownloadVersions();
 	CheckFilesystems();
 #ifdef RUFUS_TEST_ALLOCATION_FAILURE
 	CheckAllocationFailure();

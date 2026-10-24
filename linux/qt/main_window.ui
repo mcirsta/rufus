@@ -32,7 +32,7 @@
      </widget></item>
      <item><widget class="QToolButton" name="saveDeviceButton">
       <property name="enabled"><bool>false</bool></property>
-      <property name="toolTip"><string>Save the selected device to an image — not available</string></property>
+      <property name="toolTip"><string>Save the selected device to an image. Its filesystems will be unmounted; close files using the device first.</string></property>
       <property name="accessibleName"><string>Save device to image</string></property>
       <property name="icon"><iconset resource="rufus_icons.qrc"><normaloff>:/rufus/save-16.png</normaloff>:/rufus/save-16.png</iconset></property>
       <property name="autoRaise"><bool>true</bool></property>
@@ -46,16 +46,17 @@
      <item><widget class="QComboBox" name="bootCombo">
       <property name="sizeAdjustPolicy"><enum>QComboBox::AdjustToMinimumContentsLengthWithIcon</enum></property>
       <property name="minimumContentsLength"><number>24</number></property>
+      <item><property name="text"><string>Non bootable</string></property></item>
       <item><property name="text"><string>Disk or ISO image (Please select)</string></property></item>
      </widget></item>
      <item><widget class="QToolButton" name="hashButton">
       <property name="enabled"><bool>false</bool></property>
-      <property name="toolTip"><string>Compute image checksums — not available</string></property>
+      <property name="toolTip"><string>Compute image checksums</string></property>
       <property name="accessibleName"><string>Compute image checksums</string></property>
       <property name="icon"><iconset resource="rufus_icons.qrc"><normaloff>:/rufus/hash-16.png</normaloff>:/rufus/hash-16.png</iconset></property>
       <property name="autoRaise"><bool>true</bool></property>
      </widget></item>
-     <item><widget class="QPushButton" name="selectImageButton">
+     <item><widget class="rufus::ImageSelectButton" name="selectImageButton">
       <property name="autoDefault"><bool>true</bool></property>
       <property name="text"><string>SELECT</string></property>
       <property name="minimumSize"><size><width>80</width><height>0</height></size></property>
@@ -89,13 +90,12 @@
      <property name="autoRaise"><bool>true</bool></property>
     </widget></item>
     <item><widget class="QWidget" name="advancedDriveOptions">
-     <property name="enabled"><bool>false</bool></property>
      <layout class="QVBoxLayout" name="advancedDriveLayout">
       <property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property>
       <property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property>
-      <item><widget class="QCheckBox" name="listUsbHardDrives"><property name="text"><string>List USB Hard Drives</string></property></widget></item>
-      <item><widget class="QCheckBox" name="oldBiosFixes"><property name="text"><string>Add fixes for old BIOSes (extra partition, align, etc.)</string></property></widget></item>
-      <item><widget class="QCheckBox" name="uefiValidation"><property name="text"><string>Enable runtime UEFI media validation</string></property></widget></item>
+      <item><widget class="QCheckBox" name="listUsbHardDrives"><property name="toolTip"><string>Enable the listing of USB Hard Drive enclosures. USE AT YOUR OWN RISKS!!!</string></property><property name="text"><string>List USB Hard Drives</string></property></widget></item>
+      <item><widget class="QCheckBox" name="oldBiosFixes"><property name="enabled"><bool>false</bool></property><property name="text"><string>Add fixes for old BIOSes (extra partition, align, etc.)</string></property></widget></item>
+      <item><widget class="QCheckBox" name="uefiValidation"><property name="enabled"><bool>false</bool></property><property name="text"><string>Enable runtime UEFI media validation</string></property></widget></item>
      </layout>
     </widget></item>
     <item><layout class="QHBoxLayout" name="formatHeaderLayout">
@@ -152,14 +152,14 @@
     <item><spacer name="buttonSpace"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeType"><enum>QSizePolicy::Fixed</enum></property><property name="sizeHint"><size><width>0</width><height>12</height></size></property></spacer></item>
     <item><layout class="QHBoxLayout" name="buttonLayout">
      <item><widget class="QToolButton" name="languageButton">
-      <property name="enabled"><bool>false</bool></property><property name="accessibleName"><string>Change application language</string></property>
-      <property name="toolTip"><string>Change application language — not available</string></property>
+      <property name="enabled"><bool>true</bool></property><property name="accessibleName"><string>Change application language</string></property>
+      <property name="toolTip"><string>Change application language</string></property>
       <property name="icon"><iconset resource="rufus_icons.qrc"><normaloff>:/rufus/lang-16.png</normaloff>:/rufus/lang-16.png</iconset></property>
       <property name="autoRaise"><bool>true</bool></property>
      </widget></item>
      <item><widget class="QToolButton" name="aboutButton">
-      <property name="enabled"><bool>false</bool></property><property name="accessibleName"><string>About Rufus</string></property>
-      <property name="toolTip"><string>About Rufus — not available</string></property>
+      <property name="accessibleName"><string>About Rufus</string></property>
+      <property name="toolTip"><string>About Rufus</string></property>
       <property name="icon"><iconset resource="rufus_icons.qrc"><normaloff>:/rufus/info-16.png</normaloff>:/rufus/info-16.png</iconset></property>
       <property name="autoRaise"><bool>true</bool></property>
      </widget></item>
@@ -190,6 +190,7 @@
   </widget>
   <widget class="QStatusBar" name="statusBar"><property name="sizeGripEnabled"><bool>false</bool></property></widget>
  </widget>
+ <customwidgets><customwidget><class>rufus::ImageSelectButton</class><extends>QPushButton</extends><header>qt/image_select_button.h</header></customwidget></customwidgets>
  <tabstops>
   <tabstop>deviceCombo</tabstop><tabstop>saveDeviceButton</tabstop><tabstop>bootCombo</tabstop><tabstop>hashButton</tabstop><tabstop>selectImageButton</tabstop>
   <tabstop>partitionCombo</tabstop><tabstop>targetCombo</tabstop><tabstop>advancedDriveButton</tabstop>

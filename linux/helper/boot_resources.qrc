@@ -1,0 +1,5 @@
+<RCC>
+ <qresource prefix="/rufus/uefi">
+  <file alias="uefi-ntfs.img">../../res/uefi/uefi-ntfs.img</file>
+ </qresource>
+</RCC>

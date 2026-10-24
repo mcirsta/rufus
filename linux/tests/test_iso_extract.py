@@ -38,16 +38,23 @@ def make_image(root, name, entries, mkisofs, udf=False, directories=(), special=
     return image
 
 
-def extract(probe, image, target, view="rr", fault="none", error=0):
+def extract(probe, image, target, view="rr", fault="none", error=0, label=None, original_path=None):
     global runs
-    result = subprocess.run([str(probe), str(image), str(target), view, fault],
-                            capture_output=True, timeout=20)
+    command = [str(probe), str(image), str(target), view, fault]
+    if label is not None:
+        command += [label, str(image) if original_path is None else original_path]
+    result = subprocess.run(command, capture_output=True, timeout=30)
     runs += 1
     assert result.returncode == 0, (result.returncode, result.stderr)
     values = {key.decode(): int(value) for key, value in re.findall(rb"([A-Z_]+)=(-?\d+)", result.stdout)}
     assert values["ERROR"] == error, (fault, values, result.stderr)
     assert values["FDS"] == 0, (fault, values)
-    assert values["WRITTEN"] == values["ACTUAL"], (fault, values)
+    assert values["PROGRESS_INVALID"] == 0, (fault, values)
+    if fault.startswith("preflight"):
+        assert values["ACTUAL"] == values["WRITES"] == 0, (fault, values)
+        assert values["PROGRESS_SAMPLES"] == 0, (fault, values)
+    else:
+        assert values["WRITTEN"] + values["GENERATED"] == values["ACTUAL"], (fault, values)
     assert values["MAX_READ"] <= MIB and values["MAX_WRITE"] <= MIB, values
     if values["FLAGS"]:
         assert values["FLAGS"] & os.O_NOFOLLOW, values
@@ -58,6 +65,22 @@ def extract(probe, image, target, view="rr", fault="none", error=0):
         else:
             assert values["FLAGS"] & os.O_NONBLOCK, values
     return values
+
+
+def check_progress(args, root, udf):
+    # Tiny tails distinguish Rufus's per-file ISO block counts from byte counts.
+    entries = {"one.bin": b"x", "tail.bin": b"y" * 2049, "large.bin": b"z" * (2 * MIB + 1),
+               "ldlinux.sys": b"skipped"}
+    name = "PROGRESS_UDF" if udf else "PROGRESS_ISO"
+    image = make_image(root, name, entries, args.mkisofs, udf)
+    target = root / (name + "_out")
+    target.mkdir()
+    values = extract(args.probe, image, target)
+    expected = sum((len(data) + 2047) // 2048 for path, data in entries.items() if path != "ldlinux.sys")
+    assert values["PROGRESS_BLOCKS"] == expected, values
+    assert values["PROGRESS_TOTAL"] == expected + 1, values  # Original scan includes skipped ldlinux.sys.
+    assert values["PROGRESS_INTERMEDIATE"] > 0, values
+    assert values["PROGRESS_SAMPLES"] >= 5, values
 
 
 def check_tree(target, entries, empty=()):
@@ -241,6 +264,15 @@ def check_sanitized_names(args, root, udf):
     assert report["FILES"] == 2 and report["WRITTEN"] == len(b"firstsecond"), report
     assert report["REPLACEMENTS"] == report["TRUNCATIONS"] == 1, report
     check_tree(target, {"bad_name.txt": b"second"})
+    if not udf:
+        # Joliet itself translates both names to the same source path. Each
+        # visited record must supply its own extent; path lookup finds only
+        # the first record and would reject or copy the wrong second file.
+        target = root / "joliet-name-clash"
+        target.mkdir()
+        report = extract(args.probe, image, target, view="joliet")
+        assert report["FILES"] == 2 and report["WRITTEN"] == len(b"firstsecond"), report
+        check_tree(target, {"bad_name.txt": b"second"})
 
 
 def make_merged_image(root, name, mkisofs, udf=False):
@@ -329,6 +361,14 @@ def check_target_types(args, root):
 
 def check_preflight(args, root):
     image = make_image(root, "DIRECTORY", {"nested/file": b"data"}, args.mkisofs)
+    for mode, error, files, planned in [('preflight', 0, 1, 4), ('preflight-small', errno.EFBIG, 0, 0)]:
+        absent = root / 'preflight-output-must-not-exist'
+        result = subprocess.run([str(args.probe), str(image), str(absent), 'rr', mode], capture_output=True, timeout=20)
+        assert result.returncode == 0, result.stderr
+        report = {key.decode(): int(value) for key, value in re.findall(rb'([A-Z_]+)=(-?\d+)', result.stdout)}
+        assert report['ERROR'] == error and report['FILES'] == files and report['WRITTEN'] == planned, report
+        assert report['ACTUAL'] == report['WRITES'] == report['FDS'] == 0, report
+        assert not absent.exists()
     target = root / "mkdir-fail"
     target.mkdir()
     extract(args.probe, image, target, fault="mkdir-fail", error=errno.EACCES)
@@ -355,8 +395,9 @@ def check_preflight(args, root):
         image = make_image(root, special.upper(), {"data.bin": b"data"}, args.mkisofs, special=special)
         target = root / (special + "-output")
         target.mkdir()
-        extract(args.probe, image, target, error=errno.ENOTSUP)
-        assert not list(target.iterdir())
+        extract(args.probe, image, target)
+        expected = {"data.bin": b"data", "link": b"data.bin"} if special == "symlink" else {"data.bin": b"data", "fifo": b""}
+        check_tree(target, expected)
     image = root / "invalid.iso"
     image.write_bytes(bytes(65536))
     target = root / "invalid-output"
@@ -377,6 +418,336 @@ def check_preflight(args, root):
     assert not list(target.iterdir())
 
 
+def check_syslinux_configs(args, root, udf):
+    root_config = b"DEFAULT loadconfig\n\nLABEL loadconfig\n  CONFIG /isolinux.cfg\n"
+    nested_config = (b"DEFAULT loadconfig\n\nLABEL loadconfig\n"
+                     b"  CONFIG /MiXeD/isolinux.cfg\n  APPEND /MiXeD/\n")
+    override_config = (b"DEFAULT loadconfig\n\nLABEL loadconfig\n"
+                       b"  CONFIG /boot/x86_64/loader/isolinux.cfg\n  APPEND /boot/x86_64/loader/\n")
+    source = {"boot/x86_64/loader/isolinux.cfg": b"default linux\n", "syslinux.cfg": b"original\n"}
+    overridden = {"boot/x86_64/loader/isolinux.cfg": b"default linux\n",
+                  "syslinux.org": b"original\n", "syslinux.cfg": override_config}
+    cases = [
+        ({"boot/grub/grub.cfg": b"menuentry linux {}\n"}, None, b""),
+        ({"isolinux.cfg": b"default linux\n"}, None, root_config),
+        ({"MiXeD/isolinux.cfg": b"default linux\n"}, None, nested_config),
+        ({"MiXeD/isolinux.cfg": b"default linux\n", "syslinux.cfg": b"keep me\r\n"}, None, b""),
+        (source, overridden, override_config),
+        ({"isolinux.cfg": b"default linux\n", "syslinux.org": b"older backup\n"}, None, root_config),
+    ]
+    for index, (entries, expected, generated) in enumerate(cases):
+        image = make_image(root, f"CONFIG{index}", entries, args.mkisofs, udf)
+        original = image.read_bytes()
+        target = root / f"output-{index}"
+        target.mkdir()
+        if expected is None:
+            expected = dict(entries)
+            if generated:
+                expected["syslinux.cfg"] = generated
+        report = extract(args.probe, image, target)
+        check_tree(target, expected)
+        assert report["FILES"] == len(entries), report
+        assert report["WRITTEN"] == sum(map(len, entries.values())), report
+        assert report["GENERATED"] == len(generated), report
+        assert image.read_bytes() == original
+    entries = dict(source, **{"syslinux.org": b"do not replace my backup\n"})
+    image = make_image(root, "BACKUP", entries, args.mkisofs, udf)
+    target = root / "backup-exists"
+    target.mkdir()
+    report = extract(args.probe, image, target, error=errno.EEXIST)
+    check_tree(target, entries)
+    assert report["GENERATED"] == 0
+    target = root / "backup-exists-fallback"
+    target.mkdir()
+    report = extract(args.probe, image, target, fault="config-backup-fallback", error=errno.EEXIST)
+    check_tree(target, entries)
+    assert report["BACKUP_LINKS"] == 1 and report["BACKUP_UNLINKS"] == 0, report
+    assert report["GENERATED"] == 0
+    image = make_image(root, "CONFLICT", {"isolinux.cfg": b"default linux\n"},
+                       args.mkisofs, udf, directories=["syslinux.cfg"])
+    target = root / "directory-conflict"
+    target.mkdir()
+    extract(args.probe, image, target, error=errno.ENOTSUP)
+    check_tree(target, {"isolinux.cfg": b"default linux\n"}, ["syslinux.cfg"])
+
+    image = make_image(root, "CONFIGFAULTS", source, args.mkisofs, udf)
+    original = image.read_bytes()
+    for fault, error, unlinks in (("config-backup-fallback", 0, 1), ("config-backup-enosys", 0, 1),
+                                  ("config-backup-unsupported", 0, 1), ("config-backup-link-fail", errno.EIO, 0),
+                                  ("config-backup-link-unsupported", errno.EOPNOTSUPP, 0),
+                                  ("config-backup-unlink-fail", errno.EIO, 1)):
+        target = root / fault
+        target.mkdir()
+        report = extract(args.probe, image, target, fault=fault, error=error)
+        expected = dict(overridden if error == 0 else source)
+        if fault == "config-backup-unlink-fail":
+            expected["syslinux.org"] = source["syslinux.cfg"]
+            assert (target / "syslinux.cfg").stat().st_ino == (target / "syslinux.org").stat().st_ino
+            assert (target / "syslinux.cfg").stat().st_nlink == 2
+        elif error == 0:
+            assert (target / "syslinux.org").stat().st_nlink == 1
+        check_tree(target, expected)
+        assert report["BACKUP_LINKS"] == 1, report
+        assert report["BACKUP_UNLINKS"] == unlinks, report
+        assert report["GENERATED"] == (len(override_config) if error == 0 else 0), report
+        assert image.read_bytes() == original
+    cases = [("config-backup-fail", errno.EACCES, False, 0),
+             ("config-cancel", errno.ECANCELED, False, 0),
+             ("config-source-change", errno.ESTALE, False, 0),
+             ("config-open-fail", errno.EACCES, True, 0),
+             ("config-write-fail", errno.ENOSPC, True, 0),
+             ("config-sync-fail", errno.EIO, True, len(override_config)),
+             ("config-close-fail", errno.EIO, True, len(override_config))]
+    for fault, error, backed_up, written in cases:
+        image.write_bytes(original)
+        target = root / fault
+        target.mkdir()
+        report = extract(args.probe, image, target, fault=fault, error=error)
+        assert report["BACKUP_LINKS"] == 0 and report["BACKUP_UNLINKS"] == 0, report
+        expected = dict(source)
+        if backed_up:
+            expected["syslinux.org"] = expected.pop("syslinux.cfg")
+        check_tree(target, expected)
+        assert report["GENERATED"] == written, (fault, report)
+
+
+def label_fixture():
+    # Literal expectations remain independent of the shared C rule list.
+    tokens = ('options', 'append', 'linux', 'linuxefi', '$linux', 'search', 'for')
+    lines = ''.join(f'{token} OLD\\x20LABEL inst.stage2\r\n' for token in tokens)
+    lines += '# append OLD\\x20LABEL\r\nset OLD\\x20LABEL\r\nappendix OLD\\x20LABEL\r\n'
+    source = {'boot/boot.cfg': lines.encode(),
+              'loader/entries/arch.conf': b'options OLD\\x20LABEL\r\n',
+              'loader/entries/nested/keep.conf': b'options OLD\\x20LABEL\r\n',
+              'elsewhere.conf': b'options OLD\\x20LABEL\r\n',
+              'unicode.cfg': b'\xff\xfe' + 'append čș🚀 OLD\\x20LABEL\r\n'.encode('utf-16le'),
+              'keep.cfg': b'# append OLD\\x20LABEL\r\n',
+              'boot/boot.cfg~': b'preserve existing backup\n'}
+    expected = dict(source)
+    changed = ''.join(f'{token} NEW\\x20USB inst.stage2\n' for token in tokens)
+    changed += '# append OLD\\x20LABEL\nset OLD\\x20LABEL\nappendix OLD\\x20LABEL\n'
+    expected['boot/boot.cfg'] = changed.encode()
+    expected['loader/entries/arch.conf'] = b'options NEW\\x20USB\n'
+    expected['unicode.cfg'] = b'\xff\xfe' + 'append čș🚀 NEW\\x20USB\n'.encode('utf-16le')
+    return source, expected
+
+
+def check_label_configs(args, root, udf):
+    source, expected = label_fixture()
+    image = make_image(root, 'OLD LABEL', source, args.mkisofs, udf)
+    original = image.read_bytes()
+    for view in ('rr', 'joliet'):
+        target = root / ('labels-' + view)
+        target.mkdir()
+        report = extract(args.probe, image, target, view, label='NEW USB', fault='preflight')
+        assert not list(target.iterdir()) and report['WRITTEN'] == sum(map(len, source.values()))
+        report = extract(args.probe, image, target, view, label='NEW USB')
+        assert report['PATCHED'] == 3, report
+        check_tree(target, expected)
+    assert image.read_bytes() == original
+    # The retained source path is deliberately unrelated to the original image
+    # filename: netinst policy must use the original full path, with Rufus's case.
+    redhat = {'boot.cfg': b'append RHEL-9 inst.stage2\r\n'}
+    image = make_image(root, 'RHEL-9', redhat, args.mkisofs, udf)
+    cases = [('dvd', '/images/dvd.iso', b'append NEW\\x20USB inst.repo\n'),
+             ('netinst', '/images/netinst.iso', b'append NEW\\x20USB inst.stage2\n'),
+             ('directory', '/netinst/dvd.iso', b'append NEW\\x20USB inst.stage2\n'),
+             ('upper', '/images/NETINST.iso', b'append NEW\\x20USB inst.repo\n')]
+    for name, original_path, content in cases:
+        target = root / name
+        target.mkdir()
+        report = extract(args.probe, image, target, label='NEW USB', original_path=original_path)
+        assert report['PATCHED'] == 1, report
+        check_tree(target, {'boot.cfg': content})
+    # Matching labels still need the Red Hat substitution.
+    target = root / 'same-label-redhat'
+    target.mkdir()
+    extract(args.probe, image, target, label='RHEL-9')
+    check_tree(target, {'boot.cfg': b'append RHEL-9 inst.repo\n'})
+
+    target = root / 'ordered-label-and-repo'
+    target.mkdir()
+    extract(args.probe, image, target, label='inst.stage2')
+    check_tree(target, {'boot.cfg': b'append inst.repo inst.repo\n'})
+    limits = root / 'limits'
+    limits.mkdir()
+    image = make_image(limits, 'OLD', {'boot.cfg': b'append OLD\n'}, args.mkisofs, udf)
+    target = limits / 'target'
+    target.mkdir()
+    extract(args.probe, image, target, label='LONGER', fault='preflight-config-limit', error=errno.EFBIG)
+    assert not list(target.iterdir())
+
+    invalid = [('malformed', b'append OLD\r\n\xff', errno.EILSEQ),
+               ('binary', b'append OLD\0\n', errno.ENOTSUP),
+               ('large', b'x' * (8 * MIB + 1), errno.EFBIG),
+               ('expansion', b'append OLD\n' * 50000, errno.EFBIG)]
+    for name, content, error in invalid:
+        case = root / name
+        case.mkdir()
+        image = make_image(case, 'OLD', {'a.txt': b'no earlier writes', 'bad.cfg': content}, args.mkisofs, udf)
+        label = 'X' * 191 if name == 'expansion' else 'NEW'
+        for fault in ('preflight', 'none'):
+            target = case / fault
+            target.mkdir()
+            report = extract(args.probe, image, target, label=label, fault=fault, error=error)
+            assert report['ACTUAL'] == report['FILES'] == report['PATCHED'] == 0, report
+            assert not list(target.iterdir())
+        if name == 'malformed':
+            # With no active substitution Windows leaves even these bytes alone.
+            target = case / 'same-label'
+            target.mkdir()
+            extract(args.probe, image, target, label='OLD')
+            check_tree(target, {'a.txt': b'no earlier writes', 'bad.cfg': content})
+
+
+def freenas_fixture():
+    source = {'boot/grub/grub.cfg':
+              b'set root=cd9660:/dev/iso9660/OLD LABEL\r\nlinux OLD\\x20LABEL\r\n',
+              'boot/grub/loopback.cfg': b'\xff\xfe' +
+              'SET root=cd9660:/dev/iso9660/OLD LABEL čș\r\n'.encode('utf-16le'),
+              'other.cfg': b'set root=cd9660:/dev/iso9660/OLD LABEL\r\n'}
+    expected = {'boot/grub/grub.cfg':
+                b'set root=msdosfs:/dev/msdosfs/NEW USB\nlinux NEW\\x20USB\n',
+                'boot/grub/loopback.cfg': b'\xff\xfe' +
+                'SET root=msdosfs:/dev/msdosfs/NEW USB čș\n'.encode('utf-16le'),
+                'other.cfg': source['other.cfg']}
+    return source, expected
+
+
+def check_freenas_configs(args, root, udf):
+    source, expected = freenas_fixture()
+    image = make_image(root, 'OLD LABEL', source, args.mkisofs, udf)
+    original = image.read_bytes()
+    for view in ('rr', 'joliet'):
+        target = root / view
+        target.mkdir()
+        extract(args.probe, image, target, view, fault='preflight', label='NEW USB')
+        assert not list(target.iterdir())
+        report = extract(args.probe, image, target, view, label='NEW USB')
+        assert report['PATCHED'] == 2 and report['GENERATED'] == 0, report
+        check_tree(target, expected)
+    target = root / 'equal-labels'
+    target.mkdir()
+    extract(args.probe, image, target, label='OLD LABEL')
+    same = dict(source)
+    same['boot/grub/grub.cfg'] = b'set root=msdosfs:/dev/msdosfs/OLD LABEL\nlinux OLD\\x20LABEL\n'
+    same['boot/grub/loopback.cfg'] = b'\xff\xfe' + 'SET root=msdosfs:/dev/msdosfs/OLD LABEL čș\n'.encode('utf-16le')
+    check_tree(target, same)
+    assert image.read_bytes() == original
+    invalid = root / 'invalid'
+    invalid.mkdir()
+    image = make_image(invalid, 'SAME', {'grub.cfg': b'set cd9660:/dev/iso9660/SAME\xff'}, args.mkisofs, udf)
+    for fault in ('preflight', 'none'):
+        target = invalid / fault
+        target.mkdir()
+        report = extract(args.probe, image, target, label='SAME', fault=fault, error=errno.EILSEQ)
+        assert report['ACTUAL'] == report['FILES'] == 0 and not list(target.iterdir()), report
+
+
+EFI_CONFIG_ROOT = (b'DEFAULT loadconfig\n\nLABEL loadconfig\n'
+                   b'  CONFIG /EFI/BOOT/isolinux.cfg\n  APPEND /EFI/BOOT/\n')
+EFI_CONFIG_SOURCE = b'append OLD\\x20LABEL\r\n' + b'# keep comment\r\n' * 20
+EFI_CONFIG_PATCHED = b'append NEW\\x20USB\n' + b'# keep comment\n' * 20
+
+
+def check_efi_configs(args, root, udf):
+    source = {'EFI/BOOT/isolinux.cfg': EFI_CONFIG_SOURCE}
+    expected = {'EFI/BOOT/isolinux.cfg': EFI_CONFIG_PATCHED,
+                'EFI/BOOT/syslinux.cfg': EFI_CONFIG_PATCHED, 'syslinux.cfg': EFI_CONFIG_ROOT}
+    image = make_image(root, 'OLD LABEL', source, args.mkisofs, udf)
+    original = image.read_bytes()
+    target = root / 'patched'
+    target.mkdir()
+    report = extract(args.probe, image, target, label='NEW USB', fault='preflight')
+    assert report['FILES'] == 1 and report['ACTUAL'] == 0 and not list(target.iterdir())
+    report = extract(args.probe, image, target, label='NEW USB')
+    assert report['PATCHED'] == 1 and report['GENERATED'] == len(EFI_CONFIG_PATCHED) + len(EFI_CONFIG_ROOT), report
+    check_tree(target, expected)
+    cases = [('duplicate-cancel', errno.ECANCELED, 0), ('duplicate-source-change', errno.ESTALE, 0),
+             ('duplicate-input-fail', errno.EIO, 0), ('duplicate-open-fail', errno.EACCES, 0),
+             ('duplicate-read-fail', errno.EIO, 0), ('duplicate-eof', errno.EIO, 0),
+             ('duplicate-zero-write', errno.EIO, 0), ('duplicate-write-fail', errno.ENOSPC, 127),
+             ('duplicate-write-cancel', errno.ECANCELED, 127),
+             ('duplicate-sync-fail', errno.EIO, len(EFI_CONFIG_PATCHED)),
+             ('duplicate-close-fail', errno.EIO, len(EFI_CONFIG_PATCHED))]
+    for fault, error, copied in cases:
+        image.write_bytes(original)
+        target = root / fault
+        target.mkdir()
+        report = extract(args.probe, image, target, label='NEW USB', fault=fault, error=error)
+        assert report['FILES'] == 1 and report['GENERATED'] == copied, (fault, report)
+        check_tree(target, {'EFI/BOOT/isolinux.cfg': EFI_CONFIG_PATCHED})
+    image.write_bytes(original)
+    for fault in ('duplicate-short', 'duplicate-read-eintr', 'duplicate-write-eintr', 'duplicate-existing'):
+        target = root / fault
+        target.mkdir()
+        report = extract(args.probe, image, target, label='NEW USB', fault=fault)
+        kept = dict(expected)
+        if fault == 'duplicate-existing':
+            kept['EFI/BOOT/syslinux.cfg'] = b'existing'
+            assert report['GENERATED'] == len(EFI_CONFIG_ROOT), report
+        check_tree(target, kept)
+    assert image.read_bytes() == original
+
+    # The scanner's existing EFI config suppresses the copy, even when it has
+    # different case and different content. Keep the independent root config.
+    source = {'eFi/Boot/ISOLINUX.CFG': EFI_CONFIG_SOURCE, 'eFi/Boot/SYSLINUX.CFG': b'keep EFI\r\n',
+              'syslinux.cfg': b'keep root\r\n'}
+    image = make_image(root, 'EXISTING', source, args.mkisofs, udf)
+    target = root / 'existing-source'
+    target.mkdir()
+    report = extract(args.probe, image, target)
+    assert report['GENERATED'] == 0, report
+    check_tree(target, source)
+    del source['eFi/Boot/SYSLINUX.CFG']
+    image = make_image(root, 'UPPER', source, args.mkisofs, udf)
+    target = root / 'uppercase'
+    target.mkdir()
+    extract(args.probe, image, target)
+    source['eFi/Boot/sysLINUX.CFG'] = EFI_CONFIG_SOURCE
+    check_tree(target, source)
+
+    # This source directory is visited after the generated file, so the later
+    # directory creation fails without replacing either completed config.
+    source = {'EFI/BOOT/isolinux.cfg': EFI_CONFIG_SOURCE}
+    image = make_image(root, 'CONFLICT', source, args.mkisofs, udf, directories=['EFI/BOOT/syslinux.cfg'])
+    target = root / 'directory-conflict'
+    target.mkdir()
+    extract(args.probe, image, target, error=errno.ENOTDIR)
+    check_tree(target, dict(source, **{'EFI/BOOT/syslinux.cfg': EFI_CONFIG_SOURCE}))
+    # Faults insert pre-existing destination types before its exclusive open.
+    outside = root / 'outside'
+    outside.mkdir()
+    sentinel = outside / 'sentinel'
+    sentinel.write_bytes(b'outside config')
+    for fault, error in [('duplicate-directory', errno.ENOTSUP), ('duplicate-symlink', errno.ENOTSUP),
+                         ('duplicate-hardlink', errno.EMLINK), ('duplicate-fifo', errno.ENOTSUP)]:
+        target = root / fault
+        target.mkdir()
+        report = extract(args.probe, image, target, fault=fault, error=error)
+        assert report['GENERATED'] == 0, report
+        assert sentinel.read_bytes() == b'outside config'
+        assert (target / 'EFI/BOOT/isolinux.cfg').read_bytes() == EFI_CONFIG_SOURCE
+        node = target / 'EFI/BOOT/syslinux.cfg'
+        if fault == 'duplicate-directory':
+            assert node.is_dir() and not list(node.iterdir())
+        elif fault == 'duplicate-symlink':
+            assert node.is_symlink()
+        elif fault == 'duplicate-hardlink':
+            assert node.samefile(sentinel)
+        else:
+            assert stat.S_ISFIFO(node.lstat().st_mode)
+    for size in (0, 2 * MIB + 33):
+        source = {'EFI/BOOT/isolinux.cfg': b'x' * size, 'syslinux.cfg': b'keep root\n'}
+        image = make_image(root, 'SIZE' + str(size), source, args.mkisofs, udf)
+        target = root / ('size-' + str(size))
+        target.mkdir()
+        report = extract(args.probe, image, target)
+        assert report['GENERATED'] == size, report
+        source['EFI/BOOT/syslinux.cfg'] = source['EFI/BOOT/isolinux.cfg']
+        check_tree(target, source)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("probe", type=Path)
@@ -386,6 +757,7 @@ def main():
         root = Path(temporary)
         check_success(args, root)
         for udf in (False, True):
+            check_progress(args, root, udf)
             faults = root / ("faults-udf" if udf else "faults-iso")
             faults.mkdir()
             check_failures(args, faults, udf)
@@ -393,6 +765,18 @@ def main():
             names.mkdir()
             check_sanitized_names(args, names, udf)
             check_replacements(args, names, udf)
+            configs = root / ("configs-udf" if udf else "configs-iso")
+            configs.mkdir()
+            check_syslinux_configs(args, configs, udf)
+            labels = root / ('labels-udf' if udf else 'labels-iso')
+            labels.mkdir()
+            check_label_configs(args, labels, udf)
+            freenas = root / ('freenas-udf' if udf else 'freenas-iso')
+            freenas.mkdir()
+            check_freenas_configs(args, freenas, udf)
+            efi = root / ('efi-udf' if udf else 'efi-iso')
+            efi.mkdir()
+            check_efi_configs(args, efi, udf)
         types = root / "target-types"
         types.mkdir()
         check_target_types(args, types)
