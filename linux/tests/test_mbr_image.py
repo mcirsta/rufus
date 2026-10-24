@@ -155,7 +155,7 @@ def main():
     inspect = partial(inspect_mbr, file_system=args.file_system, non_bootable=args.non_bootable,
                       uefi_payload=uefi_payload, boot_code=args.boot_code)
     other_file_system = 32 if args.file_system == 16 else 16
-    max_cluster = {16: 65536, 32: 32768, "ntfs": 65536, "exfat": 32 * MIB}[args.file_system]
+    max_cluster = {16: 65536, 32: 65536, "ntfs": 65536, "exfat": 32 * MIB}[args.file_system]
     with tempfile.TemporaryDirectory(prefix="rufus-mbr-image-") as temporary:
         root = Path(temporary)
         # The 2-TiB bound is tested without allocating or opening a large image.
@@ -163,8 +163,10 @@ def main():
             call(root / "absent", size, operation="plan")
         for size, cluster, track, sector in ((2**41 + 512, 512, 63, 512), (MIB, 512, 63, 512),
                 (65 * MIB + 1, 512, 63, 512), (65 * MIB, 513, 63, 512),
-                (65 * MIB, max_cluster * 2, 63, 512), (65 * MIB, 512, 0, 512), (65 * MIB, 512, 63, 4096)):
+                (65 * MIB, max_cluster * 2, 63, 512), (65 * MIB, 512, 0, 512)):
             call(root / "absent", size, cluster, track, "plan", error=errno.EINVAL, sector=sector)
+        sector_error = errno.ENOTSUP if not args.non_bootable or uefi_payload else errno.EINVAL
+        call(root / "absent", 65 * MIB, 512, 63, "plan", error=sector_error, sector=4096)
         call(root / "absent", 65 * MIB, operation="plan", file_system=12, error=errno.ENOTSUP)
         call(root / "absent", 512 * MIB, cluster=max_cluster, operation="plan")
         if args.boot_code and args.boot_code != "syslinux":

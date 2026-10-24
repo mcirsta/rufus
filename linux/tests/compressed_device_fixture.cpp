@@ -94,7 +94,7 @@ extern "C" int __wrap_open64(const char* path, int flags, ...)
     const QByteArray name(path);
     const QByteArray directory = root();
     const bool disk = name == directory + "/disk.bin";
-    const bool source = name == directory + "/source.zip" || name == directory + "/source.gz" || name == directory + "/source.xz"
+    const bool source = name == directory + "/source.img" || name == directory + "/source.zip" || name == directory + "/source.gz" || name == directory + "/source.xz"
         || name == directory + "/source.bz2" || name == directory + "/source.lzma" || name == directory + "/source.Z"
         || name == directory + "/source.zst" || name == directory + "/source.vtsi"
         || name == directory + "/source.vhd";
@@ -269,9 +269,11 @@ extern "C" int __wrap__ZN5rufus27CheckPrepareDeviceSelectionERK15QDBusConnection
     return synced && mode("final-snapshot-error") ? ESTALE : 0;
 }
 
-extern "C" QString __wrap__ZN5rufus22ListUDisksTargetMountsERK4QMapI15QDBusObjectPathS0_I7QStringS0_IS2_8QVariantEEERKNS_6DeviceEyR5QListIS2_Eb(
-    const rufus::UDisksObjects&, const rufus::Device&, quint64, QStringList& mounts, bool)
+extern "C" QString __wrap__ZN5rufus22ListUDisksTargetMountsERK4QMapI15QDBusObjectPathS0_I7QStringS0_IS2_8QVariantEEERKNS_6DeviceEyR5QListIS2_EbNS_12DeviceAccessE(
+    const rufus::UDisksObjects&, const rufus::Device&, quint64, QStringList& mounts, bool, rufus::DeviceAccess access)
 {
+    if (access != rufus::DeviceAccess::Write)
+        qFatal("Compressed write fixture requires write access");
     mounts.clear();
     if (protectedTarget() && !unmounted) mounts.append(QStringLiteral("fixture-mount"));
     return {};
@@ -299,9 +301,11 @@ extern "C" int __wrap__ZN5rufus23CheckNativeTargetMountsEiiRNS_18NativeTargetMou
     return 0;
 }
 
-extern "C" QString __wrap__ZN5rufus23MatchUDisksTargetMountsERK4QMapI15QDBusObjectPathS0_I7QStringS0_IS2_8QVariantEEERKNS_6DeviceEyyRKNS_18NativeTargetMountsEb(
-    const rufus::UDisksObjects&, const rufus::Device&, quint64, quint64, const rufus::NativeTargetMounts&, bool)
+extern "C" QString __wrap__ZN5rufus23MatchUDisksTargetMountsERK4QMapI15QDBusObjectPathS0_I7QStringS0_IS2_8QVariantEEERKNS_6DeviceEyyRKNS_18NativeTargetMountsEbNS_12DeviceAccessE(
+    const rufus::UDisksObjects&, const rufus::Device&, quint64, quint64, const rufus::NativeTargetMounts&, bool, rufus::DeviceAccess access)
 {
+    if (access != rufus::DeviceAccess::Write)
+        qFatal("Compressed write fixture requires write access");
     return mode("mount-mismatch") ? QStringLiteral("fixture mount mismatch") : QString();
 }
 

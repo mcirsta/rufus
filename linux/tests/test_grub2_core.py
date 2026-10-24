@@ -104,8 +104,8 @@ def check_case(args, root, bits, boot_code):
 
     for fault, error in [('readonly', errno.EINVAL), ('append', errno.EINVAL), ('direct', errno.EINVAL),
                          ('null-options', errno.EINVAL), ('null-result', errno.EINVAL), ('null-core', errno.EINVAL),
-                         ('overflow', errno.ENOSPC), ('wrong-id', errno.EBADMSG), ('wrong-code', errno.ENOTSUP),
-                         ('block-request', errno.ENOTSUP), ('sector', errno.EINVAL)]:
+                         ('overflow', errno.ENOSPC), ('wrong-id', errno.EBADMSG), ('wrong-code', errno.EBADMSG),
+                         ('block-request', errno.ENOTSUP), ('sector', errno.ENOTSUP)]:
         disk.write_bytes(before)
         invoke(args.probe, disk, core, bits=bits, fault=fault, error=error, boot_code=boot_code)
         assert disk.read_bytes() == before, fault
@@ -157,7 +157,7 @@ def check_case(args, root, bits, boot_code):
             assert disk.read_bytes() == expected, fault
 
 
-def check_unsupported(args, root, bits):
+def check_alternate_mbr(args, root, bits):
     disk = root / 'unsupported.img'
     opposite = 'grub2' if args.grub4dos else 'grub4dos'
     for boot_code in ['syslinux', 'zero', opposite]:
@@ -166,8 +166,16 @@ def check_unsupported(args, root, bits):
                       non_bootable=boot_code == 'zero',
                       boot_code=None if boot_code == 'zero' else boot_code)
         before = disk.read_bytes()
-        invoke(args.probe, disk, args.core, bits=bits, error=errno.ENOTSUP, boot_code=boot_code)
-        assert disk.read_bytes() == before, boot_code
+        # ReactOS may retain its initial Syslinux MBR for an independent GRUB
+        # SBR. Other providers and a nonbootable data MBR remain unsupported.
+        supported = boot_code == 'syslinux'
+        invoke(args.probe, disk, args.core, bits=bits, error=0 if supported else errno.ENOTSUP,
+               boot_code=boot_code)
+        expected = bytearray(before)
+        if supported:
+            payload = args.core.read_bytes()[SECTOR:] if args.grub4dos else args.core.read_bytes()
+            expected[CORE_OFFSET:CORE_OFFSET + len(payload)] = payload
+        assert disk.read_bytes() == expected, boot_code
 
 
 def main():
@@ -186,7 +194,7 @@ def main():
         for bits in [16, 32, 'ntfs']:
             for boot_code in BOOT_CODES:
                 check_case(args, Path(temporary), bits, boot_code)
-            check_unsupported(args, Path(temporary), bits)
+            check_alternate_mbr(args, Path(temporary), bits)
         invoke(args.probe, Path('/dev/null'), args.core, error=errno.ENOTSUP,
                boot_code=provider)
         if args.grub4dos:

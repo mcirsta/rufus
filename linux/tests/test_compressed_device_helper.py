@@ -38,8 +38,8 @@ def timestamp(value):
     return f"{value // 10**9}:{value % 10**9}"
 
 
-def request(root, data, packed, sector, capacity, force):
-    source = root / ("source." + extension)
+def request(root, data, packed, sector, capacity, force, source_extension):
+    source = root / ("source." + source_extension)
     source.write_bytes(packed)
     info = source.stat()
     return {"operation": "compressed-write-device-v1", "path": str(root / "disk.bin"),
@@ -229,7 +229,8 @@ def check(program, root, mode="success", sector=512, data=None, force=False, cap
         if mode == 'incomplete-code':
             # The final eight bits cannot complete another nine-bit code.
             packed = encode_literals(data, 9) + b'\x7f'
-    packet = request(root, data, packed, sector, capacity, force)
+    source_extension = "img" if mode == "legacy-raw" else extension
+    packet = request(root, data, packed, sector, capacity, force, source_extension)
     wire = packet["source"]["compression"]
     if mode == "legacy-raw":
         packet["operation"] = "raw-write-device-v1"
@@ -302,7 +303,7 @@ def check(program, root, mode="success", sector=512, data=None, force=False, cap
     if mode == "corrupt": expected[23] ^= 1
     if mode == "padding-corrupt": expected[len(data)] ^= 1
     assert target.read_bytes() == expected, (mode, report)
-    assert (root / ("source." + extension)).read_bytes() == packed
+    assert Path(packet["source"]["path"]).read_bytes() == packed
 
 
 def main():

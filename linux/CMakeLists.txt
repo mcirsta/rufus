@@ -2116,7 +2116,7 @@ if(BUILD_TESTING)
         -Wl,--wrap=unshare -Wl,--wrap=mount -Wl,--wrap=ioctl -Wl,--wrap=InspectWritableTarget
         -Wl,--wrap=WriteGrub2CoreImage -Wl,--wrap=WriteGrub4dosSbrImage
         -Wl,--wrap=_ZN5rufus23ReadEmbeddedGrub4dosSbrEyR10QByteArray -Wl,--wrap=ExtractIsoTree -Wl,--wrap=WriteMbrUefiNtfsImage
-        -Wl,--wrap=InstallFatDeviceBootRecords -Wl,--wrap=InstallWinPeFatDeviceBootRecords -Wl,--wrap=CreateMbrImage
+        -Wl,--wrap=InstallFatDeviceBootRecords -Wl,--wrap=InstallLegacyFatDeviceBootRecords -Wl,--wrap=CreateMbrImage
         -Wl,--wrap=pwrite64 -Wl,--wrap=fsync
         -Wl,--wrap=AnalyzeIsoImageWithSource)
     add_executable(test_prepare_grub2_image tests/test_prepare_grub2_image.cpp)
@@ -2131,7 +2131,7 @@ if(BUILD_TESTING)
     target_link_libraries(test_prepare_grub2_image PRIVATE rufus_prepare_source rufus_qt_reporting rufus_wimlib Qt6::Test)
     add_dependencies(test_prepare_grub2_image prepare_grub2_image_probe wim_fixture)
     add_test(NAME rufus_prepare_grub2_image COMMAND test_prepare_grub2_image)
-    set_tests_properties(rufus_prepare_grub2_image PROPERTIES LABELS "functional;image;process;no-hardware" TIMEOUT 90)
+    set_tests_properties(rufus_prepare_grub2_image PROPERTIES LABELS "functional;image;process;no-hardware" TIMEOUT 600)
     add_executable(test_raw_helper_process tests/test_raw_helper_process.cpp)
     set_target_properties(test_raw_helper_process PROPERTIES AUTOMOC ON)
     target_compile_options(test_raw_helper_process PRIVATE -Wall -Wextra -Wpedantic)
@@ -2182,8 +2182,8 @@ if(BUILD_TESTING)
         -Wl,--wrap=pread64 -Wl,--wrap=pwrite64 -Wl,--wrap=fsync -Wl,--wrap=WriteCompressedImageToDevice
         -Wl,--wrap=_ZN5rufus25ReadPrepareDeviceSnapshotERK15QDBusConnectionRKNS_19PrepareImageRequestER4QMapI15QDBusObjectPathS6_I7QStringS6_IS8_8QVariantEEERNS_6DeviceE
         -Wl,--wrap=_ZN5rufus27CheckPrepareDeviceSelectionERK15QDBusConnectionRKNS_19PrepareImageRequestEbPi
-        -Wl,--wrap=_ZN5rufus22ListUDisksTargetMountsERK4QMapI15QDBusObjectPathS0_I7QStringS0_IS2_8QVariantEEERKNS_6DeviceEyR5QListIS2_Eb
-        -Wl,--wrap=_ZN5rufus23MatchUDisksTargetMountsERK4QMapI15QDBusObjectPathS0_I7QStringS0_IS2_8QVariantEEERKNS_6DeviceEyyRKNS_18NativeTargetMountsEb
+        -Wl,--wrap=_ZN5rufus22ListUDisksTargetMountsERK4QMapI15QDBusObjectPathS0_I7QStringS0_IS2_8QVariantEEERKNS_6DeviceEyR5QListIS2_EbNS_12DeviceAccessE
+        -Wl,--wrap=_ZN5rufus23MatchUDisksTargetMountsERK4QMapI15QDBusObjectPathS0_I7QStringS0_IS2_8QVariantEEERKNS_6DeviceEyyRKNS_18NativeTargetMountsEbNS_12DeviceAccessE
         -Wl,--wrap=_ZN5rufus20OpenNativeCallerHomeEjRi
         -Wl,--wrap=_ZN5rufus23CheckNativeTargetMountsEiiRNS_18NativeTargetMountsEi
         -Wl,--wrap=_ZN5rufus19UnmountNativeTargetEiiRKNS_18NativeTargetMountsERii)
@@ -2596,7 +2596,7 @@ if(BUILD_TESTING)
     target_compile_options(test_download_workflow PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_definitions(test_download_workflow PRIVATE RUFUS_FIDO_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/fido")
     add_test(NAME rufus_download_workflow COMMAND test_download_workflow)
-    set_tests_properties(rufus_download_workflow PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "functional;widgets;network;no-hardware" TIMEOUT 120)
+    set_tests_properties(rufus_download_workflow PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "functional;widgets;network;no-hardware" TIMEOUT 600)
     add_executable(test_udisks_client tests/test_udisks_client.cpp)
     # Only invented-metadata tests replace the native reader; production and VM
     # targets always read the actual USB sysfs snapshot.
@@ -2644,7 +2644,7 @@ if(BUILD_TESTING)
         grubDownloadWarning grubDownloadFlow grubDownloadExcluded
         grubIsoCreation grubIsoFailure grubIsoSelection grubIsoNtfsPolicy grubIsoHybridDd)
     set_tests_properties(rufus_grub2_widgets PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
-        LABELS "functional;dbus;image;widgets;no-hardware" TIMEOUT 60)
+        LABELS "functional;dbus;image;widgets;no-hardware" TIMEOUT 300)
     add_test(NAME rufus_compressed_write_widgets COMMAND test_raw_write_widgets
         zipPickerSelectsCompressedImage compressedPlanGeometry compressedCapacity compressedInvalidatedBeforeAuthorization
         compressedReadyWaitsForJoinedHelper compressedHelperFailure

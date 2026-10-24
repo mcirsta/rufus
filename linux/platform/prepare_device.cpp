@@ -21,9 +21,9 @@
 #include <fcntl.h>
 #include <linux/fs.h>
 #include "filesystem_magic.h"
-#include <linux/mount.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
+#include <linux/mount.h>
 #include <sys/stat.h>
 #include <sys/statfs.h>
 #include <sys/statvfs.h>

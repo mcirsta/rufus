@@ -19,6 +19,20 @@ ENVIRONMENT = dict(os.environ, LC_ALL="C.UTF-8")
 runs = 0
 
 
+def readonly_checker(program):
+    if not program or program.endswith('-NOTFOUND'):
+        return None
+    help_result = subprocess.run([program, '--help'], env=ENVIRONMENT, capture_output=True, timeout=15)
+    help_text = help_result.stdout + help_result.stderr
+    # NTFS-3G's older ntfsck accepts only a device argument and silently
+    # returns a usage error for -n. Require a documented no-repair option.
+    readonly_option = re.search(rb'(?m)^\s*-n(?:,\s*--[^\s,]+)?[ \t]+[^\r\n]*(?:no fix|no repair|read.only|no.action)', help_text, re.IGNORECASE)
+    if readonly_option is None:
+        print('Optional ntfsck has no supported -n read-only mode; retaining independent NTFS readbacks.', flush=True)
+        return None
+    return program
+
+
 def make_target(root, name, size=DEFAULT_SIZE):
     path = root / name
     with path.open("wb") as volume:
@@ -131,6 +145,7 @@ def main():
         parser.add_argument("--" + name, required=True)
     parser.add_argument("--fsck")
     args = parser.parse_args()
+    args.fsck = readonly_checker(args.fsck)
     with tempfile.TemporaryDirectory(prefix="rufus-ntfs-format-") as temporary:
         root = Path(temporary)
         cases = [(16*MIB, 0, 4096, ""), (DEFAULT_SIZE, 0, 4096, "Rufus ș😀"), (DEFAULT_SIZE, MIB, 8192, "Rufus ș 😀"),

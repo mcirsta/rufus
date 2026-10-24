@@ -33,14 +33,52 @@ def dirty(path, size):
         output.write(b'\xa5' * (size % MIB))
 
 
+def exfat_capability(probe, formatter):
+    """Use the standalone exFAT corpus's library/help gates and verify refusal."""
+    assert formatter and os.path.isabs(str(formatter)) and os.access(formatter, os.X_OK), formatter
+    library = subprocess.run([str(probe), '--check-library'], capture_output=True, timeout=15)
+    assert library.returncode in (0, 77), (library.returncode, library.stdout, library.stderr)
+    unavailable = 'libblkid' if library.returncode == 77 else None
+    if unavailable is None:
+        help_result = subprocess.run([str(formatter), '--help'], capture_output=True, timeout=15)
+        help_text = help_result.stdout + help_result.stderr
+        required = (b'--check-written', b'--no-discard', b'--partition-table')
+        if not all(option in help_text for option in required):
+            unavailable = 'mkfs.exfat'
+    if unavailable is not None:
+        preflight = subprocess.run([str(probe), '--tools', str(formatter), 'none'],
+                                   capture_output=True, timeout=15)
+        assert preflight.returncode == 0, (preflight.returncode, preflight.stdout, preflight.stderr)
+        report = {key.decode(): int(value) for key, value in re.findall(rb'([A-Z_]+)=(-?\d+)', preflight.stdout)}
+        assert report['ERROR'] == errno.ENOTSUP and report['PROBLEM'] == 1, (report, preflight.stderr)
+        assert report['FDS'] == 0 and report['CHILD'] == -1 and report['CHILD_ERRNO'] == errno.ECHILD, report
+        print(f'exFAT capability preflight refusal verified: unsupported {unavailable}', flush=True)
+    return unavailable
+
+
 def main():
     fat, ntfs, exfat, ext, zero = sys.argv[1:]
     tools = {name: shutil.which(name) for name in ('mkfs.fat', 'mkntfs', 'mkfs.exfat', 'mke2fs', 'debugfs', 'e2fsck', 'fsck.fat')}
     assert all(tools.values()), tools
+    exfat_unavailable = exfat_capability(exfat, tools['mkfs.exfat'])
     cases = []
     with tempfile.TemporaryDirectory(prefix='rufus-full-format-') as scratch:
         root = Path(scratch); target = root / 'volume.raw'
+        if exfat_unavailable is not None:
+            cases.append('exFAT unsupported ' + exfat_unavailable + ': tools preflight refuses before formatting')
+            if exfat_unavailable == 'libblkid':
+                for full in (False, True):
+                    dirty(target, 64 * MIB)
+                    before = target.read_bytes()
+                    command = [exfat, tools['mkfs.exfat'], target, 64 * MIB, 4096, 'FULLTEST', 'none']
+                    if full: command.append('full')
+                    refused = run(command, errno.ENOTSUP)
+                    assert refused['STARTED'] == refused['SYNCS'] == refused['BYTES'] == 0, refused
+                    assert target.read_bytes() == before
+                    cases.append(f'exFAT {"full" if full else "quick"}: old library refuses without writes')
         for fs in ('fat16', 'fat32', 'ntfs', 'exfat', 'ext2', 'ext3', 'ext4'):
+            if fs == 'exfat' and exfat_unavailable is not None:
+                continue
             size = (32 if fs == 'fat16' else 64) * MIB
             for full in (False, True):
                 offset = MIB if fs.startswith('fat') else 0

@@ -210,7 +210,15 @@ sys.exit(1 if error else 0)
         QVERIFY(script.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner)); script.close();
         launches = 0;
         rufus::PrepareImageProcess process(fixturePath);
-        process.setReportDirectory(mode == QStringLiteral("log-failure") ? reports.filePath("absent") : reports.path());
+        QString reportDirectory = reports.path();
+        if (mode == QStringLiteral("log-failure"))
+        {
+            reportDirectory = reports.filePath(QStringLiteral("not-a-directory"));
+            QFile blocker(reportDirectory);
+            QVERIFY(blocker.open(QIODevice::WriteOnly));
+            blocker.close();
+        }
+        process.setReportDirectory(reportDirectory);
         QSignalSpy done(&process, &rufus::PrepareImageProcess::finished);
         QSignalSpy review(&process, &rufus::PrepareImageProcess::badBlocksReviewRequired);
         if (mode == QStringLiteral("log-failure"))

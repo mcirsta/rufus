@@ -9,6 +9,9 @@
 #include "ms-sys/inc/br_fat32pe_0x52.h"
 #include "ms-sys/inc/br_fat32pe_0x3f0.h"
 #include "ms-sys/inc/br_fat32pe_0x1800.h"
+#include "ms-sys/inc/br_fat32nt_0x52.h"
+#include "ms-sys/inc/br_fat32nt_0x3f0.h"
+#include "ms-sys/inc/br_fat32nt_0x1800.h"
 #include "wimlib.h"
 #include <QDir>
 #include <QFile>
@@ -665,10 +668,19 @@ private slots:
             QCOMPARE(read(request_.path, qint64(coreOffset + quint64(core_.size())), qint64(remainingGap)), QByteArray(qsizetype(remainingGap), '\0'));
             if (windowsFat)
             {
+                // Freeze source facts: only root-prepared already contains
+                // BOOTMGR. Other fixtures start with SETUPLDR and select NT
+                // records even though extraction later creates BOOTMGR.
+                const bool sourceBootmgr = mode == QStringLiteral("root-prepared");
                 const quint64 positions[] = {0, 0x52, 0x3f0, 0x1800};
-                const unsigned char* bytes[] = {br_fat32_0x0, br_fat32pe_0x52, br_fat32pe_0x3f0, br_fat32pe_0x1800};
-                const size_t lengths[] = {sizeof(br_fat32_0x0), sizeof(br_fat32pe_0x52),
-                    sizeof(br_fat32pe_0x3f0), sizeof(br_fat32pe_0x1800)};
+                const unsigned char* bytes[] = {br_fat32_0x0,
+                    sourceBootmgr ? br_fat32pe_0x52 : br_fat32nt_0x52,
+                    sourceBootmgr ? br_fat32pe_0x3f0 : br_fat32nt_0x3f0,
+                    sourceBootmgr ? br_fat32pe_0x1800 : br_fat32nt_0x1800};
+                const size_t lengths[] = {sizeof(br_fat32_0x0),
+                    sourceBootmgr ? sizeof(br_fat32pe_0x52) : sizeof(br_fat32nt_0x52),
+                    sourceBootmgr ? sizeof(br_fat32pe_0x3f0) : sizeof(br_fat32nt_0x3f0),
+                    sourceBootmgr ? sizeof(br_fat32pe_0x1800) : sizeof(br_fat32nt_0x1800)};
                 for (quint64 copy : {quint64(0), quint64(6 * sectorBytes)})
                 {
                     const quint64 base = outcome.offset + copy;

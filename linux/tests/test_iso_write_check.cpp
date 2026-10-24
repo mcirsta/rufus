@@ -267,6 +267,49 @@ class TestIsoWriteCheck : public QObject
         QCOMPARE(rufus::CapturePrepareSource(sourcePath, request_), 0);
     }
 
+    void markUdfSymlink(const char* path)
+    {
+        // genisoimage omits host symlinks from its UDF view. Master the valid
+        // ECMA-167 path-component bytes as a regular file, then change only
+        // its ICB type and repair the descriptor tag. This makes the same real
+        // UDF symlink fixture with either genisoimage or cdrtools.
+        udf_t* image = udf_open(QFile::encodeName(sourcePath).constData());
+        udf_dirent_t* root = image ? udf_get_root(image, true, 0) : nullptr;
+        udf_dirent_t* entry = root ? udf_fopen(root, path) : nullptr;
+        const bool regular = entry && entry->fid && entry->fe.icb_tag.file_type == ICBTAG_FILE_TYPE_REGULAR;
+        const quint64 sector = regular ? quint64(entry->i_part_start) + qFromLittleEndian(entry->fid->icb.loc.lba) : 0;
+        if (entry) udf_dirent_free(entry);
+        if (root) udf_dirent_free(root);
+        if (image) udf_close(image);
+        QVERIFY(regular);
+        QFile file(sourcePath);
+        QVERIFY(file.open(QIODevice::ReadWrite));
+        QVERIFY(file.seek(qint64(sector * UDF_BLOCKSIZE)));
+        QByteArray descriptor = file.read(UDF_BLOCKSIZE);
+        QCOMPARE(descriptor.size(), qsizetype(UDF_BLOCKSIZE));
+        QCOMPARE(qFromLittleEndian<quint16>(descriptor.constData()), quint16(261));
+        constexpr qsizetype fileTypeOffset = 27;
+        QCOMPARE(quint8(descriptor[fileTypeOffset]), quint8(ICBTAG_FILE_TYPE_REGULAR));
+        descriptor[fileTypeOffset] = char(ICBTAG_FILE_TYPE_SYMLINK);
+        const quint16 crcBytes = qFromLittleEndian<quint16>(descriptor.constData() + 10);
+        QVERIFY(crcBytes >= 20 && crcBytes <= UDF_BLOCKSIZE - 16);
+        quint16 crc = 0;
+        for (quint16 index = 0; index < crcBytes; ++index) {
+            crc ^= quint16(quint8(descriptor[16 + index])) << 8;
+            for (unsigned bit = 0; bit < 8; ++bit)
+                crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1;
+        }
+        qToLittleEndian<quint16>(crc, descriptor.data() + 8);
+        quint8 checksum = 0;
+        for (qsizetype index = 0; index < 16; ++index)
+            if (index != 4) checksum += quint8(descriptor[index]);
+        descriptor[4] = char(checksum);
+        QVERIFY(file.seek(qint64(sector * UDF_BLOCKSIZE)));
+        QCOMPARE(file.write(descriptor), qint64(UDF_BLOCKSIZE));
+        file.close();
+        QCOMPARE(rufus::CapturePrepareSource(sourcePath, request_), 0);
+    }
+
     void putWindows(const QString& kind, const QByteArray& repair = QByteArray())
     {
         const QString tree = directory_.filePath(QStringLiteral("tree"));
@@ -3306,7 +3349,12 @@ private slots:
         QFETCH(bool, udf);
         QFETCH(bool, link);
         const QString extra = directory_.filePath(QStringLiteral("tree/extra.cfg"));
-        if (link)
+        if (link && udf)
+        {
+            // One named path component, CS0-8 "payload", version unspecified.
+            put(extra, QByteArray::fromHex("05080000087061796c6f6164"));
+        }
+        else if (link)
         {
             QVERIFY(QDir().mkpath(QFileInfo(extra).absolutePath()));
             QVERIFY(QFile::link(QStringLiteral("payload"), extra));
@@ -3314,6 +3362,7 @@ private slots:
         else
             put(extra, QByteArray("options SOURCE\0broken", 21));
         makeImage(QStringLiteral("EFI/BOOT/BOOTX64.EFI"), efiHeader(), udf);
+        if (link && udf) markUdfSymlink("/extra.cfg");
         rufus::IsoWriteCheck result;
         if (link && !udf) { QCOMPARE(check(result),0); QVERIFY(result.problem.isEmpty()); return; }
         QVERIFY(check(result) != 0);

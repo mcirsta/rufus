@@ -5,6 +5,7 @@ import errno
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
 
@@ -149,7 +150,7 @@ def persistence_cases(args, root):
         image = make_image(root, file_system + '-persistent.img', size)
         invoke(args, image, file_system, size, 'persistence', persistence=True)
         inspect(args, image, file_system, size, 'persistence', 1024, 128, blocks=262145, reserve=13106)
-        contents = subprocess.run(['/usr/bin/debugfs', '-R', 'cat /persistence.conf', str(image)],
+        contents = subprocess.run([args.debugfs, '-R', 'cat /persistence.conf', str(image)],
                                   capture_output=True, check=True, timeout=15)
         assert contents.stdout == b'/ union\n', contents
         image.unlink()
@@ -174,6 +175,8 @@ def main():
     parser.add_argument('--fsck', type=Path, required=True)
     parser.add_argument('--dump', type=Path, required=True)
     args = parser.parse_args()
+    args.debugfs = shutil.which('debugfs')
+    assert args.debugfs, 'debugfs from e2fsprogs is required'
     with tempfile.TemporaryDirectory(prefix='rufus-ext-format-') as temporary:
         root = Path(temporary)
         refusal_cases(args, root)

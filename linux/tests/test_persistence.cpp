@@ -5,6 +5,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QProcess>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 #include <cerrno>
@@ -110,7 +111,9 @@ private slots:
         if (payload)
             QVERIFY(layout.persistence_offset + layout.persistence_size <= layout.uefi_ntfs_offset);
         QProcess inspector;
-        inspector.start(QStringLiteral("/usr/bin/sfdisk"), {QStringLiteral("--json"), disk.fileName()});
+        const QString sfdisk = QStandardPaths::findExecutable(QStringLiteral("sfdisk"));
+        QVERIFY2(!sfdisk.isEmpty(), "sfdisk from util-linux/fdisk is required");
+        inspector.start(sfdisk, {QStringLiteral("--json"), disk.fileName()});
         QVERIFY(inspector.waitForFinished());
         QCOMPARE(inspector.exitCode(), 0);
         const QJsonObject table = QJsonDocument::fromJson(inspector.readAllStandardOutput())

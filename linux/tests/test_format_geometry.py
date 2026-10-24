@@ -8,6 +8,7 @@ import re
 import struct
 import subprocess
 import tempfile
+from test_full_format import exfat_capability
 
 MIB = 1024 * 1024
 GIB = 1024 * MIB
@@ -121,10 +122,22 @@ def ntfs_cases(args, root):
 
 
 def exfat_cases(args, root):
+    unavailable = exfat_capability(args.exfat_probe, args.mkfs_exfat)
+    if unavailable == 'mkfs.exfat':
+        # Its exact ENOTSUP tools-preflight refusal was checked above. The
+        # formatter itself cannot supply the required verified geometry.
+        return
     for logical, physical in ((512, 4096), (1024, 4096), (2048, 65536), (4096, 4096)):
         size = 64 * MIB
         path = target(root, f'exfat-{logical}', size)
         command = [args.exfat_probe, args.mkfs_exfat, path, size, 4096, 'Geometry', 'none']
+        if unavailable == 'libblkid':
+            before = path.read_bytes()
+            refused = invoke(command, logical, physical, error=errno.ENOTSUP, started=False)
+            assert refused['BYTES'] == refused['SYNCS'] == 0, refused
+            assert path.read_bytes() == before
+            path.unlink()
+            continue
         invoke(command, logical, physical)
         regions = read_at(path, 0, 24 * logical)
         assert regions[:12 * logical] == regions[12 * logical:]

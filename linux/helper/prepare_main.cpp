@@ -259,7 +259,8 @@ protected:
                 if (outcome.error != 0)
                     emit logMessage(checkedImage_.problem);
             }
-            if (outcome.error == 0 && (request_.windowsBios || request_.grub4dos || request_.syslinux))
+            if (outcome.error == 0 && !request_.imagePath.isEmpty() &&
+                (request_.windowsBios || request_.grub4dos || request_.syslinux))
             {
                 grub4dosSbr_ = GetSecondaryBootType(BT_IMAGE, &checkedImage_.analysis.report, false) == BT_GRUB4DOS;
                 if (grub4dosSbr_)

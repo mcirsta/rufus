@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """One capture/export corpus, including an actual file beyond the 4-GiB boundary."""
 import argparse
+import binascii
 import errno
 import json
 import os
@@ -72,6 +73,40 @@ def cancel_encoder(probe, root):
     print('ISO encoder cancellation: child exited, old backup retained, temporary image removed')
 
 
+def genisoimage_111(encoder):
+    result = subprocess.run([str(encoder), '-version'], capture_output=True, text=True, timeout=10)
+    return (result.stdout + result.stderr).startswith('genisoimage 1.1.11 ')
+
+
+def check_genisoimage_semicolon(encoder, tree, root, original, replacement):
+    # This provider rewrites semicolons even in its UDF tree. Verify the actual
+    # valid FID independently before expecting native export to refuse it.
+    image = root / 'provider-renamed.iso'
+    subprocess.run([str(encoder), '-quiet', '-D', '-udf', '-iso-level', '3',
+                    '-input-charset', 'utf-8', '-V', 'SOURCE', '-o', str(image), str(tree)],
+                   check=True, capture_output=True, timeout=15)
+    data = image.read_bytes()
+    names = []
+    for offset in range(0, len(data) - 38, 4):
+        tag = data[offset:offset + 16]
+        if tag[:2] != b'\x01\x01' or ((sum(tag) - tag[4]) & 255) != tag[4]:
+            continue
+        crc_size = int.from_bytes(tag[10:12], 'little')
+        if offset + 16 + crc_size > len(data):
+            continue
+        if binascii.crc_hqx(data[offset + 16:offset + 16 + crc_size], 0) != int.from_bytes(tag[8:10], 'little'):
+            continue
+        size = data[offset + 19]
+        start = offset + 38 + int.from_bytes(data[offset + 36:offset + 38], 'little')
+        encoded = data[start:start + size]
+        if encoded[:1] == b'\x08':
+            names.append(encoded[1:].decode('latin-1'))
+        elif encoded[:1] == b'\x10':
+            names.append(encoded[1:].decode('utf-16-be'))
+    assert replacement in names and original not in names, names
+    image.unlink()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('probe', type=Path)
@@ -85,13 +120,14 @@ def main():
         if args.cancel_only:
             cancel_encoder(args.probe, root)
             return
+        limited_encoder = genisoimage_111(args.encoder)
         cancellation = root / 'encoder-cancel'; cancellation.mkdir()
         cancel_encoder(args.probe, cancellation)
         checks += 1
         tree = root / 'source tree' 
         tree.mkdir()
         entries = {'empty': b'', '.hidden/.keep': b'hidden', 'ldlinux.sys': b'must be retained',
-                   'șΩ filename [x];.txt': bytes(range(256)) * 257,
+                   'șΩ filename [x].txt': bytes(range(256)) * 257,
                    '/'.join(['deep directory 0123456789'] * 12) + '/long name.txt': b'long path'}
         for name, data in entries.items():
             path = tree / name
@@ -101,6 +137,15 @@ def main():
         output = root / 'saved.iso'
         report = capture(args.probe, args.encoder, tree, output)
         assert report['bytes'] == sum(map(len, entries.values()))
+        checks += 1
+        original = 'șΩ filename [x];.txt'
+        safe_name = tree / 'șΩ filename [x].txt'
+        unusual_name = tree / original
+        safe_name.rename(unusual_name)
+        if limited_encoder:
+            check_genisoimage_semicolon(args.encoder, tree, root, original, original.replace(';', '_'))
+        capture(args.probe, args.encoder, tree, output, error=errno.EBADMSG if limited_encoder else 0)
+        unusual_name.rename(safe_name)
         checks += 1
         for mode, error in (('short', 0), ('cancel-copy', errno.ECANCELED), ('cancel-verify', errno.ECANCELED),
                             ('sync-fail', errno.EIO), ('destination-race', errno.ESTALE),
@@ -135,12 +180,14 @@ def main():
             file.truncate(size)
             file.seek((1 << 32) - 11); file.write(b'boundary-payload-crossing-four-gib')
             file.seek(size - 7); file.write(b'THE END')
-        report = capture(args.probe, args.encoder, tree, output)
-        assert report['bytes'] == size + sum(map(len, entries.values()))
-        assert output.stat().st_size > 1 << 32
+        report = capture(args.probe, args.encoder, tree, output, error=errno.EIO if limited_encoder else 0)
+        if not limited_encoder:
+            assert report['bytes'] == size + sum(map(len, entries.values()))
+            assert output.stat().st_size > 1 << 32
         checks += 1
         large.unlink(); output.unlink()
-    print(f'ISO export: {checks} batched cases; hidden/Unicode/empty/deep paths and actual >4-GiB UDF-only output verified')
+    large_result = 'genisoimage 1.1.11 semicolon rewriting and >4-GiB refusal preserve the old backup' if limited_encoder else 'semicolon names and actual >4-GiB UDF-only output verified'
+    print(f'ISO export: {checks} batched cases; hidden/Unicode/empty/deep paths verified; {large_result}')
 
 
 if __name__ == '__main__':

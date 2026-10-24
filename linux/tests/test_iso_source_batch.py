@@ -5,6 +5,14 @@ from pathlib import Path
 from test_iso_extract import extract
 MIB=1024*1024
 
+def efi_boot_options(mkisofs):
+    result=subprocess.run([mkisofs,'-help'],capture_output=True,timeout=10)
+    help_text=result.stdout+result.stderr
+    if b'-eltorito-platform' in help_text:
+        return ['-eltorito-platform','efi','-b','efiboot.img']
+    assert b'-efi-boot' in help_text, 'Fixture encoder must expose an EFI El Torito option'
+    return ['-e','efiboot.img']
+
 def pe(machine=0x8664,wide=True):
     b=bytearray(2048);b[:2]=b'MZ';struct.pack_into('<I',b,60,64);b[64:68]=b'PE\0\0'
     struct.pack_into('<HH',b,68,machine,1);optional=240 if wide else 224
@@ -24,7 +32,7 @@ def image(args,root,name,files,links=(),udf=False):
     if udf:command+=['-udf']
     if name in ('broken','bad-fat'):
         (tree/'bios.img').write_bytes(bytes(2048))
-        command+=['-b','bios.img','-no-emul-boot','-eltorito-alt-boot','-eltorito-platform','efi','-b','efiboot.img','-no-emul-boot','-boot-load-size','32768']
+        command+=['-b','bios.img','-no-emul-boot','-eltorito-alt-boot']+efi_boot_options(args.mkisofs)+['-no-emul-boot','-boot-load-size','32768']
     subprocess.run(command+[str(tree)],check=True,capture_output=True,timeout=30);return iso
 
 def preflight(args,iso):

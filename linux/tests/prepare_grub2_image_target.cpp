@@ -113,7 +113,11 @@ extern "C" int __wrap_InspectWritableTarget(int fd, uint64_t device, WRITABLE_TA
     if ((fd != disk && fd != volume) || device != fixtureDevice)
         return EPERM;
     const int error = __real_InspectWritableTarget(fd, 0, target);
-    if (error == 0) target->sector_size = 512;
+    if (error == 0)
+    {
+        target->sector_size = sectorBytes;
+        target->physical_sector_size = sectorBytes;
+    }
     return error;
 }
 
@@ -232,10 +236,10 @@ extern "C" int __wrap_InstallFatDeviceBootRecords(int fd, uint64_t device, uint6
     return error;
 }
 
-extern "C" int __real_InstallWinPeFatDeviceBootRecords(int, uint64_t, uint64_t, bool,
+extern "C" int __real_InstallLegacyFatDeviceBootRecords(int, uint64_t, uint64_t, FAT_BOOT_CODE, bool,
     const FAT_FORMAT_OPTIONS*, FAT_BOOT_RESULT*);
-extern "C" int __wrap_InstallWinPeFatDeviceBootRecords(int fd, uint64_t device, uint64_t capacity,
-    bool masquerade, const FAT_FORMAT_OPTIONS* options, FAT_BOOT_RESULT* result)
+extern "C" int __wrap_InstallLegacyFatDeviceBootRecords(int fd, uint64_t device, uint64_t capacity,
+    FAT_BOOT_CODE code, bool masquerade, const FAT_FORMAT_OPTIONS* options, FAT_BOOT_RESULT* result)
 {
     stage("winpe-fat-boot");
     constexpr off_t hintsOffset = sectorBytes + 488;
@@ -254,7 +258,7 @@ extern "C" int __wrap_InstallWinPeFatDeviceBootRecords(int fd, uint64_t device, 
     if (fd != disk || device != fixtureDevice) qFatal("Unexpected WinPE FAT target");
     activeFatBoot = true;
     fatOffset = options->offset;
-    const int error = __real_InstallWinPeFatDeviceBootRecords(fd, device, capacity, masquerade, options, result);
+    const int error = __real_InstallLegacyFatDeviceBootRecords(fd, device, capacity, code, masquerade, options, result);
     activeFatBoot = false;
     return error;
 }
@@ -262,7 +266,7 @@ extern "C" int __wrap_InstallWinPeFatDeviceBootRecords(int fd, uint64_t device, 
 extern "C" int __real_CreateMbrImage(int, const MBR_IMAGE_OPTIONS*, MBR_IMAGE_RESULT*);
 extern "C" int __wrap_CreateMbrImage(int fd, const MBR_IMAGE_OPTIONS* options, MBR_IMAGE_RESULT* result)
 {
-    if (options->boot_code != MBR_BOOT_RUFUS_MASQUERADE)
+    if (!options->masquerade_disk && options->boot_code != MBR_BOOT_RUFUS_MASQUERADE)
         return __real_CreateMbrImage(fd, options, result);
     stage("masquerade");
     *result = {};
