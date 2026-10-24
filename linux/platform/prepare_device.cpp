@@ -19,10 +19,10 @@
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
+#include <sys/mount.h>
 #include <linux/fs.h>
 #include "filesystem_magic.h"
 #include <sys/ioctl.h>
-#include <sys/mount.h>
 #include <linux/mount.h>
 #include <sys/stat.h>
 #include <sys/statfs.h>

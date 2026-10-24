@@ -499,7 +499,15 @@ private slots:
             for (const char* mode : {"source-change", "prewrite-source-change", "postcopy-source-change", "stale-source"})
                 QTest::newRow((prefix + mode).constData()) << int(FS_NTFS) << uefi << QString::fromLatin1(mode) << ESTALE << true << rufusMbr;
             for (const char* mode : {"missing-bootmgr", "missing-install", "unknown-windows", "syslinux-precedence", "mount-support-error"})
-                QTest::newRow((prefix + mode).constData()) << int(FS_NTFS) << uefi << QString::fromLatin1(mode) << ENOTSUP << true << rufusMbr;
+            {
+                // Ordinary BOOTMGR copying needs no known install archive.
+                // Alt+E retains Windows PBR dispatch over a Syslinux source.
+                const QByteArray name(mode);
+                const bool refused = name == "missing-bootmgr" || name == "mount-support-error"
+                    || (name == "syslinux-precedence" && !uefi);
+                QTest::newRow((prefix + mode).constData()) << int(FS_NTFS) << uefi
+                    << QString::fromLatin1(mode) << (refused ? ENOTSUP : 0) << true << rufusMbr;
+            }
             QTest::newRow((prefix + "cancel-copy").constData()) << int(FS_NTFS) << uefi << QStringLiteral("cancel-copy") << ECANCELED << true << rufusMbr;
             if (uefi)
             {
@@ -527,7 +535,13 @@ private slots:
             for (const char* mode : {"source-change", "prewrite-source-change", "postcopy-source-change", "stale-source", "fat-boot-source-change"})
                 QTest::newRow((prefix + mode).constData()) << int(FS_FAT32) << uefi << QString::fromLatin1(mode) << ESTALE << true << rufusMbr;
             for (const char* mode : {"missing-bootmgr", "missing-install", "unknown-windows", "syslinux-precedence", "mount-support-error"})
-                QTest::newRow((prefix + mode).constData()) << int(FS_FAT32) << uefi << QString::fromLatin1(mode) << ENOTSUP << true << rufusMbr;
+            {
+                // All FAT32 Windows fixtures explicitly select Alt+E.
+                const QByteArray name(mode);
+                const bool refused = name == "missing-bootmgr" || name == "mount-support-error";
+                QTest::newRow((prefix + mode).constData()) << int(FS_FAT32) << uefi
+                    << QString::fromLatin1(mode) << (refused ? ENOTSUP : 0) << true << rufusMbr;
+            }
             for (const char* mode : {"cancel-copy", "cancel-fat-boot"})
                 QTest::newRow((prefix + mode).constData()) << int(FS_FAT32) << uefi << QString::fromLatin1(mode) << ECANCELED << true << rufusMbr;
             QTest::newRow((prefix + "cleanup-error").constData()) << int(FS_FAT32) << uefi << QStringLiteral("cleanup-error") << EBUSY << true << rufusMbr;
@@ -609,12 +623,13 @@ private slots:
         QVERIFY2(result, output.constData());
         QVERIFY2(outcome.error == expected, diagnostics.constData());
         QCOMPARE(outcome.error, expected);
-        const bool windowsRefusal = mode == QStringLiteral("missing-bootmgr")
-            || mode == QStringLiteral("missing-install") || mode == QStringLiteral("unknown-windows");
+        const bool windowsRefusal = mode == QStringLiteral("missing-bootmgr");
         const bool legacyRefusal = legacyWinPe_ && (mode == QStringLiteral("no-grub") || mode == QStringLiteral("root-mismatch"));
+        const bool syslinuxRefusal = mode == QStringLiteral("syslinux-precedence")
+            && (legacyWinPe_ || !windows || !request_.enhancedInstall);
         const bool beforeWrites = mode == QStringLiteral("resource-error") || windowsRefusal || legacyRefusal || mode == QStringLiteral("stale-source") || mode == QStringLiteral("bad-core-hash")
             || mode == QStringLiteral("prewrite-source-change") || mode == QStringLiteral("mount-support-error")
-            || mode == QStringLiteral("syslinux-precedence") || mode == QStringLiteral("missing-uefi")
+            || syslinuxRefusal || mode == QStringLiteral("missing-uefi")
             || mode == QStringLiteral("unexpected-uefi") || mode == QStringLiteral("split-collision");
         QCOMPARE(outcome.started, !beforeWrites);
         if (beforeWrites) QCOMPARE(read(request_.path, 0, 512), before);
@@ -808,6 +823,10 @@ private slots:
                 }
                 else
                     QCOMPARE(read(destination + QStringLiteral("/sources/install.wim")), read(tree + QStringLiteral("/sources/install.wim")));
+                if (mode == QStringLiteral("missing-install"))
+                    QVERIFY(!QFile::exists(destination + QStringLiteral("/sources/install.wim")));
+                if (mode == QStringLiteral("syslinux-precedence"))
+                    QCOMPARE(read(destination + QStringLiteral("/isolinux/isolinux.cfg")), QByteArray("default linux\n"));
                 QCOMPARE(read(destination + QStringLiteral("/readme.txt")), QByteArray("Synthetic Windows payload\n"));
                 if (mode != QStringLiteral("bios-only-enhanced") && (!windowsFat || uefi))
                     QCOMPARE(read(destination + QStringLiteral("/EFI/BOOT/BOOTX64.EFI")), read(tree + QStringLiteral("/EFI/BOOT/BOOTX64.EFI")));

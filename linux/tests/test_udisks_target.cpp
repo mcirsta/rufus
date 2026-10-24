@@ -20,9 +20,11 @@
 #include <linux/fs.h>
 #include <memory>
 #include <sys/ioctl.h>
+#include <sys/sysmacros.h>
 #include <unistd.h>
 
 static constexpr int fixtureTimeoutMs = 2000;
+static const quint64 fixtureDiskNumber = quint64(makedev(240, 42));
 
 // Only the private fixture's regular-file inode gets synthetic kernel facts.
 // No block nodes are created or opened, and production has no test-mode branch.
@@ -192,7 +194,7 @@ private slots:
     {
         ResetTestNativeDisks();
         emulateBlock = true;
-        nativeNumber = 2048; nativeCapacity = 65536;
+        nativeNumber = fixtureDiskNumber; nativeCapacity = 65536;
         nativeReadOnly = nativeError = 0; nativeSector = 512;
         sourcePath_ = directory_.filePath(QStringLiteral("source.img"));
         targetPath_ = directory_.filePath(QStringLiteral("target.bin"));
@@ -208,7 +210,8 @@ private slots:
             QStringLiteral("--nofork"), QStringLiteral("--print-address=1"),
             QStringLiteral("--address=unix:tmpdir=%1").arg(directory_.path())});
         QVERIFY(daemon_.waitForStarted(fixtureTimeoutMs));
-        QVERIFY(daemon_.waitForReadyRead(fixtureTimeoutMs));
+        QVERIFY2(daemon_.canReadLine() || daemon_.waitForReadyRead(fixtureTimeoutMs),
+            daemon_.readAllStandardError().constData());
         const QString address = QString::fromUtf8(daemon_.readLine()).trimmed();
         QVERIFY(address.startsWith(QStringLiteral("unix:")));
         connection_ = std::make_unique<QDBusConnection>(QDBusConnection::connectToBus(address, QStringLiteral("raw-private-test")));
@@ -222,7 +225,7 @@ private slots:
             {QStringLiteral("Drive"), QVariant::fromValue(drive)},
             {QStringLiteral("Device"), QByteArray("/dev/test-a\0", 12)},
             {QStringLiteral("Size"), QVariant::fromValue(quint64(65536))},
-            {QStringLiteral("DeviceNumber"), QVariant::fromValue(quint64(2048))},
+            {QStringLiteral("DeviceNumber"), QVariant::fromValue(fixtureDiskNumber)},
             {QStringLiteral("ReadOnly"), false}, {QStringLiteral("HintSystem"), false},
             {QStringLiteral("HintIgnore"), false}, {QStringLiteral("Id"), QStringLiteral("fixture-id")}
         };
@@ -286,7 +289,7 @@ private slots:
         // An ordinary unmounted filesystem must remain eligible.
         objects_[partition][blockInterface] = {
             {QStringLiteral("Drive"), QVariant::fromValue(drive)},
-            {QStringLiteral("DeviceNumber"), QVariant::fromValue(quint64(2049))}
+            {QStringLiteral("DeviceNumber"), QVariant::fromValue(fixtureDiskNumber + 1)}
         };
         objects_[partition][fsInterface][QStringLiteral("MountPoints")] = QVariant::fromValue(QList<QByteArray>{});
         setObjects();
@@ -449,7 +452,7 @@ private slots:
     {
         objects_[partition][blockInterface] = {
             {QStringLiteral("Drive"), QVariant::fromValue(drive)},
-            {QStringLiteral("DeviceNumber"), quint64(2049)},
+            {QStringLiteral("DeviceNumber"), fixtureDiskNumber + 1},
             {QStringLiteral("HintSystem"), false}, {QStringLiteral("HintIgnore"), false},
             {QStringLiteral("ReadOnly"), false}
         };
@@ -478,7 +481,7 @@ private slots:
         QFETCH(QString, kind);
         objects_[partition][blockInterface] = {
             {QStringLiteral("Drive"), QVariant::fromValue(drive)},
-            {QStringLiteral("DeviceNumber"), QVariant::fromValue(quint64(2049))}
+            {QStringLiteral("DeviceNumber"), QVariant::fromValue(fixtureDiskNumber + 1)}
         };
         if (kind == QStringLiteral("mounted"))
             objects_[partition][fsInterface][QStringLiteral("MountPoints")] = QVariant::fromValue(QList<QByteArray>{QByteArray("/media/test\0", 12)});

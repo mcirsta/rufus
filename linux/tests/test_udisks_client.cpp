@@ -20,6 +20,7 @@
 
 #include <memory>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 
 static constexpr int fixtureTimeoutMs = 2000;
 
@@ -34,6 +35,8 @@ const QDBusObjectPath diskA(QStringLiteral("/org/freedesktop/UDisks2/block_devic
 const QDBusObjectPath diskB(QStringLiteral("/org/freedesktop/UDisks2/block_devices/test_b"));
 const QDBusObjectPath driveA(QStringLiteral("/org/freedesktop/UDisks2/drives/test_a"));
 const QDBusObjectPath driveB(QStringLiteral("/org/freedesktop/UDisks2/drives/test_b"));
+const quint64 diskANumber = quint64(makedev(240, 42));
+const quint64 diskBNumber = quint64(makedev(240, 58));
 
 void addDisk(rufus::UDisksObjects& objects, const QDBusObjectPath& disk,
     const QDBusObjectPath& drive, const QByteArray& path)
@@ -45,7 +48,7 @@ void addDisk(rufus::UDisksObjects& objects, const QDBusObjectPath& disk,
         {QStringLiteral("Size"), QVariant::fromValue(16ULL * 1024 * 1024 * 1024 + 123)},
         {QStringLiteral("ReadOnly"), false}, {QStringLiteral("HintSystem"), false},
         {QStringLiteral("HintIgnore"), false}, {QStringLiteral("Id"), disk.path()},
-        {QStringLiteral("DeviceNumber"), QVariant::fromValue(quint64(disk == diskA ? 2048 : 2064))}
+        {QStringLiteral("DeviceNumber"), QVariant::fromValue(disk == diskA ? diskANumber : diskBNumber)}
     };
     objects[drive][driveInterface] = {
         {QStringLiteral("ConnectionBus"), QStringLiteral("usb")},
@@ -150,7 +153,8 @@ private slots:
             QStringLiteral("--nofork"), QStringLiteral("--print-address=1"),
             QStringLiteral("--address=unix:tmpdir=%1").arg(busDirectory_.path())});
         QVERIFY(daemon_.waitForStarted(fixtureTimeoutMs));
-        QVERIFY2(daemon_.waitForReadyRead(fixtureTimeoutMs), daemon_.readAllStandardError().constData());
+        QVERIFY2(daemon_.canReadLine() || daemon_.waitForReadyRead(fixtureTimeoutMs),
+            daemon_.readAllStandardError().constData());
         const QString address = QString::fromUtf8(daemon_.readLine()).trimmed();
         QVERIFY(address.startsWith(QStringLiteral("unix:")));
         connection_ = std::make_unique<QDBusConnection>(QDBusConnection::connectToBus(address,
@@ -235,7 +239,7 @@ private slots:
         QCOMPARE(selection().devices.at(0).size, 16ULL * 1024 * 1024 * 1024 + 123);
         QCOMPARE(selection().devices.at(0).path, QStringLiteral("/dev/test-a"));
         QCOMPARE(selection().devices.at(0).objectPath, diskA.path());
-        QCOMPARE(selection().devices.at(0).number, quint64(2048));
+        QCOMPARE(selection().devices.at(0).number, diskANumber);
         QVERIFY(selection().devices.at(0).serviceOwner.startsWith(QLatin1Char(':')));
         QVERIFY(!selection().devices.at(0).identity.isEmpty());
         QCOMPARE(selection().devices.at(0).name, selection().devices.at(1).name);
@@ -341,7 +345,7 @@ private slots:
     void advancedDeviceClasses()
     {
         QFETCH(int, kind);
-        auto& facts = TestNativeDisk(2048); facts.deviceClass = rufus::DeviceClass(kind); facts.usbTransport = false;
+        auto& facts = TestNativeDisk(diskANumber); facts.deviceClass = rufus::DeviceClass(kind); facts.usbTransport = false;
         objects_[driveA][driveInterface]["ConnectionBus"] = QStringLiteral("ata");
         objects_[diskA][blockInterface]["HintSystem"] = true;
         setObjects(); client_->start();
@@ -381,7 +385,7 @@ private slots:
     void nativeClassification()
     {
         QFETCH(QString, kind); QFETCH(bool, visible); QFETCH(bool, protectedAcquisition);
-        auto& facts = TestNativeDisk(2048);
+        auto& facts = TestNativeDisk(diskANumber);
         QVariantMap& drive = objects_[driveA][driveInterface];
         QVariantMap& block = objects_[diskA][blockInterface];
         if (kind == QStringLiteral("fixed") || kind == QStringLiteral("native-fixed"))
@@ -447,7 +451,7 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(selection().devices.size(), 1, fixtureTimeoutMs);
         const QString original = selection().devices.first().id;
         controller_->selectDevice(original);
-        TestNativeDisk(2048).diskSequence++;
+        TestNativeDisk(diskANumber).diskSequence++;
         // An ordinary content refresh must still compare native identity.
         notifyChanged(diskA, blockInterface, {{QStringLiteral("IdLabel"), QStringLiteral("new label")}});
         QTRY_VERIFY_WITH_TIMEOUT(selection().devices.first().id != original, fixtureTimeoutMs);
@@ -461,13 +465,13 @@ private slots:
         QVERIFY(rufus::DescribeUDisksDevice(objects_, diskA.path(), before));
         QCOMPARE(before.logicalSectorSize, quint32(512));
         QCOMPARE(before.physicalSectorSize, quint32(512));
-        TestNativeDisk(2048).physicalSectorSize = 4096;
+        TestNativeDisk(diskANumber).physicalSectorSize = 4096;
         QVERIFY(rufus::DescribeUDisksDevice(objects_, diskA.path(), current));
         QCOMPARE(current.logicalSectorSize, quint32(512));
         QCOMPARE(current.physicalSectorSize, quint32(4096));
         QVERIFY(before.identity != current.identity);
         before = current;
-        TestNativeDisk(2048).logicalSectorSize = 4096;
+        TestNativeDisk(diskANumber).logicalSectorSize = 4096;
         QVERIFY(rufus::DescribeUDisksDevice(objects_, diskA.path(), current));
         QCOMPARE(current.logicalSectorSize, quint32(4096));
         QVERIFY(before.identity != current.identity);
@@ -475,7 +479,7 @@ private slots:
 
     void fixedUsbDiscoveryRefresh()
     {
-        TestNativeDisk(2048).model = "HDD";
+        TestNativeDisk(diskANumber).model = "HDD";
         objects_[driveA][driveInterface][QStringLiteral("MediaRemovable")] = false;
         addDisk(objects_, diskB, driveB, "/dev/test-b");
         setObjects();
@@ -508,7 +512,7 @@ private slots:
 
     void fixedUsbOldReplyCannotRestoreOptIn()
     {
-        TestNativeDisk(2048).model = "HDD";
+        TestNativeDisk(diskANumber).model = "HDD";
         objects_[driveA][driveInterface][QStringLiteral("MediaRemovable")] = false;
         setObjects();
         client_->start();
@@ -633,7 +637,7 @@ private slots:
         else if (reason == QStringLiteral("fixed-usb"))
         {
             drive[QStringLiteral("MediaRemovable")] = false;
-            TestNativeDisk(2048).model = "HDD";
+            TestNativeDisk(diskANumber).model = "HDD";
         }
         else if (reason == QStringLiteral("readonly"))
             block[QStringLiteral("ReadOnly")] = true;

@@ -64,6 +64,7 @@
 #include <linux/fs.h>
 #include <memory>
 #include <sys/ioctl.h>
+#include <sys/sysmacros.h>
 #include <unistd.h>
 #include <zlib.h>
 
@@ -72,6 +73,7 @@ static constexpr int uiTimeoutMs = 1000;
 static constexpr int writeTimeoutMs = 4000;
 static constexpr int cancelTimeoutMs = 3000;
 static constexpr int resumeTimeoutMs = 5000;
+static const quint64 fixtureDiskNumber = quint64(makedev(240, 42));
 
 // Only the private fixture's regular-file inode gets synthetic kernel facts.
 // No block nodes are created or opened, and production has no test-mode branch.
@@ -735,8 +737,17 @@ private slots:
         faultKind = NoFault;
         writeCalls = 0; actualWritten = 0; syncCalls = 0;
         emulateBlock = true;
-        nativeNumber = 2048; nativeCapacity = 12 * 1024 * 1024;
+        nativeNumber = fixtureDiskNumber; nativeCapacity = 12 * 1024 * 1024;
         nativeReadOnly = nativeError = 0; nativeSector = 512;
+        // Qt 6.4 does not call cleanup() when init() skips a row.
+        // Gate optional providers before acquiring any per-row resources.
+        if (QByteArray(QTest::currentTestFunction()).startsWith("exfat") ||
+            QByteArray(QTest::currentDataTag()).startsWith("exfat-"))
+        {
+            QString problem;
+            if (rufus::CheckExfatFormatTools(QStringLiteral(RUFUS_MKFS_EXFAT_PATH), problem) != 0)
+                QSKIP(qPrintable(problem));
+        }
         sourcePath_ = directory_.filePath(QStringLiteral("source.img"));
         targetPath_ = directory_.filePath(QStringLiteral("target.bin"));
         sourceBytes_ = QByteArray(8 * 1024 * 1024 + 512, '\x17');
@@ -751,7 +762,8 @@ private slots:
             QStringLiteral("--nofork"), QStringLiteral("--print-address=1"),
             QStringLiteral("--address=unix:tmpdir=%1").arg(directory_.path())});
         QVERIFY(daemon_.waitForStarted(fixtureTimeoutMs));
-        QVERIFY(daemon_.waitForReadyRead(fixtureTimeoutMs));
+        QVERIFY2(daemon_.canReadLine() || daemon_.waitForReadyRead(fixtureTimeoutMs),
+            daemon_.readAllStandardError().constData());
         const QString address = QString::fromUtf8(daemon_.readLine()).trimmed();
         QVERIFY(address.startsWith(QStringLiteral("unix:")));
         connection_ = std::make_unique<QDBusConnection>(QDBusConnection::connectToBus(address, QStringLiteral("raw-widgets-test")));
@@ -765,7 +777,7 @@ private slots:
             {QStringLiteral("Drive"), QVariant::fromValue(drive)},
             {QStringLiteral("Device"), QByteArray("/dev/test-a\0", 12)},
             {QStringLiteral("Size"), QVariant::fromValue(quint64(nativeCapacity))},
-            {QStringLiteral("DeviceNumber"), QVariant::fromValue(quint64(2048))},
+            {QStringLiteral("DeviceNumber"), QVariant::fromValue(fixtureDiskNumber)},
             {QStringLiteral("ReadOnly"), false}, {QStringLiteral("HintSystem"), false},
             {QStringLiteral("HintIgnore"), false}, {QStringLiteral("Id"), QStringLiteral("fixture-id")}
         };
@@ -801,13 +813,6 @@ private slots:
         connect(&writer(), &rufus::RawWriteController::changed, this, &TestRawWriteWidgets::observeState);
         window_->show();
         selectFixture();
-        if (QByteArray(QTest::currentTestFunction()).startsWith("exfat") ||
-            QByteArray(QTest::currentDataTag()).startsWith("exfat-"))
-        {
-            QString problem;
-            if (rufus::CheckExfatFormatTools(QStringLiteral(RUFUS_MKFS_EXFAT_PATH), problem) != 0)
-                QSKIP(qPrintable(problem));
-        }
     }
 
     void cleanup()

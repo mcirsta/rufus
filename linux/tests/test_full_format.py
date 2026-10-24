@@ -60,6 +60,10 @@ def main():
     fat, ntfs, exfat, ext, zero = sys.argv[1:]
     tools = {name: shutil.which(name) for name in ('mkfs.fat', 'mkntfs', 'mkfs.exfat', 'mke2fs', 'debugfs', 'e2fsck', 'fsck.fat')}
     assert all(tools.values()), tools
+    ntfs_help_result = subprocess.run([tools['mkntfs'], '--help'], capture_output=True, timeout=15)
+    ntfs_help = ntfs_help_result.stdout + ntfs_help_result.stderr
+    assert ntfs_help_result.returncode in (0, 1) and b'--quick' in ntfs_help, ntfs_help
+    native_full_arguments = ['--full'] if b'--full' in ntfs_help else []
     exfat_unavailable = exfat_capability(exfat, tools['mkfs.exfat'])
     cases = []
     with tempfile.TemporaryDirectory(prefix='rufus-full-format-') as scratch:
@@ -98,7 +102,8 @@ def main():
                 arguments = json.loads(trace.read_text())
                 if fs == 'ntfs':
                     assert ('-Q' in arguments) == (not full)
-                    if full: assert '--full' in arguments
+                    # NTFS-3G defaults to full; ntfsprogs-plus requires --full.
+                    assert ('--full' in arguments) == (full and bool(native_full_arguments))
                 if fs == 'exfat': assert ('-f' in arguments) == full
                 if fs in ('ext3', 'ext4'):
                     assert 'lazy_journal_init=' + str(int(not full)) in arguments[arguments.index('-E') + 1]
@@ -143,7 +148,7 @@ def main():
             help_text = '--quick Perform a quick format' + ('(default)' if quick_default else '')
             body = ("if '--help' in sys.argv:\n    print(" + repr(help_text) + "); sys.exit(0)\n"
                 "assert '-Q' not in sys.argv and '--full' not in sys.argv\n"
-                "os.execv(" + repr(tools['mkntfs']) + ", [" + repr(tools['mkntfs']) + ", '--full'] + sys.argv[1:])")
+                "os.execv(" + repr(tools['mkntfs']) + ", " + repr([tools['mkntfs']] + native_full_arguments) + " + sys.argv[1:])")
             provider = fake_formatter(root, 'provider-default', body)
             run([ntfs, provider, target, MIB, 64 * MIB, 4096, 'FULLTEST', 'none', 'full'],
                 errno.ENOTSUP if quick_default else 0)

@@ -75,7 +75,9 @@ def cancel_encoder(probe, root):
 
 def genisoimage_111(encoder):
     result = subprocess.run([str(encoder), '-version'], capture_output=True, text=True, timeout=10)
-    return (result.stdout + result.stderr).startswith('genisoimage 1.1.11 ')
+    # The distribution's mkisofs symlink prints a compatibility preamble before
+    # its genuine genisoimage version. Do not infer the provider from argv[0].
+    return any(line.startswith('genisoimage 1.1.11 ') for line in (result.stdout + result.stderr).splitlines())
 
 
 def check_genisoimage_semicolon(encoder, tree, root, original, replacement):

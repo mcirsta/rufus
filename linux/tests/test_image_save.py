@@ -70,11 +70,16 @@ def check_case(probe, root, data, suffix, mode='success', sector=512, expected=0
                     assert raw_block == data[offset:offset + count]
         if suffix == 'vhd' or (suffix == 'vhdx' and sector == 512):
             decoded = root / 'decoded.raw'
-            subprocess.run(['qemu-img', 'convert', '-f', 'vpc' if suffix == 'vhd' else 'vhdx', '-O', 'raw', str(output), str(decoded)], check=True, capture_output=True)
-            # VHD geometry may round up the virtual CHS size; the exact stored
-            # current-size field and Rufus decoder must retain the captured size.
+            options = {'driver': 'vpc' if suffix == 'vhd' else 'vhdx',
+                       'file': {'driver': 'file', 'filename': str(output)}}
+            # Older QEMU defaults to legacy CHS sizing for an unknown creator.
+            # Decode the exact VHD current_size field, including the final GPT.
+            if suffix == 'vhd':
+                options['force_size_calc'] = 'current_size'
+            subprocess.run(['qemu-img', 'convert', '-O', 'raw', 'json:' + json.dumps(options),
+                            str(decoded)], check=True, capture_output=True)
             raw = decoded.read_bytes()
-            assert raw[:len(data)] == data and not any(raw[len(data):]), (suffix, len(raw), len(data))
+            assert raw == data, (suffix, len(raw), len(data))
             decoded.unlink()
         after = source.stat()
         assert (before.st_size, before.st_mtime_ns, before.st_ctime_ns) == (after.st_size, after.st_mtime_ns, after.st_ctime_ns)
