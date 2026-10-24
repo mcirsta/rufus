@@ -1,30 +1,9 @@
 name: MinGW
 
-on: 
-  push:
-    paths-ignore:
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.gitignore'
-      - '.gitattributes'
-      - 'res/**'
-      - '**.cmd'
-      - '**.md'
-      - '**.rc'
-      - '**.sh'
-      - '**.txt'
-      - '**.xml'
-  pull_request:
-    branches: [master]
-    paths-ignore:
-      - '.gitignore'
-      - '.gitattributes'
-      - 'res/**'
-      - '**.cmd'
-      - '**.md'
-      - '**.rc'
-      - '**.sh'
-      - '**.txt'
-      - '**.xml'
+# Retained for optional Windows maintenance; Linux releases use native builds.
+# The repository workflow is disabled and has no automatic triggers.
+on:
+  workflow_dispatch:
 
 jobs:
   MinGW-Build:
