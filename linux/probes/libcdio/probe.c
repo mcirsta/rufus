@@ -45,7 +45,14 @@ int main(int argc, char** argv)
     }
     else
     {
-        printf("SIZE=%" PRIu64 "\n", entry->total_size);
+        // bundled_cdio exports this ABI selection and its aggregate 64-bit
+        // extent size. The upstream system ABI exposes the ordinary size.
+#ifdef DO_NOT_WANT_COMPATIBILITY
+        const uint64_t entry_size = entry->total_size;
+#else
+        const uint64_t entry_size = entry->size;
+#endif
+        printf("SIZE=%" PRIu64 "\n", entry_size);
         if (iso9660_iso_seek_read(iso, block, entry->lsn, 1) != sizeof(block))
         {
             puts("READ_FAILED");

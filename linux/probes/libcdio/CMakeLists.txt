@@ -8,6 +8,8 @@ get_filename_component(RUFUS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUT
 add_subdirectory(../../cdio cdio)
 
 add_executable(probe_bundled probe.c)
+# Inherits DO_NOT_WANT_COMPATIBILITY from bundled_cdio; probe.c uses that
+# existing ABI definition for the bundled reader's 64-bit total_size field.
 target_link_libraries(probe_bundled PRIVATE bundled_cdio)
 target_compile_definitions(probe_bundled PRIVATE _FILE_OFFSET_BITS=64)
 target_compile_options(probe_bundled PRIVATE -Wall -Wextra)
@@ -29,7 +31,8 @@ if(BUILD_TESTING)
     )
 endif()
 
-# Compile the same probe against the system library's own headers and ABI.
+# Compile the same probe against the system library's own headers and ABI,
+# without the bundled DO_NOT_WANT_COMPATIBILITY definition or its fields.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SYSTEM_CDIO REQUIRED IMPORTED_TARGET libiso9660 libudf)
 add_executable(probe_system probe.c)
