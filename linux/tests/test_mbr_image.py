@@ -3,13 +3,13 @@
 import argparse
 import errno
 from functools import partial
-import hashlib
 import json
 from pathlib import Path
 import re
 import struct
 import subprocess
 import tempfile
+from file_hash import file_sha256
 
 MIB = 1024 * 1024
 SECTOR_BYTES = 512
@@ -117,7 +117,7 @@ def inspect_mbr(image, size, cluster=512, track=63, sfdisk="sfdisk", signature=0
 def digest(image, offset=0):
     with image.open("rb") as stream:
         stream.seek(offset)
-        return hashlib.file_digest(stream, "sha256").digest()
+        return file_sha256(stream).digest()
 
 
 def make_image(root, name, size):

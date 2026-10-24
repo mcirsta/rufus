@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "platform/grub2_cache.h"
+#include "file_timestamp_fixture.h"
 #include "../../res/grub2/grub2_version.h"
 #include <QCryptographicHash>
 #include <QDir>
@@ -47,6 +48,11 @@ void changeInput()
             mutationError = ftruncate(fd, 512) == 0 ? 0 : errno;
         else
         {
+            if (!WaitForFileTimestampTick(&info.st_ctim)) {
+                mutationError = ETIMEDOUT;
+                close(fd);
+                return;
+            }
             const char changed = 'x';
             mutationError = pwrite(fd, &changed, 1, 0) == 1 ? 0 : EIO;
             const timespec times[] = {info.st_atim, info.st_mtim};

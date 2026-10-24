@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "platform/image_source.h"
+#include "file_timestamp_fixture.h"
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -153,6 +154,7 @@ static void CheckChanges(const char* path, const char* moved, const char* link)
 	CHECK(OpenImageFileSource(path, &source) == 0);
 	times[0] = source.info.st_atim;
 	times[1] = source.info.st_mtim;
+	CHECK(WaitForFileTimestampTick(&source.info.st_ctim));
 	fd = open(path, O_WRONLY);
 	CHECK(fd >= 0 && pwrite(fd, "changed!", 8, 0) == 8);
 	CHECK(futimens(fd, times) == 0);

@@ -2,7 +2,6 @@
 """Qualify native exFAT quick formatting on disposable partition-sized files."""
 import argparse
 import errno
-import hashlib
 import os
 from pathlib import Path
 import re
@@ -12,6 +11,7 @@ import subprocess
 import tempfile
 
 from test_fat_format import fake_formatter
+from file_hash import file_sha256
 
 MIB = 1024 * 1024
 SECTOR = 512
@@ -23,7 +23,7 @@ runs = 0
 
 def digest(path):
     with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
+        return file_sha256(stream).hexdigest()
 
 
 def make_target(root, name, size=SIZE):

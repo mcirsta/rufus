@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 static const char* fault;
+static const char* formatter_ready;
 static int64_t start;
 static int syncs, ticks;
 enum {
@@ -45,7 +46,8 @@ int __wrap_clock_gettime(clockid_t clock, struct timespec* now)
 int IsRufusJobCancelled(void)
 {
 	bool cancel_running = strcmp(fault, "cancel-running") == 0 && Milliseconds() - start >= CANCEL_DELAY_MS;
-	return strcmp(fault, "cancel-before") == 0 || cancel_running;
+	bool cancel_child_ready = formatter_ready != NULL && access(formatter_ready, F_OK) == 0;
+	return strcmp(fault, "cancel-before") == 0 || cancel_running || cancel_child_ready;
 }
 
 int IsIsoScanCancelled(void) { return IsRufusJobCancelled(); }
@@ -101,6 +103,13 @@ int main(int argc, char** argv)
 		return 64;
 	const bool fat16 = argc >= 9 && strcmp(argv[8], "16") == 0;
 	fault = argv[7];
+	if (strcmp(fault, "cancel-child-ready") == 0) {
+		formatter_ready = getenv("RUFUS_TEST_FORMATTER_READY");
+		if (formatter_ready == NULL || formatter_ready[0] != '/' || access(formatter_ready, F_OK) == 0) {
+			fprintf(stderr, "Child-ready cancellation needs an absent absolute marker path\n");
+			return 64;
+		}
+	}
 	options.full_format = argc == 10 && strcmp(argv[9], "full") == 0;
 	options.offset = strtoull(argv[3], NULL, 10);
 	options.size = strtoull(argv[4], NULL, 10);

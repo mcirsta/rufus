@@ -3,7 +3,6 @@
 import argparse
 import errno
 import fcntl
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -12,6 +11,7 @@ import struct
 import sys
 import tempfile
 import time
+from file_hash import file_sha256
 
 sys.path.insert(0, str(Path(__file__).parent / 'vm'))
 from gpt import inspect_formatted_partition
@@ -24,7 +24,7 @@ PROCESS_TIMEOUT_SECONDS = 10
 
 def digest(path):
     with path.open('rb') as source:
-        return hashlib.file_digest(source, 'sha256').hexdigest()
+        return file_sha256(source).hexdigest()
 
 
 def request_for(path):

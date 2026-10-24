@@ -31,8 +31,17 @@ def legacy_result(program, path):
 
 def check(program, legacy, path, packed, unpacked, trailing=None, independent=True):
     if independent:
+        oracle = packed
+        declared_size = struct.unpack_from('<Q', packed, 5)[0]
+        if declared_size != 2**64 - 1:
+            assert declared_size == len(unpacked), (declared_size, len(unpacked))
+            # liblzma 5.2 rejects an EOS marker with a declared length; 5.4
+            # permits it. Verify the unchanged compressed payload using its
+            # original unknown-size header. Both native/Windows decoders below
+            # still receive the exact known-size fixture, including its tail.
+            oracle = declared(packed, 2**64 - 1)
         decoder = lzma.LZMADecompressor(format=lzma.FORMAT_ALONE)
-        assert decoder.decompress(packed) == unpacked and decoder.eof
+        assert decoder.decompress(oracle) == unpacked and decoder.eof
     path.write_bytes(packed)
     result = probe(program, path, max(1, len(unpacked)))
     assert int(result['error']) == 0, result

@@ -2439,8 +2439,11 @@ if(BUILD_TESTING)
         -Wl,--wrap=_ZN8QProcess5startERK7QStringRK5QListIS0_E6QFlagsIN13QIODeviceBase12OpenModeFlagEE)
     add_test(NAME rufus_image_hash_widgets COMMAND test_image_hash_widgets)
     add_test(NAME rufus_image_hash_widgets_scaled COMMAND test_image_hash_widgets largeFontDialog)
+    # Qt 6.2 defaults to an 800x600 offscreen display, only 400x300 at 2x.
+    # Give both large-font runs the same explicit physical desktop size.
     set_tests_properties(rufus_image_hash_widgets rufus_image_hash_widgets_scaled PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "functional;widgets;image;no-hardware" TIMEOUT 60)
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/offscreen-desktop.json"
+        LABELS "functional;widgets;image;no-hardware" TIMEOUT 60)
     set_property(TEST rufus_image_hash_widgets_scaled APPEND PROPERTY ENVIRONMENT "QT_SCALE_FACTOR=2")
     add_executable(test_image_mode_dialog tests/test_image_mode_dialog.cpp)
     add_executable(test_windows_user_dialog tests/test_windows_user_dialog.cpp)

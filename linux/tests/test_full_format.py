@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -15,8 +16,8 @@ from test_fat_format import fake_formatter
 MIB = 1024 * 1024
 
 
-def run(command, expected=0):
-    result = subprocess.run([str(item) for item in command], capture_output=True, timeout=30)
+def run(command, expected=0, environment=None):
+    result = subprocess.run([str(item) for item in command], env=environment, capture_output=True, timeout=30)
     assert result.returncode == 0, (command, result.stdout, result.stderr)
     report = {key.decode(): int(value) for key, value in re.findall(rb'([A-Z_]+)=(-?\d+)', result.stdout)}
     assert report['ERROR'] == expected, (command, report, result.stderr)
@@ -172,9 +173,14 @@ def main():
             run(command, 0 if full else errno.ETIMEDOUT)
             cases.append('full ignores old absolute deadline' if full else 'quick retains old absolute deadline')
         dirty(target, 32 * MIB)
-        blocked = fake_formatter(root, 'cancel-full', 'signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(10)')
-        report = run([fat, blocked, target, 0, 32 * MIB, 2048, 'FULLTEST', 'cancel-running', '16', 'full'], errno.ECANCELED)
-        assert report['SYNCS'] >= 1 and report['SIGNAL'] != 0, report
+        ready = root / 'cancel-full-ready'
+        blocked = fake_formatter(root, 'cancel-full',
+            'signal.signal(signal.SIGTERM, signal.SIG_IGN); open(' + repr(str(ready)) + ", 'xb').close(); time.sleep(10)")
+        environment = dict(os.environ, RUFUS_TEST_FORMATTER_READY=str(ready))
+        report = run([fat, blocked, target, 0, 32 * MIB, 2048, 'FULLTEST', 'cancel-child-ready', '16', 'full'],
+                     errno.ECANCELED, environment)
+        assert ready.is_file(), 'The formatter must start before cancelling the full-format job'
+        assert report['SYNCS'] >= 1 and report['SIGNAL'] == signal.SIGKILL, report
         cases.append('full cancellation kills, reaps and synchronizes formatter')
         for fault, error in (('cancel-before', errno.ECANCELED), ('readonly', errno.EINVAL), ('sync-fail', errno.EIO)):
             dirty(target, 32 * MIB)

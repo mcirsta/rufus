@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "platform/compressed_source.h"
+#include "file_timestamp_fixture.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -170,8 +171,14 @@ static int Consume(void* context, const uint8_t* bytes, size_t size, uint64_t of
 		} else if (consumer->fault == REPLACE_SOURCE) {
 			CHECK(rename(path, moved) == 0);
 			WritePacked(path);
-		} else if (consumer->fault == REMOVE_SOURCE)
+		} else if (consumer->fault == REMOVE_SOURCE) {
+			struct stat info;
+			const bool have_info = fstat(source_fd, &info) == 0;
+			CHECK(have_info);
+			if (have_info)
+				CHECK(WaitForFileTimestampTick(&info.st_ctim));
 			CHECK(unlink(path) == 0);
+		}
 	}
 	return 0;
 }

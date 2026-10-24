@@ -741,12 +741,28 @@ private slots:
         nativeReadOnly = nativeError = 0; nativeSector = 512;
         // Qt 6.4 does not call cleanup() when init() skips a row.
         // Gate optional providers before acquiring any per-row resources.
-        if (QByteArray(QTest::currentTestFunction()).startsWith("exfat") ||
-            QByteArray(QTest::currentDataTag()).startsWith("exfat-"))
+        const QByteArray function = QTest::currentTestFunction();
+        const bool formatData = function == "fullFormatChoice" || function == "extendedLabelCreation"
+            || function == "sourceFreeCreationWaitsForExit" || function == "sfdGuiJob"
+            || function == "sfdPreparation" || function == "sourceFreeFailures"
+            || function == "sourceFreeCancel" || function == "sourceFreePreflightRefusal";
+        bool exfat = function.startsWith("exfat");
+        if (formatData)
+        {
+            QFETCH(int, filesystem);
+            exfat = filesystem == FS_EXFAT;
+        }
+        if (exfat)
         {
             QString problem;
-            if (rufus::CheckExfatFormatTools(QStringLiteral(RUFUS_MKFS_EXFAT_PATH), problem) != 0)
+            const int error = rufus::CheckExfatFormatTools(QStringLiteral(RUFUS_MKFS_EXFAT_PATH), problem);
+            QVERIFY2(error == 0 || error == ENOTSUP, qPrintable(problem));
+            if (error == ENOTSUP)
+            {
+                QVERIFY(!problem.isEmpty());
+                QCOMPARE(helperStarts, 0);
                 QSKIP(qPrintable(problem));
+            }
         }
         sourcePath_ = directory_.filePath(QStringLiteral("source.img"));
         targetPath_ = directory_.filePath(QStringLiteral("target.bin"));
