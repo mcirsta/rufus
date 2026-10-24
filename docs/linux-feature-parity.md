@@ -1,6 +1,15 @@
 # Windows feature parity backlog
 
-## Current release work — CP78 / Preview47 (2026-10-24)
+## Current release work — CP79 / Preview48 (2026-10-24)
+
+Preview48 packages the qualified fixes following Preview47: preserved standalone
+GRUB4DOS selection, older Qt/header compatibility, distro CI dependencies and
+deterministic fixtures. Both Ubuntu CI jobs pass 252 suites with one optional
+exFAT capability skip, staged integration and the separate ISO classification
+fixture. Focused normal/sanitizer repairs and unchanged CP78 desktop/media
+evidence are reused. The [evidence index](linux-release-evidence.md) records the
+exact nine-file product delta. New package/publication results belong to CP79's
+delivery receipt; `linux-preview.47` remains immutable.
 
 B8 prepares the first useful x86-64 release: the original 38-language Rufus
 catalog is reused wherever the native text is equivalent, with explicit English
@@ -15,8 +24,9 @@ and fresh installation, same-payload package-release upgrade and removal checks.
 The AUR source recipe builds the tagged GitHub archive; source and binary
 packages have distinct packaging instructions.
 
-The user requested GitHub publication at `mcirsta/rufus`, tag `linux-preview.47`.
-The AUR recipe must use the checksum of that actual downloaded tag archive.
+The user authorized the next GitHub release at `mcirsta/rufus`, tag
+`linux-preview.48`. The AUR recipe must use the checksum of that actual downloaded
+tag archive; the release owner will submit it manually.
 Arch/CachyOS, Debian, Fedora and generic install trees depend on system libraries;
 the generic archive is not self-contained.
 

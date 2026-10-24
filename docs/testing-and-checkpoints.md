@@ -2,6 +2,32 @@
 
 Updated: 2026-10-24
 
+## CP79 — qualified fixes in Preview48 (2026-10-24)
+
+The user authorized a new release containing the qualified post-Preview47 fixes.
+Preview48 preserves explicit standalone GRUB4DOS selection, supports the declared
+Qt 6.2 API and older Linux headers, and carries the repaired distro dependencies,
+deterministic test fixtures and standalone ISO-probe ABI selection. Filesystem
+identifiers prefer platform definitions, with guarded fallbacks for missing ones.
+Published `linux-preview.47` remains immutable at `a5987163`.
+
+Source base `4f15f8af` has the same product inputs as green Ubuntu CI source
+`db82f6b5`. Each Ubuntu 22.04/24.04 job passes the build, staged integration,
+252 regression suites, and the separate ISO classification fixture; one optional
+exFAT provider-capability suite is skipped. Affected paths also pass the retained
+focused normal and sanitizer repairs, including standalone GRUB4DOS and ISO-backed
+boot-record failures. No additional full regression or media matrix is needed.
+
+The provenance audit finds nine changed product files: eight existing media
+files and one new compatibility header. The other 189 CP78 media files match;
+Qt application sources, original sources, catalog and resources are unchanged.
+All 26 retained checkpoint receipt hashes verify. CP78's 32 bounded desktop cases
+and prior media/boot evidence are reused with their original limits. Preview48
+package inspection and actual public archive/update handoff are recorded in its
+delivery receipt after the source is frozen. Evidence is under
+`../../.rufus-test-artifacts/cp79/`; prior CI receipts remain under `cp78/github-ci/`.
+Full Windows parity and the disclosed hardware/architecture gaps remain open.
+
 ## CP78 — catalog reuse and useful release qualification, Preview47 (2026-10-24)
 
 The user accepted original Rufus translations with disclosed English fallback

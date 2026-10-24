@@ -4,11 +4,17 @@ This is Linux preview @RUFUS_PREVIEW_REVISION@, based on Rufus @RUFUS_UPSTREAM_V
 development port with a working Qt6 desktop interface and native Linux media
 operations. Complete Windows Rufus feature parity remains in development.
 
-CP78 / Preview47 prepares the useful x86-64 release: original Rufus translations
+CP79 / Preview48 ships the qualified native Linux fixes: standalone GRUB4DOS
+creation preserves the selected bootloader, and source builds support older Qt
+and Linux headers. Platform filesystem definitions take precedence over guarded
+fallbacks. Ubuntu 22.04 and 24.04 CI pass; MinGW CI is disabled.
+
+The release reuses the existing media, desktop and regression evidence, with
+focused checks for the fixes and rebuilt packages. Original Rufus translations
 are reused across 38 languages; Linux-specific text may remain English. Native
-Debian/Fedora packages and an Arch AUR source recipe join Arch/CachyOS and generic
-install trees. See the [release evidence](docs/linux-release-evidence.md) and
-[package instructions](linux/packaging/README.md).
+Debian/Fedora packages and a manual Arch AUR source recipe accompany Arch/CachyOS
+and generic install trees. See the [release evidence](docs/linux-release-evidence.md)
+and [package instructions](linux/packaging/README.md).
 
 Existing UDF1.02–2.01 remains supported. UDF2.50/2.60, ReFS formatting and Dev
 Drive detection are user-deferred. The actual Windows UDF indexing attribute is

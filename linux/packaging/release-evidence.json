@@ -1,5 +1,106 @@
 {
   "schema_version": 1,
+  "current_checkpoint": "CP79",
+  "current_release": "Preview48",
+  "historical_record_scope": "All original CP78 fields below describe the frozen Preview47 candidate and retain their original qualification/publication phase. The current source-followup qualification is cp79_source_followup; the old 197-file/929-input identity claims do not describe Preview48.",
+  "cp79_source_followup": {
+    "checkpoint": "CP79",
+    "release": "Preview48",
+    "date": "2026-10-24",
+    "status": "qualified_source_followup_package_delivery_pending",
+    "published_predecessor": {
+      "tag": "linux-preview.47",
+      "commit": "a598716360d2050a0d40399552916d1c0c09c095"
+    },
+    "qualified_source_base": "4f15f8aff9b6945366eb6f82a41c7b9c00c4bab1",
+    "ci_tested_source": "db82f6b5662a63728b61ec68c86783034b77e640",
+    "source_provenance": {
+      "artifact": "cp79/source-provenance.json",
+      "sha256": "e5c50b11924f28ae4b3f02b27fbc2990fa41203ce30ba3472d52f9bfa04796f9"
+    },
+    "product_delta": {
+      "changed_existing_files": 8,
+      "new_files": 1,
+      "changed_product_files": {
+        "linux/helper/prepare_main.cpp": "ISO-source guard preserves explicit standalone GRUB4DOS SBR selection; ISO-backed source selection remains active.",
+        "linux/platform/filesystem_magic.h": "New platform-first linux/magic.h wrapper; #ifndef fallbacks for existing exFAT/FUSE statfs identifiers only.",
+        "linux/platform/freedos_copy.cpp": "Include the platform-first filesystem identifier wrapper.",
+        "linux/platform/legacy_iso.cpp": "Include the platform-first filesystem identifier wrapper.",
+        "linux/platform/media_appearance.cpp": "Include the platform-first filesystem identifier wrapper.",
+        "linux/platform/prepare_device.cpp": "Include the platform-first filesystem identifier wrapper and libc mount header before Linux UAPI mount definitions.",
+        "linux/platform/windows_bootloaders.cpp": "Include the platform-first filesystem identifier wrapper.",
+        "linux/platform/iso_export.cpp": "Use equivalent Qt 6.2-compatible bounded char/length hashing overload.",
+        "linux/platform/secure_boot_cache.cpp": "Use equivalent Qt 6.2-compatible explicit UTC timezone construction."
+      },
+      "cp78_media_files_unchanged": 189,
+      "cp78_media_files_total": 197,
+      "current_media_files": 198,
+      "qt_product_delta": [],
+      "original_source_catalog_resource_delta": [],
+      "retained_checkpoint_receipt_hashes_verified": 26
+    },
+    "ci": {
+      "run": 40087395293,
+      "status": "success",
+      "environments": [
+        "Ubuntu 22.04 x86-64",
+        "Ubuntu 24.04 x86-64"
+      ],
+      "per_job": {
+        "selected_regression_suites": 253,
+        "passed": 252,
+        "optional_exfat_provider_capability_skip": 1,
+        "failures": 0,
+        "native_build": "passed",
+        "staged_integration": "passed",
+        "standalone_iso_probe_builds": "passed",
+        "separate_iso_classification_fixture": "passed"
+      },
+      "receipt": {
+        "artifact": "cp78/github-ci/probe-final-ci-receipt.json",
+        "sha256": "0849cc76e5d1cbff4aed7eaba3825df3760c42213f2f26ab573f816d048e347c"
+      }
+    },
+    "focused_normal_sanitizer_repairs": [
+      {
+        "artifact": "cp78/github-ci/local-compat-run.json",
+        "sha256": "b9706398e75dd5edffc5abd8b0f15b65b8d0354afff80236f5002f8fb0e8b321"
+      },
+      {
+        "artifact": "cp78/github-ci/batched-final-repair-run.json",
+        "sha256": "a8603cb2bb017ef4febfeb0fd950f58e48e30c7a46c25ab4b047e4f4ad6582ec"
+      },
+      {
+        "artifact": "cp78/github-ci/last-ci-repair-run.json",
+        "sha256": "06bec52f5a0260057c539ee2bfe0abedfc49ddc38f4d6ee89083ed2403a41743"
+      },
+      {
+        "artifact": "cp78/github-ci/closing-repair-run.json",
+        "sha256": "1587b74af2001c4ef9c7954e24ca28a7c8609025c600cf06e3c6232d2c84b768"
+      }
+    ],
+    "desktop_reuse": {
+      "qt_product_delta": [],
+      "catalog_and_original_resources_delta": [],
+      "receipt": {
+        "artifact": "cp78/desktop-qualification.json",
+        "sha256": "d35a4ddc650b9ab2a353133d1edbd7d444966a0290fe251c4c5b15ba9d80b5b3"
+      },
+      "scope": "Reuse 32 bounded KDE native Wayland / Qt xcb-XWayland cases, 1x/2x, fr/ar/ro, keyboard/dialog/18pt layout; no new host or physical-media claim."
+    },
+    "media_reuse_boundary": "The 8 changed existing media files are covered by the qualified compatibility fixes and focused normal/sanitizer guard tests plus both green distro regression runs. Historical media/boot/device evidence remains bounded; this is not a new VM, hardware or installed-Windows matrix.",
+    "release_limits": "Existing translation policy, user-deferred UDF 2.50/2.60/ReFS/Dev Drive, native UDF indexing limit, non-x64 To Go and unavailable host/physical-media qualifications remain unchanged.",
+    "package_qualification": "Prior CP78 install/upgrade/removal evidence remains historical. Preview48 package build/inspection and release metadata matching are recorded separately in the CP79 delivery receipt.",
+    "publication": {
+      "authorization": "User authorized the next release containing qualified fixes.",
+      "repository": "mcirsta/rufus",
+      "tag": "linux-preview.48",
+      "phase": "source_candidate_prepublication",
+      "postpublication_proof": "Final attached delivery receipt records the release commit, actual public archive/assets, AUR source checksum verification and live update handoff. No self-referential published hash is predicted in tracked inputs.",
+      "aur_submission": "Manual submission by the release owner."
+    },
+    "test_budget": "Reuse green Ubuntu CI and focused normal/sanitizer repairs. No new full regression, VM, physical-media or installed-Windows matrix."
+  },
   "checkpoint": "CP78",
   "date": "2026-10-24",
   "status": "retained_evidence_reconciled_with_open_release_qualifications",

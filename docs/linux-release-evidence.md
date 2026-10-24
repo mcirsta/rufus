@@ -1,4 +1,36 @@
-# Linux release evidence reconciliation (CP78)
+# Linux release evidence reconciliation (CP79)
+
+## Preview48 source follow-up
+
+Preview48 packages the qualified source fixes after immutable Preview47. Source
+base `4f15f8af` has no product delta from tested CI source `db82f6b5`. Both jobs in
+[CI run 40087395293](https://github.com/mcirsta/rufus/actions/runs/40087395293)
+pass native builds, staged integration, 252 regression suites and the separate
+ISO classification fixture, with one optional exFAT capability skip per job.
+Focused normal/sanitizer repair receipts cover the affected paths.
+
+| Product delta from Preview47 | Qualification and reuse |
+| --- | --- |
+| `helper/prepare_main.cpp` | ISO-derived secondary-boot selection requires an ISO path, preserving standalone GRUB4DOS selection. Focused standalone/ISO helper and fault cases pass in normal/sanitizer builds; both CI matrices pass. |
+| `platform/iso_export.cpp`, `platform/secure_boot_cache.cpp` | Equivalent Qt 6.2-compatible hashing and UTC APIs; focused ISO-export/policy checks and both CI matrices pass. |
+| New `platform/filesystem_magic.h`; includes in `freedos_copy.cpp`, `legacy_iso.cpp`, `media_appearance.cpp`, `prepare_device.cpp`, `windows_bootloaders.cpp` | Platform headers supply filesystem identifiers first; guarded missing-definition fallbacks and compatible mount-header ordering. Native builds and relevant existing helper/component cases pass. |
+
+Paths above are relative to `linux/`. Of the 197 CP78 media files, 189 still
+match and eight changed; the new header makes 198 current files. The original
+197-file identity claim below remains historical CP78 evidence. Qt application
+sources, original sources/instructions, catalog and resources are unchanged,
+allowing reuse of CP78's 32 bounded desktop cases and prior media/boot evidence.
+All 26 retained checkpoint receipt hashes were rechecked. Exact hashes and
+changed-file classifications are in `cp79/source-provenance.json`; the JSON
+index adds a CP79 record while preserving its original CP78 fields.
+
+The release owner records new package inspection, actual public archive hashes,
+AUR source verification and update handoff in CP79's delivery receipt. Existing
+translation policy, deferrals and unavailable hardware/architecture qualifications
+remain unchanged. No new full regression, VM, physical-media or Windows matrix
+is required for this release.
+
+## Retained CP78 qualification record
 
 This is the Q01 coverage index for preparing a useful release. It reuses the
 retained qualification behind delivered features; it does not declare complete
@@ -9,7 +41,7 @@ The machine-readable index is
 
 ## Reuse boundary
 
-The CP78 audit compared all 197 production C/C++/header files in `linux/helper`
+The historical CP78 audit compared all 197 production C/C++/header files in `linux/helper`
 and `linux/platform` against the CP77 delivered source manifest, the CP78 starting
 snapshot and the current tree. They match. `cp78/media-source-reuse.json` records
 the individual hashes. GUI, localization and packaging changes require their
