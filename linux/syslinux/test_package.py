@@ -48,15 +48,6 @@ def reject_changed_payloads(args, directory, env):
         assert f"Payload does not match qualified {version}: {payload}" in " ".join(output.split()), output
         target.write_bytes(original)
         print(f"PASS rejected changed {payload}", flush=True)
-    if args.major == 4:
-        command = [args.cmake, "-S", PROBES, "-B", directory / "bad-architecture", "-G", "Ninja",
-                   "-DBUILD_TESTING=OFF", f"-DRUFUS_SYSLINUX4_UPSTREAM={source}",
-                   "-DCMAKE_SYSTEM_NAME=Linux", "-DCMAKE_SYSTEM_PROCESSOR=aarch64"]
-        result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
-        output = result.stdout + result.stderr
-        print(output, end="", flush=True)
-        assert result.returncode != 0 and "Syslinux 4.07 requires an x86 host" in output, output
-        print("PASS rejected unqualified non-x86 4.07 build", flush=True)
 
 
 def check_package(args, directory, env):

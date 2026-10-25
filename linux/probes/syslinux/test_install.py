@@ -124,6 +124,8 @@ def main():
                       ("existing-long-name", errno.EEXIST, False), ("deleted-file", errno.EEXIST, False),
                       ("no-label", 0, True))
         else:
+            # CP74 supports v4 with selected resources; this default-v6 request
+            # deliberately omits them and must fail before installing v6 bytes.
             cases += (("image-version4", errno.ENOTSUP, False),)
         if args.major == 4:
             cases = tuple(case for case in cases if case[0] != "module-bytes")

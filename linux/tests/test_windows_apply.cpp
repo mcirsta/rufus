@@ -143,13 +143,17 @@ bool inspectNtfs(const QByteArray& path, NtfsSnapshot& snapshot)
     if (volume == nullptr) return false;
     bool ok = ntfs_open_secure(volume) == 0;
     ntfs_inode* root = ntfs_inode_open(volume, FILE_root);
-    ntfs_inode* file = ntfs_pathname_to_inode(volume, nullptr, "payload.bin");
-    ntfs_inode* alias = ntfs_pathname_to_inode(volume, nullptr, "alias.bin");
-    ntfs_inode* junction = ntfs_pathname_to_inode(volume, nullptr, "junction");
-    ok = ok && root != nullptr && file != nullptr && alias != nullptr && junction != nullptr;
+    ntfs_inode* alias = root == nullptr ? nullptr : ntfs_pathname_to_inode(volume, root, "alias.bin");
+    const bool foundAlias = alias != nullptr;
+    const quint64 aliasInode = foundAlias ? alias->mft_no : 0;
+    // The provider caches handles by inode number: close a hardlink before opening its other name.
+    if (alias != nullptr && ntfs_inode_close(alias) != 0) ok = false;
+    ntfs_inode* file = root == nullptr ? nullptr : ntfs_pathname_to_inode(volume, root, "payload.bin");
+    ntfs_inode* junction = root == nullptr ? nullptr : ntfs_pathname_to_inode(volume, root, "junction");
+    ok = ok && root != nullptr && file != nullptr && foundAlias && junction != nullptr;
     if (ok)
     {
-        snapshot.alias = file->mft_no == alias->mft_no;
+        snapshot.alias = file->mft_no == aliasInode;
         snapshot.data = readAttribute(file);
         snapshot.stream = readAttribute(file, QStringLiteral("Zone.Identifier"));
         snapshot.attributes = le32_to_cpu(file->flags);
@@ -192,7 +196,6 @@ bool inspectNtfs(const QByteArray& path, NtfsSnapshot& snapshot)
         }
     }
     if (file != nullptr && ntfs_inode_close(file) != 0) ok = false;
-    if (alias != nullptr && ntfs_inode_close(alias) != 0) ok = false;
     if (junction != nullptr && ntfs_inode_close(junction) != 0) ok = false;
     if (root != nullptr && ntfs_inode_close(root) != 0) ok = false;
     closeSecure(volume);

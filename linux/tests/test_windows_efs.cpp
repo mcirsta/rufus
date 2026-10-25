@@ -297,12 +297,16 @@ private slots:
         ntfs_volume* volume = ntfs_mount(QFile::encodeName(target).constData(), NTFS_MNT_RDONLY | NTFS_MNT_FORENSIC);
         QVERIFY(volume != nullptr);
         volume->efs_raw = TRUE;
-        ntfs_inode* file = ntfs_pathname_to_inode(volume, nullptr, "encrypted.bin");
         ntfs_inode* alias = ntfs_pathname_to_inode(volume, nullptr, "alias.bin");
+        QVERIFY(alias != nullptr);
+        const quint64 aliasInode = alias->mft_no;
+        // Do not keep two handles for one cached inode open through hardlink names.
+        QCOMPARE(ntfs_inode_close(alias), 0);
+        ntfs_inode* file = ntfs_pathname_to_inode(volume, nullptr, "encrypted.bin");
         ntfs_inode* directory = ntfs_pathname_to_inode(volume, nullptr, "encrypted-directory");
         ntfs_inode* empty = ntfs_pathname_to_inode(volume, nullptr, "empty-encrypted.bin");
-        QVERIFY(file && alias && directory && empty);
-        QCOMPARE(file->mft_no, alias->mft_no);
+        QVERIFY(file && directory && empty);
+        QCOMPARE(file->mft_no, aliasInode);
         QVERIFY(file->flags & FILE_ATTR_ENCRYPTED);
         QVERIFY(directory->flags & FILE_ATTR_ENCRYPTED);
         QVERIFY(directory->mrec->flags & MFT_RECORD_IS_DIRECTORY);
@@ -320,7 +324,6 @@ private slots:
             free(value);
         }
         QCOMPARE(ntfs_inode_close(file), 0);
-        QCOMPARE(ntfs_inode_close(alias), 0);
         QCOMPARE(ntfs_inode_close(directory), 0);
         QCOMPARE(ntfs_inode_close(empty), 0);
         QCOMPARE(ntfs_umount(volume, FALSE), 0);

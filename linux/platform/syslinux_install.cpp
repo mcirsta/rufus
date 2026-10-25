@@ -323,6 +323,13 @@ static int checkRequest(const NativeSyslinuxRequest& request, QString& problem)
         request.toolsDirectory.contains(QChar::Null) || request.temporaryRoot.contains(QChar::Null);
     if (!absolutePrograms || !validDirectories || embeddedNull)
         return EINVAL;
+    const bool oldFamilyImage = imageInstall &&
+        SL_MAJOR(SyslinuxSourceReport(request.analysis->report).sl_version) < 5;
+    if (oldFamilyImage && request.resources == nullptr)
+    {
+        problem = QStringLiteral("Syslinux 3/4 image installation requires the selected boot resources.");
+        return ENOTSUP;
+    }
     if (request.resources && (!imageInstall || ValidateSyslinuxResources(request.analysis->report,*request.resources) != 0)) return ENOTSUP;
     if (!imageInstall)
         return CheckNativeSyslinuxGeometry(request.fileSystem, sectorBytes, request.format.offset, problem);
