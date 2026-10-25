@@ -23,7 +23,7 @@ pins the archive's SHA-256, checks Bash syntax and generates `.SRCINFO` with
 ```sh
 python linux/packaging/aur/prepare.py \
   --source-archive /absolute/path/to/the-release-source.tar.gz \
-  --source-url https://github.com/mcirsta/rufus/archive/refs/tags/linux-preview.48.tar.gz \
+  --source-url https://github.com/mcirsta/rufus/archive/refs/tags/linux-preview.49.tar.gz \
   --output /absolute/path/to/aur-candidate
 ```
 
@@ -35,7 +35,7 @@ bundled third-party notices.
 
 ## Build on Arch
 
-The development recipe requires Qt 6.4 or newer and enables the native
+The Preview49 recipe requires Qt 6.4 or newer and enables the native
 warnings-as-errors build policy. Published release recipes retain the source
 and dependency requirements recorded for their own immutable tag.
 
@@ -79,7 +79,7 @@ name/contact, verify the source URL from a fresh directory and recheck the
 package name before submitting. Do not submit binary packages or downloaded
 archives.
 
-The planned release tag is `linux-preview.48` in `mcirsta/rufus`. Generate the
+The planned release tag is `linux-preview.49` in `mcirsta/rufus`. Generate the
 final candidate from the archive actually downloaded from GitHub after the tag
 is public. A locally generated archive can qualify the preparation/build flow,
 but its compressed-byte checksum must not be assumed to match GitHub's archive.

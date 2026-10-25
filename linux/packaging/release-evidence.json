@@ -1,8 +1,77 @@
 {
   "schema_version": 1,
   "current_checkpoint": "CP79",
-  "current_release": "Preview48",
-  "historical_record_scope": "All original CP78 fields below describe the frozen Preview47 candidate and retain their original qualification/publication phase. The current source-followup qualification is cp79_source_followup; the old 197-file/929-input identity claims do not describe Preview48.",
+  "current_release": "Preview49",
+  "current_qualification": "preview49_warning_followup",
+  "historical_record_scope": "Original CP78 and CP79 records below retain their frozen source, qualification and publication phases. The current Preview49 maintenance record is preview49_warning_followup; historical file-identity, Qt 6.2 and Ubuntu 22.04 claims do not describe Preview49.",
+  "preview49_warning_followup": {
+    "release": "Preview49",
+    "date": "2026-10-26",
+    "status": "qualified_source_package_delivery_pending",
+    "published_predecessor": {
+      "tag": "linux-preview.48",
+      "commit": "a09b9d7d8c365b6c6ccce87763c172c028a5aeaa"
+    },
+    "qualified_source": "dec391ec0118a004d7d2e823494bcfe6cc55862d",
+    "qualification_evidence_commit": "07b3d6c000b3dc7667f56bfbd9306f85035bd9e2",
+    "source_identity_boundary": "The qualification receipt preserves the tested source hashes. Preview49 changes release revision and documentation separately; actual release commit, package inspection and public archive hashes belong to the delivery receipt.",
+    "warning_qualification": {
+      "document": "docs/linux-compiler-warnings.md",
+      "receipt": "docs/linux-compiler-warning-evidence.json",
+      "receipt_sha256": "05bf5b23706c864f2e7635ef08753e99a7edeacff5917a633194c85c9081628b",
+      "private_receipts": "warnings-2026-10-26/",
+      "baseline_compiler_warning_lines": 3571,
+      "baseline_unique_scopes": 482,
+      "final_compiler_warnings": 0,
+      "warnings_as_errors": true,
+      "new_diagnostic_suppressions": false,
+      "minimum_qt": "6.4",
+      "ci_ubuntu": "24.04",
+      "native_builds": [
+        "Release with GCC 16.2.1",
+        "Debug with AddressSanitizer and UndefinedBehaviorSanitizer",
+        "Clean CachyOS makepkg hardening flags with FORTIFY_SOURCE=3 and LTO"
+      ],
+      "third_party_source_handling": "Tracked zero-fuzz patches applied to private libcdio, bled, wimlib and Syslinux build copies. Original upstream sources and pinned boot payloads remain unchanged.",
+      "abi_probes": [
+        "libcdio private C/public C/C++ fixed record layouts",
+        "wimlib C/C++ directory-entry prefix and flexible stream tail"
+      ]
+    },
+    "reused_runtime_qualification": {
+      "normal_suites_passed": 266,
+      "sanitizer_suites_passed": 34,
+      "leak_checks_enabled": true,
+      "standalone_iso_fixture_passed": true,
+      "staged_desktop_and_cli_passed": true,
+      "batching": "Passing unchanged suites and full Qt cases were retained; dependency and fixture failures were resolved in focused groups. This release does not repeat the whole media, guest or installed-Windows matrix."
+    },
+    "ci_at_source_manifest_export": {
+      "run": 40246344865,
+      "url": "https://github.com/mcirsta/rufus/actions/runs/40246344865",
+      "compiler_build": "success",
+      "test_status": "in_progress",
+      "previous_full_gate": "https://github.com/mcirsta/rufus/actions/runs/40244491468",
+      "final_status_location": "Release delivery receipt; pending status here is the source-manifest export boundary."
+    },
+    "behavioral_repair": "An old-family Syslinux image request without matching selected resources fails before writes instead of falling back to embedded v6 payloads. Existing refusal coverage passes.",
+    "qualification_fixture_repairs": [
+      "Actual memory-backed filesystem expectations",
+      "Sequential ownership of cached NTFS hardlink inode handles",
+      "Dedicated bounded private-process startup deadlines without changing action/write/cancel deadlines"
+    ],
+    "evidence_reuse_boundary": "Prior bounded media and desktop results retain their original source and environment limits. No new physical USB, firmware or installed-Windows qualification is claimed.",
+    "release_limits": "Existing Linux-specific English fallback, user-deferred UDF 2.50/2.60/ReFS/Dev Drive, Windows UDF indexing limit, non-x64 To Go and unavailable host/physical-media qualifications remain unchanged.",
+    "package_qualification": "Rebuild and inspect release packages, staged payloads and the actual public source archive separately. CP78 package-manager install/upgrade/removal evidence remains historical.",
+    "publication": {
+      "authorization": "User explicitly authorized the next Linux GitHub release and manual AUR update using existing test evidence.",
+      "repository": "mcirsta/rufus",
+      "tag": "linux-preview.49",
+      "phase": "source_candidate_prepublication",
+      "postpublication_proof": "The attached delivery receipt records final CI status, the actual release commit, public archive/asset hashes, source verification and live update handoff. Published Preview48 is not retagged.",
+      "aur_submission": "Manual submission by the release owner."
+    }
+  },
   "cp79_source_followup": {
     "checkpoint": "CP79",
     "release": "Preview48",

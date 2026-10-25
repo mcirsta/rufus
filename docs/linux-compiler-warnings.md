@@ -66,6 +66,8 @@ source hashes and totals. Private logs and command receipts are retained under
 `../.rufus-test-artifacts/warnings-2026-10-26/`; reproducible build copies and
 private tool binaries are removed after qualification.
 
-Published Preview48 and its manual AUR recipe still refer to the immutable
-Preview48 archive. These source fixes require a subsequent release to reach
-that recipe; the published tag and assets were not replaced.
+Preview49 packages these qualified fixes and prepares a new manual AUR recipe
+from its actual public source archive. The qualification source and hashes above
+predate the release-revision/documentation update; package and publication checks
+are recorded separately in the release delivery receipt. Published Preview48
+and its original recipe retain their immutable source tag and assets.

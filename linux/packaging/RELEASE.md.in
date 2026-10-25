@@ -11,12 +11,27 @@ the original sources and boot payloads. MinGW CI is disabled. Standalone
 GRUB4DOS creation preserves the selected bootloader, and platform filesystem
 definitions take precedence over guarded fallbacks.
 
-The release reuses the existing media, desktop and regression evidence, with
-focused checks for the fixes and rebuilt packages. Original Rufus translations
+Preview49 fixes 3571 compiler warning lines recorded in the GCC 16.2.1 baseline.
+Release and Debug sanitizer builds produce zero compiler warnings without adding
+diagnostic suppressions. C/C++ ABI probes verify the patched public reader
+headers, and native builds remove wimlib's old pointer-sign suppression.
+
+The release reuses 266 passing local no-hardware suites, 34 affected sanitizer
+suites with leak detection, and existing media/desktop evidence. Dependency and
+fixture failures were resolved in focused groups; the unchanged passing cases
+were retained. No additional physical-media or installed-Windows matrix was run.
+The [warning qualification](docs/linux-compiler-warnings.md) records the exact
+source and CI status. Package/archive checks are recorded separately in the
+release delivery receipt. Original Rufus translations
 are reused across 38 languages; Linux-specific text may remain English. Native
 Debian/Fedora packages and a manual Arch AUR source recipe accompany Arch/CachyOS
 and generic install trees. See the [release evidence](docs/linux-release-evidence.md)
 and [package instructions](linux/packaging/README.md).
+
+An old-family Syslinux image request without matching selected resources now
+fails before writes, preserving the requested bootloader family. Qualification
+also repaired test-only NTFS inode ownership and private-process startup timing.
+The published Preview48 tag and assets remain unchanged.
 
 Existing UDF1.02–2.01 remains supported. UDF2.50/2.60, ReFS formatting and Dev
 Drive detection are user-deferred. The actual Windows UDF indexing attribute is

@@ -12,10 +12,13 @@ The [build instructions](#build-and-test) and [desktop packaging guide](packagin
 describe how to run a matching GUI/helper pair. The component notes below retain
 historical checkpoints; their early test counts are not the current suite total.
 
-Current development builds require Qt 6.4 or newer and treat compiler warnings
+Preview49 builds require Qt 6.4 or newer and treat compiler warnings
 as errors by default. CI targets Ubuntu 24.04. Native code uses nondeprecated
 Qt APIs; bundled dependency fixes are applied as tracked patches to private
 build copies. Original upstream inputs and boot payloads remain unchanged.
+The [warning qualification](../docs/linux-compiler-warnings.md) records zero
+compiler warnings, 266 passing local suites and 34 affected sanitizer suites.
+The release reuses earlier media/desktop evidence with its existing limits.
 
 CP78 / Preview47 prepares the useful x86-64 release, with original Rufus
 translations and disclosed Linux-specific English fallback, Debian/Fedora native

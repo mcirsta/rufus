@@ -1,6 +1,6 @@
 # Linux desktop package
 
-The current packaged preview is `4.15.2404-linux-preview.48`. The version is read
+The current packaged preview is `4.15.2404-linux-preview.49`. The version is read
 from the upstream Windows resource and combined with the Linux preview revision.
 `rufus-linux --version` and `rufus-linux --help` work without a display server.
 Portable INI storage, startup options and automatic/persistent logs are described
@@ -12,6 +12,13 @@ credits. Current supported routes are listed in the installed
 E2fsprogs is a required runtime dependency for libext2fs and persistence formatting.
 UDF data formatting requires optional udftools `mkudffs`; see the
 [formatting guide](../../docs/linux-filesystem-formatting.md) for revision limits.
+
+Preview49 carries the qualified native compiler-warning fixes. It requires Qt
+6.4 or newer, uses nondeprecated Qt APIs and enables warnings as errors by
+default. CI targets Ubuntu 24.04. Dependency fixes are tracked patches applied
+to private build copies; original upstream sources and boot payloads are
+unchanged. The [warning qualification](../../docs/linux-compiler-warnings.md)
+records the reused 266 local suites, 34 sanitizer suites and their source refs.
 
 The menu entry is **Rufus (Linux preview)**. It starts `rufus-linux` as the
 desktop user. Device creation requests authorization through the session's
@@ -141,8 +148,8 @@ guides. Declared service dependencies cover UDisks2 and polkit; filesystem tools
 remain optional per the runtime table below. Debian names its polkit components
 `polkitd` and `pkexec`. Qt platform plugins are required for a desktop launch.
 The package version sorts preview builds below the corresponding stable release:
-Debian uses `4.15.2404~preview48-1`; RPM uses
-`4.15.2404-0.preview48.1`. The application's displayed version is identical on
+Debian uses `4.15.2404~preview49-1`; RPM uses
+`4.15.2404-0.preview49.1`. The application's displayed version is identical on
 all distributions.
 
 GitHub release filenames replace the Debian version's tilde with a period; the
@@ -152,10 +159,10 @@ Install with the distribution's package manager so it resolves dependencies:
 
 ```sh
 # Debian 13:
-sudo apt install ./rufus-linux-preview_4.15.2404.preview48-1_amd64.deb
+sudo apt install ./rufus-linux-preview_4.15.2404.preview49-1_amd64.deb
 
 # Fedora 44:
-sudo dnf install ./rufus-linux-preview-4.15.2404-0.preview48.1.x86_64.rpm
+sudo dnf install ./rufus-linux-preview-4.15.2404-0.preview49.1.x86_64.rpm
 ```
 
 These commands are for the user's installed system. Building and staging the
@@ -184,7 +191,7 @@ drivers. Refer to the release evidence for the actual qualified environments.
 ## AUR source-build recipe
 
 A separate source-build AUR recipe and generator are in
-[the AUR packaging guide](https://github.com/mcirsta/rufus/tree/linux-preview.48/linux/packaging/aur). The recipe uses pinned upstream wimlib/Syslinux
+[the AUR packaging guide](https://github.com/mcirsta/rufus/tree/linux-preview.49/linux/packaging/aur). The recipe uses pinned upstream wimlib/Syslinux
 sources, includes the matching GUI/helper/polkit pair, and generates
 `PKGBUILD`/`.SRCINFO` from the actual release archive checksum. It is separate
 from the local-build `PKGBUILD` above. AUR submission is prepared separately from

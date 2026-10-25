@@ -1,4 +1,39 @@
-# Linux release evidence reconciliation (CP79)
+# Linux release evidence reconciliation
+
+## Preview49 warning-cleanup maintenance release
+
+Preview49 packages the compiler-warning fixes qualified at source
+`dec391ec0118a004d7d2e823494bcfe6cc55862d`, with the evidence recorded in commit
+`07b3d6c0`. The [warning qualification](linux-compiler-warnings.md) and its
+[machine-readable receipt](linux-compiler-warning-evidence.json) retain the
+exact tested source and file hashes. The release-revision and documentation
+changes do not replace those source identities.
+
+The GCC 16.2.1 baseline had 3571 warning lines at 482 unique source/message
+locations. Final native Release and Debug sanitizer builds have zero compiler
+warnings; warnings are errors by default. Qt 6.4 is now required, native Qt
+calls are nondeprecated and CI targets Ubuntu 24.04. Tracked dependency patches
+are applied to private build copies, preserving original sources and boot
+payloads. C/C++ ABI probes cover the public header layout changes.
+
+Qualification reuses 266 passing local no-hardware suites, including the full
+Qt gate, and 34 affected AddressSanitizer/UndefinedBehaviorSanitizer suites with
+leak checks enabled. Passing unchanged cases were retained and dependency or
+fixture failures were resolved in focused groups. Standalone generated-ISO
+reader and staged desktop/CLI checks pass. The warning receipt records the
+latest CI build as passed with its test run pending at export; final CI status
+and rebuilt package/archive checks belong to the release delivery receipt.
+
+An old-family Syslinux image request without selected matching resources now
+fails before writes. Existing media and bounded desktop qualification carries
+forward with its original limits. No new physical-media, firmware or
+installed-Windows matrix is claimed. The user-deferred UDF 2.50/2.60, ReFS and
+Dev Drive work, Linux-specific English fallback and unavailable hardware/host
+qualifications remain unchanged. Published Preview48 remains immutable.
+
+The source manifest freezes this prepublication record. The attached delivery
+receipt records the actual Preview49 commit/tag, public source archive and
+asset hashes, final CI status, manual AUR source verification and update handoff.
 
 ## Preview48 source follow-up
 

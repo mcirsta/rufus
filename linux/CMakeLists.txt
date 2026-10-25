@@ -12,7 +12,7 @@ string(REGEX REPLACE ".*FILEVERSION ([0-9]+),([0-9]+),([0-9]+),.*" "\\1.\\2.\\3"
 if(NOT RUFUS_UPSTREAM_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
     message(FATAL_ERROR "Cannot read the upstream Rufus version")
 endif()
-set(RUFUS_PREVIEW_REVISION 48)
+set(RUFUS_PREVIEW_REVISION 49)
 set(RUFUS_LINUX_VERSION "${RUFUS_UPSTREAM_VERSION}-linux-preview.${RUFUS_PREVIEW_REVISION}")
 configure_file(qt/build_info.h.in generated/rufus_build_info.h @ONLY)
 
