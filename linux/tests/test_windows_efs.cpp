@@ -263,7 +263,7 @@ private slots:
         QVERIFY(formatter.waitForFinished(30000));
         QCOMPARE(formatter.exitCode(), 0);
         const QByteArray before = bad ? hash(target) : QByteArray();
-        IMAGE_FILE_SOURCE source = {.fd = -1};
+        IMAGE_FILE_SOURCE source = {-1, {}, false, false, nullptr, 0};
         QCOMPARE(OpenImageFileSource(image.constData(), &source), 0);
         WIMStruct* wim = nullptr;
         QCOMPARE(OpenWimFileDescriptor(source.fd, &wim), 0);

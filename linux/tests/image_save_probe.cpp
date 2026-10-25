@@ -80,7 +80,7 @@ int main(int argc, char** argv)
         FFU_CAPTURE_GEOMETRY geometry = {};
         const int error = PlanFfuCapture(QString::fromLocal8Bit(argv[2]).toULongLong(),
             QString::fromLocal8Bit(argv[3]).toULongLong(),
-            argc == 5 ? QString::fromLocal8Bit(argv[4]).toULongLong() : FFU_MAX_MANIFEST_BYTES, &geometry);
+            argc == 5 ? QString::fromLocal8Bit(argv[4]).toULongLong() : quint64(FFU_MAX_MANIFEST_BYTES), &geometry);
         QTextStream(stdout) << QJsonDocument(QJsonObject{{"error", error}, {"block", qint64(geometry.block_bytes)},
             {"blocks", qint64(geometry.blocks)}, {"image", qint64(geometry.image_bytes)},
             {"metadata", qint64(geometry.metadata_bytes)}, {"hashes", qint64(geometry.hash_bytes)},

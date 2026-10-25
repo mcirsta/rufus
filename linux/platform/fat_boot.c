@@ -148,7 +148,7 @@ static int PrepareRecords(int fd, const FAT_FORMAT_OPTIONS* options, bool fat16,
 	}
 	const int copies = fat16 ? 1 : MAX_COPIES;
 	for (int copy = 0; copy < copies; copy++) {
-		unsigned char hints[FSINFO_HINT_BYTES];
+		unsigned char hints[FSINFO_HINT_BYTES] = { 0 };
 		if (winpe_bootmgr)
 			memcpy(hints, records[copy] + FSINFO_HINT_OFFSET, sizeof(hints));
 		if (has_tail) {

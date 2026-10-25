@@ -183,7 +183,7 @@ static int DescriptorCount(void)
 int main(int argc, char** argv)
 {
 	int error, before = DescriptorCount(), flags = O_RDWR;
-	GPT_IMAGE_OPTIONS options = { 0, 512, 63, 4096, 0, 0 };
+	GPT_IMAGE_OPTIONS options = { 0, 512, 63, 4096, 0, 0 , 0, false, false, 0};
 	GPT_IMAGE_RESULT layout;
 	MBR_IMAGE_OPTIONS mbr = {0};
 	const bool exfat_payload = argc == 9 && strcmp(argv[4], "uefi-exfat-mbr") == 0;
@@ -199,7 +199,7 @@ int main(int argc, char** argv)
 		options.uefi_ntfs_size = strtoull(argv[8], NULL, 10);
 		if (mbr_payload) {
 			mbr = (MBR_IMAGE_OPTIONS){options.disk_size, options.sector_size, options.sectors_per_track,
-				options.cluster_size, 0, 0, exfat_payload ? FS_EXFAT : FS_NTFS, MBR_BOOT_ZERO, options.uefi_ntfs_size};
+				options.cluster_size, 0, 0, exfat_payload ? FS_EXFAT : FS_NTFS, MBR_BOOT_ZERO, options.uefi_ntfs_size, 0, false, false, false, 0};
 			MBR_IMAGE_RESULT planned;
 			if (PlanMbrImageLayout(&mbr, &planned) == 0)
 				target_offset = planned.uefi_ntfs_offset;

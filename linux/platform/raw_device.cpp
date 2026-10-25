@@ -86,7 +86,7 @@ int WriteRawDevice(const PrepareImageRequest& request, uid_t caller, RAW_WRITE_R
     {
         // Inspect only the retained descriptor after ownership/readability checks.
         // The duplicate is read-only and closed before target acquisition.
-        IMAGE_FILE_SOURCE inspected = {-1, {}, false, false};
+        IMAGE_FILE_SOURCE inspected = {-1, {}, false, false, nullptr, 0};
         error = OpenImageFileSource(source.retainedPath(), &inspected);
         if (error == 0)
         {

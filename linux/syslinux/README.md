@@ -186,3 +186,18 @@ selected in the unprivileged application and retained for a single helper job.
 See the [ISO/EFI resource guide](../../docs/linux-iso-efi-resources.md) for source,
 signature, size, alignment and qualification contracts. Distribute these adapters,
 CMake transformations and the corresponding upstream release source together.
+## Compiler warning patches
+
+Native builds apply `compiler-warnings-v4.patch`,
+`compiler-warnings-v6.patch` and `bundled-compiler-warnings.patch` to private
+source copies with zero patch fuzz. Original Windows sources and the pinned
+upstream installer/boot payloads remain unchanged.
+
+Potentially unaligned little-endian accessors accept byte-addressable `void`
+pointers and use byte offsets or `memcpy` for the accesses. Intermediate
+integer-pointer casts are removed too, preserving unaligned access semantics
+through the wrapper functions. This avoids promising integer alignment for
+packed disk fields.
+The bundled libfat cache checks a negative read result before comparing the
+byte count, and its directory byte offset uses the sector-size type. No loader
+format or boot-payload bytes change.

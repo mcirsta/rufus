@@ -53,7 +53,8 @@ int readFile(const QString& path, qsizetype limit, QByteArray& bytes)
         || before.st_ctim.tv_nsec != after.st_ctim.tv_nsec;
     if (error == 0 && changed) error = ESTALE;
     if (close(descriptor) != 0 && error == 0) error = errno;
-    if (error != 0) bytes.clear(); return error;
+    if (error != 0) bytes.clear();
+    return error;
 }
 int writeFile(const QString& path, const QByteArray& bytes)
 {

@@ -541,7 +541,7 @@ private slots:
                 const quint64 trackBytes = 63 * 512;
                 const quint64 reservedTail = syslinux ? 0 : 33 * 512;
                 const quint64 size = (disk - MiB - reservedTail) / trackBytes * trackBytes / cluster * cluster;
-                const FAT16_FORMAT_OPTIONS format = {MiB, size, cluster, 0, {0}};
+                const FAT16_FORMAT_OPTIONS format = {MiB, size, cluster, 0, {0}, false, 0, 0};
                 QCOMPARE(CheckFat16FormatOptions(&format), 0);
             }
         }
@@ -612,7 +612,7 @@ private slots:
                     error = rufus::CheckExfatFormatOptions({size, cluster, {}, MiB});
                 else
                 {
-                    const FAT_FORMAT_OPTIONS options = {MiB, size, cluster, 0, {0}};
+                    const FAT_FORMAT_OPTIONS options = {MiB, size, cluster, 0, {0}, false, 0, 0};
                     error = fs == FS_FAT16 ? CheckFat16FormatOptions(&options) : CheckFat32FormatOptions(&options);
                 }
                 QCOMPARE(error, 0);
@@ -638,7 +638,7 @@ private slots:
             {
                 const quint32 cluster = candidates & (0u - candidates);
                 candidates &= ~cluster;
-                const FAT_FORMAT_OPTIONS format = {0, disk, cluster, 0, {0}};
+                const FAT_FORMAT_OPTIONS format = {0, disk, cluster, 0, {0}, false, 0, 0};
                 QCOMPARE(CheckFat32FormatOptions(&format), 0);
             }
         }
@@ -663,7 +663,7 @@ private slots:
             {
                 const quint32 cluster = candidates & (0u - candidates);
                 candidates &= ~cluster;
-                const FAT_FORMAT_OPTIONS format = {0, disk, cluster, 0, {0}};
+                const FAT_FORMAT_OPTIONS format = {0, disk, cluster, 0, {0}, false, 0, 0};
                 QCOMPARE(CheckFat16FormatOptions(&format), 0);
             }
         }
@@ -767,7 +767,7 @@ private slots:
                 // actual MBR extent, with no GPT tail reservation.
                 const quint64 trackBytes = 63 * 512;
                 const quint64 size = (disk - MiB) / trackBytes * trackBytes / cluster * cluster;
-                const FAT32_FORMAT_OPTIONS format = {MiB, size, cluster, 0, {0}};
+                const FAT32_FORMAT_OPTIONS format = {MiB, size, cluster, 0, {0}, false, 0, 0};
                 QCOMPARE(CheckFat32FormatOptions(&format), 0);
             }
         }

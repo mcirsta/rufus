@@ -104,9 +104,9 @@ void runLegacyIsoCases(const rufus::PrepareImageRequest& base)
             const int partition = open("/dev/sda1",O_RDONLY|O_CLOEXEC); QByteArray record(0x54+body.size(),'\0');
             require(partition >= 0 && pread(partition,record.data(),size_t(record.size()),0) == record.size()
                 && close(partition) == 0 && record.left(head.size()) == head && record.mid(0x54) == body,"B4 original NTFS PBR after finalization");
-            const quint32 bootStart = qFromLittleEndian<quint32>(reinterpret_cast<const uchar*>(mbr.constData()+470));
-            const quint32 mainStart = qFromLittleEndian<quint32>(reinterpret_cast<const uchar*>(mbr.constData()+454));
-            const quint32 mainSectors = qFromLittleEndian<quint32>(reinterpret_cast<const uchar*>(mbr.constData()+458));
+            const quint32 bootStart = qFromLittleEndian<quint32>(reinterpret_cast<const uchar*>(mbr.constBegin()+470));
+            const quint32 mainStart = qFromLittleEndian<quint32>(reinterpret_cast<const uchar*>(mbr.constBegin()+454));
+            const quint32 mainSectors = qFromLittleEndian<quint32>(reinterpret_cast<const uchar*>(mbr.constBegin()+458));
             const QByteArray payload = readFile("/uefi-ntfs.img");
             constexpr quint64 trackBytes = 63*512;
             const quint64 bootBytes = (quint64(payload.size())+trackBytes-1)/trackBytes*trackBytes;

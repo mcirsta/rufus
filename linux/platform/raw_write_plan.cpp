@@ -38,7 +38,7 @@ QString CheckRawImageSource(const IMAGE_FILE_SOURCE& source, const QString& path
 
 QString CheckRawImageFile(const QString& path, bool ignoreBootMarker)
 {
-    IMAGE_FILE_SOURCE source = {-1, {}, false, false};
+    IMAGE_FILE_SOURCE source = {-1, {}, false, false, nullptr, 0};
     const QByteArray name = QFile::encodeName(path);
     int error = OpenImageFileSource(name.constData(), &source);
     if (error != 0)

@@ -108,8 +108,8 @@ int ParseDownloadManifest(const QByteArray& bytes,QUrl& provider)
 int DecodeDownloadProvider(const QByteArray& compressed,QByteArray& script)
 {
     script.clear(); if (compressed.size()<13 || compressed.size()>maximumScriptBytes) return EBADMSG;
-    const quint32 dictionary=qFromLittleEndian<quint32>(compressed.constData()+1);
-    const quint64 declared=qFromLittleEndian<quint64>(compressed.constData()+5);
+    const quint32 dictionary=qFromLittleEndian<quint32>(compressed.constBegin()+1);
+    const quint64 declared=qFromLittleEndian<quint64>(compressed.constBegin()+5);
     if (dictionary>64*1024*1024 || declared==0 || declared>quint64(maximumScriptBytes)) return EFBIG;
     QTemporaryFile file; if (!file.open() || file.write(compressed)!=compressed.size() || !file.flush()) return EIO;
     IMAGE_FILE_SOURCE source={}; source.fd=file.handle();

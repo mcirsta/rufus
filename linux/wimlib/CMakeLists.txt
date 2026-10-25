@@ -77,7 +77,7 @@ foreach(index RANGE ${last_input})
     configure_file("${input}" "${stage}/${output}" COPYONLY)
 endforeach()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    native-input.patch native-ntfs.patch upstream-inputs.json)
+    native-input.patch native-ntfs.patch compiler-warnings.patch upstream-inputs.json)
 execute_process(COMMAND "${PATCH_PROGRAM}" --batch --fuzz=0 -p1 -i "${CMAKE_CURRENT_SOURCE_DIR}/native-input.patch"
     WORKING_DIRECTORY "${stage}" RESULT_VARIABLE patch_result OUTPUT_VARIABLE patch_output ERROR_VARIABLE patch_error)
 if(NOT patch_result EQUAL 0)
@@ -95,6 +95,11 @@ foreach(name ntfs-3g_apply.c ntfs-3g_capture.c)
     string(REPLACE "#include <ntfs-3g/" "#include <" ntfs_source "${ntfs_source}")
     file(WRITE "${stage}/${name}" "${ntfs_source}")
 endforeach()
+execute_process(COMMAND "${PATCH_PROGRAM}" --batch --fuzz=0 -p1 -i "${CMAKE_CURRENT_SOURCE_DIR}/compiler-warnings.patch"
+    WORKING_DIRECTORY "${stage}" RESULT_VARIABLE patch_result OUTPUT_VARIABLE patch_output ERROR_VARIABLE patch_error)
+if(NOT patch_result EQUAL 0)
+    message(FATAL_ERROR "Native wimlib warning patch failed: ${patch_output}${patch_error}")
+endif()
 configure_file(config.h.in "${stage}/config.h")
 include(sources.cmake)
 list(TRANSFORM wim_sources PREPEND "${stage}/")
@@ -102,6 +107,6 @@ add_library(rufus_wimlib STATIC ${wim_sources} native_input.c native_ntfs_ea.c n
 target_compile_features(rufus_wimlib PRIVATE c_std_11)
 target_compile_definitions(rufus_wimlib PRIVATE
     HAVE_CONFIG_H=1 BUILDING_WIMLIB=1 _GNU_SOURCE _LARGEFILE_SOURCE _FILE_OFFSET_BITS=64)
-target_compile_options(rufus_wimlib PRIVATE -Wall -Wextra -Wno-pointer-sign)
+target_compile_options(rufus_wimlib PRIVATE -Wall -Wextra)
 target_include_directories(rufus_wimlib PUBLIC "${stage}" "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(rufus_wimlib PUBLIC rufus_iso_scan PRIVATE Threads::Threads rufus_native_ntfs)

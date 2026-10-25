@@ -260,7 +260,7 @@ private slots:
         if (mode == QStringLiteral("early-step")) frames.insert(0, frames[4 + shift]);
         if (mode == QStringLiteral("late-step")) frames.move(5 + shift, 6 + shift);
         if (mode == QStringLiteral("wrong-operation")) frames[4 + shift].insert("operation", OP_PATCH);
-        if (mode == QStringLiteral("fractional-operation")) frames[4 + shift].insert("operation", OP_FILE_COPY + .5);
+        if (mode == QStringLiteral("fractional-operation")) frames[4 + shift].insert("operation", double(OP_FILE_COPY) + .5);
         if (mode == QStringLiteral("step-fields")) frames[4 + shift].insert("unexpected", true);
         if (mode == QStringLiteral("counts")) frames[4 + shift] = rufus::EncodePrepareProgress(OP_FILE_COPY, 1, 2);
         if (mode == QStringLiteral("mount"))

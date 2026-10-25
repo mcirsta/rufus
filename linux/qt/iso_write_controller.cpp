@@ -706,8 +706,10 @@ void IsoWriteController::grubDownloadProgress(quint64 received, quint64 total)
 void IsoWriteController::chooseGrubDownload(Grub2DownloadChoice choice)
 {
     if (state_ == IsoWriteState::SelectingGrubCore)
+    {
         if (syslinuxResources_.isActive()) syslinuxResources_.choose(choice);
         else grubCore_.choose(choice);
+    }
 }
 
 void IsoWriteController::chooseMode(IMAGE_WRITE_MODE mode)

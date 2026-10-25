@@ -215,7 +215,7 @@ int main(int argc, char** argv)
     rufus::NativeSyslinuxRequest request;
     request.target = targetFd;
     request.fileSystem = fatBits == 16 ? FS_FAT16 : FS_FAT32;
-    request.format = {volumeOffset, strtoull(argv[8], nullptr, 10), uint32_t(strtoul(argv[9], nullptr, 10)), 0x1234abcd, "RUFUS_TEST"};
+    request.format = {volumeOffset, strtoull(argv[8], nullptr, 10), uint32_t(strtoul(argv[9], nullptr, 10)), 0x1234abcd, "RUFUS_TEST", 0, 0, 0};
     if (strcmp(fault, "no-label") == 0)
         strcpy(request.format.label, "NO NAME");
     request.bootType = standalone ? BT_SYSLINUX_V6 : BT_IMAGE;

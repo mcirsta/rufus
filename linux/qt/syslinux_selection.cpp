@@ -17,7 +17,7 @@ SyslinuxSelection::SyslinuxSelection(QObject* parent) : QObject(parent),download
 }
 int SyslinuxSelection::readCache(const QString& path,QByteArray& bytes) {
     const QByteArray native = QFile::encodeName(QDir(directory_).filePath(path));
-    IMAGE_FILE_SOURCE file = {-1,{},false,false,nullptr};
+    IMAGE_FILE_SOURCE file = {-1,{},false,false,nullptr, 0};
     file.fd = open(native.constData(),O_RDONLY|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC);
     if (file.fd < 0) return errno;
     int error = fstat(file.fd,&file.info) == 0 ? 0 : errno;

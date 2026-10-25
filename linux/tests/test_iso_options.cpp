@@ -112,7 +112,7 @@ private slots:
         QCOMPARE(iso9660_ifs_get_joliet_level(view.source.iso) != 0, useJoliet);
         const QString output = directory_.filePath(QStringLiteral("out-%1-%2-%3").arg(longNames).arg(joliet).arg(rock));
         QVERIFY(QDir().mkdir(output)); ISO_EXTRACT_RESULT copied;
-        const ISO_EXTRACT_OPTIONS extract = {options, nullptr, nullptr, false, 0, nullptr, false};
+        const ISO_EXTRACT_OPTIONS extract = {options, nullptr, nullptr, false, 0, nullptr, false, false, false, nullptr, nullptr};
         QCOMPARE(ExtractIsoTree(path.constData(), QFile::encodeName(output).constData(), &extract, &copied), 0);
         QCOMPARE(copied.files, 2ULL);
         const QStringList names = QDir(output).entryList(QDir::Files);
@@ -131,7 +131,7 @@ private slots:
         QFETCH(bool, preserve); QFETCH(bool, udf);
         const QString output = directory_.filePath(QStringLiteral("time-%1-%2").arg(udf).arg(preserve));
         QVERIFY(QDir().mkdir(output)); ISO_EXTRACT_RESULT copied;
-        const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, nullptr, nullptr, false, 0, nullptr, preserve};
+        const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, nullptr, nullptr, false, 0, nullptr, preserve, false, false, nullptr, nullptr};
         QCOMPARE(ExtractIsoTree(QFile::encodeName(udf ? udfIso_ : shortIso_).constData(), QFile::encodeName(output).constData(), &options, &copied), 0);
         for (const QString& name : {QStringLiteral("Mixed-Case.txt"), QStringLiteral("sub/child.txt"), QStringLiteral("empty"), QStringLiteral("sub")}) {
             struct stat info; QCOMPARE(stat(QFile::encodeName(output + QLatin1Char('/') + name).constData(), &info), 0);

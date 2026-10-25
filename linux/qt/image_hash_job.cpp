@@ -13,7 +13,7 @@ namespace
 {
 struct ImageSourceScope
 {
-    IMAGE_FILE_SOURCE file = {-1, {}, false, false};
+    IMAGE_FILE_SOURCE file = {-1, {}, false, false, nullptr, 0};
     ~ImageSourceScope() { CloseImageFileSource(&file); }
 };
 

@@ -2,6 +2,7 @@
 // Guest-only wrappers; the production helper has no payload fault controls.
 #include "platform/uefi_ntfs.h"
 #include "platform/rufus_reporting.h"
+#include <QByteArrayView>
 #include <QCryptographicHash>
 #include <QFile>
 #include <cerrno>
@@ -35,7 +36,7 @@ QByteArray outsideDigest(int fd, uint64_t offset, uint64_t payloadBytes)
                 continue;
             if (read <= 0)
                 qFatal("Cannot hash bytes outside the boot payload");
-            hash.addData(buffer.constData(), int(read));
+            hash.addData(QByteArrayView(buffer.constData(), qsizetype(read)));
             position += uint64_t(read);
         }
     }

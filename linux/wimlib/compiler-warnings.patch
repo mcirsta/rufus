@@ -1,0 +1,1171 @@
+--- a/blob_table.c
++++ b/blob_table.c
+@@ -87,6 +87,7 @@
+ static int
+ do_free_blob_descriptor(struct blob_descriptor *blob, void *_ignore)
+ {
++	(void)_ignore;
+ 	free_blob_descriptor(blob);
+ 	return 0;
+ }
+@@ -1393,7 +1394,7 @@
+ 	};
+ 	if (wim_has_metadata(wim)) {
+ 		int ret;
+-		for (int i = 0; i < wim->hdr.image_count; i++) {
++		for (u32 i = 0; i < wim->hdr.image_count; i++) {
+ 			struct blob_descriptor *blob;
+ 			struct wim_image_metadata *imd = wim->image_metadata[i];
+ 
+--- a/compress.c
++++ b/compress.c
+@@ -54,7 +54,7 @@
+ compressor_ctype_valid(int ctype)
+ {
+ 	return (ctype >= 0 &&
+-		ctype < ARRAY_LEN(compressor_ops) &&
++		(size_t)ctype < ARRAY_LEN(compressor_ops) &&
+ 		compressor_ops[ctype] != NULL);
+ }
+ 
+@@ -62,7 +62,7 @@
+ wimlib_set_default_compression_level(int ctype, unsigned int compression_level)
+ {
+ 	if (ctype == -1) {
+-		for (int i = 0; i < ARRAY_LEN(default_compression_levels); i++)
++		for (size_t i = 0; i < ARRAY_LEN(default_compression_levels); i++)
+ 			default_compression_levels[i] = compression_level;
+ 	} else {
+ 		if (!compressor_ctype_valid(ctype))
+--- a/compress_parallel.c
++++ b/compress_parallel.c
+@@ -382,8 +382,8 @@
+ 		 * are lots of threads and/or the chunks are very small.  */
+ 		chunks_per_msg = 2;
+ 		chunks_per_msg += num_threads * (65536 / out_chunk_size) / 16;
+-		chunks_per_msg = max(chunks_per_msg, 2);
+-		chunks_per_msg = min(chunks_per_msg, MAX_CHUNKS_PER_MSG);
++		chunks_per_msg = max(chunks_per_msg, 2u);
++		chunks_per_msg = min(chunks_per_msg, (size_t)MAX_CHUNKS_PER_MSG);
+ 		msgs_per_thread = 2;
+ 	} else {
+ 		/* Big chunks: Just have one buffer per thread --- more would
+--- a/decompress.c
++++ b/decompress.c
+@@ -46,7 +46,7 @@
+ decompressor_ctype_valid(int ctype)
+ {
+ 	return (ctype >= 0 &&
+-		ctype < ARRAY_LEN(decompressor_ops) &&
++		(size_t)ctype < ARRAY_LEN(decompressor_ops) &&
+ 		decompressor_ops[ctype] != NULL);
+ }
+ 
+--- a/decompress_common.c
++++ b/decompress_common.c
+@@ -162,7 +162,7 @@
+ 		 * incomplete code.  This is permitted only if the code is empty
+ 		 * (contains no symbols). */
+ 
+-		if (unlikely(remainder != 1U << max_codeword_len))
++		if (unlikely((u32)remainder != 1U << max_codeword_len))
+ 			return -1;
+ 
+ 		/* The code is empty.  When processing a well-formed stream, the
+--- a/delete_image.c
++++ b/delete_image.c
+@@ -68,9 +68,9 @@
+ 	xml_delete_image(wim->xml_info, image);
+ 
+ 	/* Fix the boot index. */
+-	if (wim->hdr.boot_idx == image)
++	if (wim->hdr.boot_idx == (u32)image)
+ 		wim->hdr.boot_idx = 0;
+-	else if (wim->hdr.boot_idx > image)
++	else if (wim->hdr.boot_idx > (u32)image)
+ 		wim->hdr.boot_idx--;
+ 
+ 	return 0;
+--- a/dentry.c
++++ b/dentry.c
+@@ -965,6 +965,7 @@
+ static int
+ do_free_dentry(struct wim_dentry *dentry, void *_ignore)
+ {
++	(void)_ignore;
+ 	free_dentry(dentry);
+ 	return 0;
+ }
+@@ -1253,7 +1254,7 @@
+ 
+ 		/* Do we have at least the size of the fixed-length data we know
+ 		 * need?  */
+-		if ((end - p) < sizeof(struct wim_extra_stream_entry_on_disk))
++		if ((size_t)(end - p) < sizeof(struct wim_extra_stream_entry_on_disk))
+ 			return WIMLIB_ERR_INVALID_METADATA_RESOURCE;
+ 
+ 		disk_strm = (const struct wim_extra_stream_entry_on_disk *)p;
+@@ -1265,7 +1266,7 @@
+ 		 * include all the fixed-length data nor so large it overflows
+ 		 * the metadata resource buffer. */
+ 		if (length < sizeof(struct wim_extra_stream_entry_on_disk) ||
+-		    length > (end - p))
++		    length > (u64)(end - p))
+ 			return WIMLIB_ERR_INVALID_METADATA_RESOURCE;
+ 
+ 		/* Read the rest of the fixed-length data. */
+--- a/divsufsort.c
++++ b/divsufsort.c
+@@ -1578,8 +1578,13 @@
+ void
+ divsufsort(const u8 *T, u32 *SA, u32 n, u32 *tmp)
+ {
+-  u32 *bucket_A = tmp;
+-  u32 *bucket_B = tmp + BUCKET_A_SIZE;
++  /* The sorter uses negative marker values in this shared 32-bit workspace.
++   * Corresponding signed/unsigned integer types may alias the same storage. */
++  STATIC_ASSERT(sizeof(int) == sizeof(u32));
++  STATIC_ASSERT(_Generic((u32)0, unsigned int: 1, default: 0));
++  int *signed_SA = (int *)SA;
++  int *bucket_A = (int *)tmp;
++  int *bucket_B = (int *)(tmp + BUCKET_A_SIZE);
+   u32 m;
+ 
+   switch (n) {
+@@ -1597,8 +1602,8 @@
+       break;
+ 
+     default:
+-      m = sort_typeBstar(T, SA, bucket_A, bucket_B, n);
+-      construct_SA(T, SA, bucket_A, bucket_B, n, m);
++      m = sort_typeBstar(T, signed_SA, bucket_A, bucket_B, n);
++      construct_SA(T, signed_SA, bucket_A, bucket_B, n, m);
+       break;
+   }
+ }
+--- a/encoding.c
++++ b/encoding.c
+@@ -185,7 +185,7 @@
+ 
+ invalid:
+ 	*c_ret = INVALID_CODEPOINT;
+-	return min(remaining, 2);
++	return min(remaining, (size_t)2);
+ }
+ 
+ static forceinline unsigned
+--- a/export_image.c
++++ b/export_image.c
+@@ -33,6 +33,7 @@
+ static int
+ blob_set_not_exported(struct blob_descriptor *blob, void *_ignore)
+ {
++	(void)_ignore;
+ 	blob->out_refcnt = 0;
+ 	blob->was_exported = 0;
+ 	return 0;
+@@ -163,7 +164,7 @@
+ 	{
+ 		const struct wim_image_metadata *src_imd =
+ 				src_wim->image_metadata[src_image - 1];
+-		for (int i = 0; i < dest_wim->hdr.image_count; i++)
++		for (u32 i = 0; i < dest_wim->hdr.image_count; i++)
+ 			if (dest_wim->image_metadata[i] == src_imd)
+ 				return WIMLIB_ERR_DUPLICATE_EXPORTED_IMAGE;
+ 	}
+@@ -272,7 +273,7 @@
+ 				(src_image - start_src_image);
+ 
+ 		if ((export_flags & WIMLIB_EXPORT_FLAG_BOOT) &&
+-		    (!all_images || src_image == src_wim->hdr.boot_idx))
++		    (!all_images || (u32)src_image == src_wim->hdr.boot_idx))
+ 			dest_wim->hdr.boot_idx = dst_image;
+ 	}
+ 
+@@ -284,7 +285,7 @@
+ 	{
+ 		xml_delete_image(dest_wim->xml_info, image);
+ 	}
+-	while (dest_wim->hdr.image_count > orig_dest_image_count)
++	while (dest_wim->hdr.image_count > (u32)orig_dest_image_count)
+ 	{
+ 		put_image_metadata(dest_wim->image_metadata[
+ 					--dest_wim->hdr.image_count]);
+--- a/extract.c
++++ b/extract.c
+@@ -153,7 +153,7 @@
+ 		if (*p)
+ 			return false;
+ 
+-	for (; end - p >= WORDBYTES; p += WORDBYTES)
++	for (; (size_t)(end - p) >= WORDBYTES; p += WORDBYTES)
+ 		if (*(const machine_word_t *)p)
+ 			return false;
+ 
+@@ -722,6 +722,7 @@
+ static int
+ dentry_delete_from_list(struct wim_dentry *dentry, void *_ignore)
+ {
++	(void)_ignore;
+ 	if (will_extract_dentry(dentry)) {
+ 		list_del(&dentry->d_extraction_list_node);
+ 		dentry_reset_extraction_list_node(dentry);
+@@ -985,9 +986,10 @@
+ 
+ 		if (prev->next == cur)
+ 			prev = cur;
+-		else
+-			; /* Current dentry and its children (which follow in
+-			     the list) were deleted.  prev stays the same.  */
++		else {
++			/* Current dentry and its children (which follow in
++			 * the list) were deleted.  prev stays the same. */
++		}
+ 	}
+ 	return 0;
+ }
+@@ -1910,7 +1912,7 @@
+ 		return ret;
+ 	tmemcpy(buf, target, output_path_len);
+ 	buf[output_path_len] = OS_PREFERRED_PATH_SEPARATOR;
+-	for (image = 1; image <= wim->hdr.image_count; image++) {
++	for (image = 1; (u32)image <= wim->hdr.image_count; image++) {
+ 		image_name = wimlib_get_image_name(wim, image);
+ 		if (image_name_ok_as_dir(image_name)) {
+ 			tstrcpy(buf + output_path_len + 1, image_name);
+@@ -2026,6 +2028,7 @@
+ 	}
+ 
+ 	in_fd = &pwm->in_fd;
++	(void)in_fd;
+ 	wimlib_assert(in_fd->offset == WIM_HEADER_DISK_SIZE);
+ 
+ 	/* As mentioned, the WIMStruct we created from the pipe does not have
+@@ -2051,7 +2054,7 @@
+ 		if (ret)
+ 			goto out_wimlib_free;
+ 
+-		if (xml_get_image_count(pwm->xml_info) != pwm->hdr.image_count) {
++		if ((u32)xml_get_image_count(pwm->xml_info) != pwm->hdr.image_count) {
+ 			ERROR("Image count in XML data is not the same as in WIM header.");
+ 			ret = WIMLIB_ERR_IMAGE_COUNT;
+ 			goto out_wimlib_free;
+@@ -2084,7 +2087,7 @@
+ 
+ 	/* Load the needed metadata resource.  */
+ 	for (i = 1; i <= pwm->hdr.image_count; i++) {
+-		ret = handle_pwm_metadata_resource(pwm, i, i == image);
++		ret = handle_pwm_metadata_resource(pwm, i, i == (u32)image);
+ 		if (ret)
+ 			goto out_wimlib_free;
+ 	}
+--- a/header.c
++++ b/header.c
+@@ -240,7 +240,7 @@
+ 	const struct wim_header *hdr = &wim->hdr;
+ 
+ 	tprintf(T("Magic Characters            = "));
+-	for (int i = 0; i < sizeof(hdr->magic); i++) {
++	for (size_t i = 0; i < sizeof(hdr->magic); i++) {
+ 		tchar c = (u8)(hdr->magic >> ((8 * i)));
+ 		if (istalpha(c))
+ 			tputchar(c);
+--- a/iterate_dir.c
++++ b/iterate_dir.c
+@@ -114,7 +114,7 @@
+ 		struct wim_security_data *sd;
+ 
+ 		sd = wim_get_current_security_data(wim);
+-		wdentry->security_descriptor = sd->descriptors[inode->i_security_id];
++		wdentry->security_descriptor = (const char *)sd->descriptors[inode->i_security_id];
+ 		wdentry->security_descriptor_size = sd->sizes[inode->i_security_id];
+ 	}
+ 	wdentry->reparse_tag = inode->i_reparse_tag;
+--- a/lcpit_matchfinder.c
++++ b/lcpit_matchfinder.c
+@@ -549,7 +549,7 @@
+ get_pos_data_size(size_t max_bufsize)
+ {
+ 	return (u64)max((u64)max_bufsize + PREFETCH_SAFETY,
+-			DIVSUFSORT_TMP_LEN) * sizeof(u32);
++			(u64)DIVSUFSORT_TMP_LEN) * sizeof(u32);
+ }
+ 
+ static forceinline u64
+--- a/lzms_compress.c
++++ b/lzms_compress.c
+@@ -2103,6 +2103,7 @@
+ lzms_get_needed_memory(size_t max_bufsize, unsigned compression_level,
+ 		       bool destructive)
+ {
++	(void)compression_level;
+ 	u64 size = 0;
+ 
+ 	if (max_bufsize > LZMS_MAX_BUFFER_SIZE)
+@@ -2138,7 +2139,7 @@
+ 	/* Scale nice_match_len with the compression level.  But to allow an
+ 	 * optimization for length cost calculations, don't allow nice_match_len
+ 	 * to exceed MAX_FAST_LENGTH.  */
+-	nice_match_len = min(((u64)compression_level * 63) / 50, MAX_FAST_LENGTH);
++	nice_match_len = min(((u64)compression_level * 63) / 50, (u64)MAX_FAST_LENGTH);
+ 
+ 	c->use_delta_matches = (compression_level >= 35);
+ 	c->try_lzmatch_lit_lzrep0 = (compression_level >= 45);
+--- a/lzx_common.c
++++ b/lzx_common.c
+@@ -79,7 +79,7 @@
+ 	if (max_bufsize == 0 || max_bufsize > LZX_MAX_WINDOW_SIZE)
+ 		return 0;
+ 
+-	return max(ilog2_ceil(max_bufsize), LZX_MIN_WINDOW_ORDER);
++	return max(ilog2_ceil(max_bufsize), (unsigned)LZX_MIN_WINDOW_ORDER);
+ }
+ 
+ /* Given a valid LZX window order, return the number of symbols that will exist
+@@ -95,7 +95,7 @@
+ 	u32 window_size = (u32)1 << window_order;
+ 	u32 max_offset = window_size - LZX_MIN_MATCH_LEN - 1;
+ 	unsigned num_offset_slots = 30;
+-	while (max_offset >= lzx_offset_slot_base[num_offset_slots])
++	while (max_offset >= (u32)lzx_offset_slot_base[num_offset_slots])
+ 		num_offset_slots++;
+ 
+ 	return LZX_NUM_CHARS + (num_offset_slots * LZX_NUM_LEN_HEADERS);
+--- a/lzx_compress.c
++++ b/lzx_compress.c
+@@ -763,7 +763,7 @@
+ 
+ 			/* Symbol 18: RLE 20 to 51 zeroes at a time.  */
+ 			while ((run_end - run_start) >= 20) {
+-				extra_bits = min((run_end - run_start) - 20, 0x1F);
++				extra_bits = min((run_end - run_start) - 20, 0x1Fu);
+ 				precode_freqs[18]++;
+ 				*itemptr++ = 18 | (extra_bits << 5);
+ 				run_start += 20 + extra_bits;
+@@ -771,7 +771,7 @@
+ 
+ 			/* Symbol 17: RLE 4 to 19 zeroes at a time.  */
+ 			if ((run_end - run_start) >= 4) {
+-				extra_bits = min((run_end - run_start) - 4, 0xF);
++				extra_bits = min((run_end - run_start) - 4, 0xFu);
+ 				precode_freqs[17]++;
+ 				*itemptr++ = 17 | (extra_bits << 5);
+ 				run_start += 4 + extra_bits;
+@@ -1747,9 +1747,9 @@
+ 						if (load_u16_unaligned(strptr) == load_u16_unaligned(matchptr)) {
+ 							STATIC_ASSERT(ARRAY_LEN(queues) - LZX_MAX_MATCH_LEN - 2 >= 250);
+ 							STATIC_ASSERT(ARRAY_LEN(queues) == ARRAY_LEN(matches_before_gap));
+-							unsigned limit = min(remaining,
++							unsigned limit = min((size_t)remaining,
+ 									     min(ARRAY_LEN(queues) - LZX_MAX_MATCH_LEN - 2,
+-										 LZX_MAX_MATCH_LEN));
++										 (size_t)LZX_MAX_MATCH_LEN));
+ 							unsigned rep0_len = lz_extend(strptr, matchptr, 2, limit);
+ 							u8 lit = strptr[-1];
+ 							cost += c->costs.main[lit] +
+@@ -2498,6 +2498,7 @@
+ static forceinline unsigned
+ lzx_repeat_offset_match_score(unsigned rep_len, unsigned rep_idx)
+ {
++	(void)rep_idx;
+ 	return rep_len + 3;
+ }
+ 
+@@ -2763,8 +2764,8 @@
+ 	for (; adjusted_offset < ARRAY_LEN(c->offset_slot_tab_1);
+ 	     adjusted_offset++)
+ 	{
+-		if (adjusted_offset >= lzx_offset_slot_base[slot + 1] +
+-				       LZX_OFFSET_ADJUSTMENT)
++		if (adjusted_offset >= (u32)(lzx_offset_slot_base[slot + 1] +
++				       LZX_OFFSET_ADJUSTMENT))
+ 			slot++;
+ 		c->offset_slot_tab_1[adjusted_offset] = slot;
+ 	}
+@@ -2773,8 +2774,8 @@
+ 	for (; adjusted_offset < LZX_MAX_WINDOW_SIZE;
+ 	     adjusted_offset += (u32)1 << 14)
+ 	{
+-		if (adjusted_offset >= lzx_offset_slot_base[slot + 1] +
+-				       LZX_OFFSET_ADJUSTMENT)
++		if (adjusted_offset >= (u32)(lzx_offset_slot_base[slot + 1] +
++				       LZX_OFFSET_ADJUSTMENT))
+ 			slot++;
+ 		c->offset_slot_tab_2[adjusted_offset >> 14] = slot;
+ 	}
+@@ -2861,7 +2862,7 @@
+ 		/* lzx_compress_lazy() needs max_search_depth >= 2 because it
+ 		 * halves the max_search_depth when attempting a lazy match, and
+ 		 * max_search_depth must be at least 1. */
+-		c->max_search_depth = max(c->max_search_depth, 2);
++		c->max_search_depth = max(c->max_search_depth, 2u);
+ 	} else {
+ 
+ 		/* Normal / high compression: Use near-optimal parsing. */
+@@ -2887,7 +2888,7 @@
+ 		c->num_optim_passes += (compression_level >= 300);
+ 
+ 		/* max_search_depth must be at least 1. */
+-		c->max_search_depth = max(c->max_search_depth, 1);
++		c->max_search_depth = max(c->max_search_depth, 1u);
+ 	}
+ 
+ 	/* Prepare the offset => offset slot mapping. */
+--- a/lzx_decompress.c
++++ b/lzx_decompress.c
+@@ -275,8 +275,9 @@
+ 						    LZX_ALIGNEDCODE_ELEMENT_SIZE);
+ 		}
+ 
+-		/* Fall though, since the rest of the header for aligned offset
++		/* Fall through, since the rest of the header for aligned offset
+ 		 * blocks is the same as that for verbatim blocks.  */
++		__attribute__((fallthrough));
+ 
+ 	case LZX_BLOCKTYPE_VERBATIM:
+ 
+--- a/mount_image.c
++++ b/mount_image.c
+@@ -2568,6 +2568,10 @@
+ wimlib_unmount_image_with_progress(const tchar *dir, int unmount_flags,
+ 				   wimlib_progress_func_t progfunc, void *progctx)
+ {
++	(void)dir;
++	(void)progctx;
++	(void)progfunc;
++	(void)unmount_flags;
+ 	return mount_unsupported_error();
+ }
+ 
+@@ -2575,6 +2579,11 @@
+ wimlib_mount_image(WIMStruct *wim, int image, const tchar *dir,
+ 		   int mount_flags, const tchar *staging_dir)
+ {
++	(void)dir;
++	(void)image;
++	(void)mount_flags;
++	(void)staging_dir;
++	(void)wim;
+ 	return mount_unsupported_error();
+ }
+ 
+--- a/ntfs-3g_apply.c
++++ b/ntfs-3g_apply.c
+@@ -57,6 +57,7 @@
+ ntfs_3g_get_supported_features(const char *target,
+ 			       struct wim_features *supported_features)
+ {
++	(void)target;
+ 	supported_features->readonly_files            = 1;
+ 	supported_features->hidden_files              = 1;
+ 	supported_features->system_files              = 1;
+@@ -357,7 +358,7 @@
+ 	if (inode_has_security_descriptor(inode)
+ 	    && !(extract_flags & WIMLIB_EXTRACT_FLAG_NO_ACLS))
+ 	{
+-		struct SECURITY_CONTEXT sec_ctx = { ctx->vol };
++		struct SECURITY_CONTEXT sec_ctx = { .vol = ctx->vol };
+ 		const void *desc;
+ 		size_t desc_size;
+ 
+@@ -890,6 +891,7 @@
+ ntfs_3g_extract_chunk(const struct blob_descriptor *blob, u64 offset,
+ 		      const void *chunk, size_t size, void *_ctx)
+ {
++	(void)blob;
+ 	struct ntfs_3g_apply_ctx *ctx = _ctx;
+ 	const void * const end = chunk + size;
+ 	const void *p;
+--- a/ntfs-3g_capture.c
++++ b/ntfs-3g_capture.c
+@@ -120,6 +120,7 @@
+ 			   const struct consume_chunk_callback *cb,
+ 			   bool recover_data)
+ {
++	(void)recover_data;
+ 	const struct ntfs_location *loc = blob->ntfs_loc;
+ 	ntfs_volume *vol = loc->volume->vol;
+ 	ntfs_inode *ni;
+@@ -146,7 +147,7 @@
+ 	pos = (loc->attr_type == AT_REPARSE_POINT) ? REPARSE_DATA_OFFSET : 0;
+ 	bytes_remaining = size;
+ 	while (bytes_remaining) {
+-		s64 to_read = min(bytes_remaining, sizeof(buf));
++		s64 to_read = min(bytes_remaining, (s64)sizeof(buf));
+ 		if (ntfs_attr_pread(na, pos, to_read, buf) != to_read) {
+ 			ERROR_WITH_ERRNO("Error reading data from NTFS inode "
+ 					 "%"PRIu64, loc->mft_no);
+@@ -497,7 +498,7 @@
+ 		goto out;
+ 	}
+ 
+-	if (unlikely(ret > avail_size)) {
++	if (unlikely((size_t)ret > avail_size)) {
+ 		if (unlikely(buf != _buf))
+ 			FREE(buf);
+ 		buf = MALLOC(ret);
+@@ -650,6 +651,8 @@
+ 	const int name_type, const s64 pos, const MFT_REF mref,
+ 	const unsigned dt_type)
+ {
++	(void)dt_type;
++	(void)pos;
+ 	struct readdir_ctx *ctx = _ctx;
+ 	struct scan_params *params = ctx->params;
+ 	const size_t name_nbytes = name_nchars * sizeof(ntfschar);
+--- a/reparse.c
++++ b/reparse.c
+@@ -233,7 +233,7 @@
+ {
+ 	struct reparse_buffer_disk rpbuf;
+ 	u16 rpbuflen;
+-	struct link_reparse_point link;
++	struct link_reparse_point link = {0};
+ 	char *target_buffer;
+ 	char *target;
+ 	size_t target_len;
+@@ -339,7 +339,7 @@
+ 	int ret;
+ 	utf16lechar *target;
+ 	size_t target_nbytes;
+-	struct link_reparse_point link;
++	struct link_reparse_point link = {0};
+ 	struct reparse_buffer_disk rpbuf;
+ 	u16 rpbuflen;
+ 
+--- a/resource.c
++++ b/resource.c
+@@ -661,6 +661,9 @@
+ static int
+ noop_cb(const void *chunk, size_t size, void *_ctx)
+ {
++	(void)_ctx;
++	(void)chunk;
++	(void)size;
+ 	return 0;
+ }
+ 
+@@ -696,6 +699,7 @@
+ 			 const struct consume_chunk_callback *cb,
+ 			 bool recover_data)
+ {
++	(void)recover_data;
+ 	int ret;
+ 	int raw_fd;
+ 	struct filedes fd;
+@@ -742,6 +746,7 @@
+ 		   u64 size, const struct consume_chunk_callback *cb,
+ 		   bool recover_data)
+ {
++	(void)recover_data;
+ 	if (unlikely(!size))
+ 		return 0;
+ 	return consume_chunk(cb, blob->attached_buffer, size);
+@@ -1350,6 +1355,8 @@
+ extract_blob_chunk_to_fd(const struct blob_descriptor *blob, u64 offset,
+ 			 const void *chunk, size_t size, void *_fd)
+ {
++	(void)blob;
++	(void)offset;
+ 	return extract_chunk_to_fd(chunk, size, _fd);
+ }
+ 
+--- a/security.c
++++ b/security.c
+@@ -201,6 +201,7 @@
+ 		*p++ = 0;
+ 
+ 	wimlib_assert(p - orig_p == sd->total_length);
++	(void)orig_p;
+ 	return p;
+ }
+ 
+@@ -346,6 +347,7 @@
+ 	sd->num_entries++;
+ 	bret = insert_sd_node(sd_set, new);
+ 	wimlib_assert(bret);
++	(void)bret;
+ 	security_id = new->security_id;
+ 	goto out;
+ out_free_descr:
+--- a/solid.c
++++ b/solid.c
+@@ -197,7 +197,7 @@
+ 			for (int i = 0; i < num_wims; i++)
+ 				if (blob->rdesc->wim == wims[i])
+ 					goto found_wim;
+-			if (num_wims >= ARRAY_LEN(wims))
++			if ((size_t)num_wims >= ARRAY_LEN(wims))
+ 				continue;
+ 			wims[num_wims++] = blob->rdesc->wim;
+ 		found_wim:
+--- a/template.c
++++ b/template.c
+@@ -166,7 +166,7 @@
+ 	if (wim == template_wim && new_image == template_image)
+ 		return WIMLIB_ERR_INVALID_PARAM;
+ 
+-	if (new_image < 1 || new_image > wim->hdr.image_count)
++	if (new_image < 1 || (u32)new_image > wim->hdr.image_count)
+ 		return WIMLIB_ERR_INVALID_IMAGE;
+ 
+ 	if (!wim_has_metadata(wim))
+--- a/textfile.c
++++ b/textfile.c
+@@ -88,7 +88,7 @@
+ 		close(raw_fd);
+ 		return WIMLIB_ERR_STAT;
+ 	}
+-	if ((size_t)st.st_size != st.st_size ||
++	if (st.st_size < 0 || (off_t)(size_t)st.st_size != st.st_size ||
+ 	    (buf = MALLOC(st.st_size)) == NULL)
+ 	{
+ 		close(raw_fd);
+--- a/threads.c
++++ b/threads.c
+@@ -166,6 +166,7 @@
+ 	int err = pthread_join(t->pthread, NULL);
+ 
+ 	wimlib_assert(err == 0);
++	(void)err;
+ }
+ 
+ bool mutex_init(struct mutex *m)
+@@ -185,6 +186,7 @@
+ 	int err = pthread_mutex_destroy(&m->pthread_mutex);
+ 
+ 	wimlib_assert(err == 0);
++	(void)err;
+ }
+ 
+ void mutex_lock(struct mutex *m)
+@@ -192,6 +194,7 @@
+ 	int err = pthread_mutex_lock(&m->pthread_mutex);
+ 
+ 	wimlib_assert(err == 0);
++	(void)err;
+ }
+ 
+ void mutex_unlock(struct mutex *m)
+@@ -199,6 +202,7 @@
+ 	int err = pthread_mutex_unlock(&m->pthread_mutex);
+ 
+ 	wimlib_assert(err == 0);
++	(void)err;
+ }
+ 
+ bool condvar_init(struct condvar *c)
+@@ -218,6 +222,7 @@
+ 	int err = pthread_cond_destroy(&c->pthread_cond);
+ 
+ 	wimlib_assert(err == 0);
++	(void)err;
+ }
+ 
+ void condvar_wait(struct condvar *c, struct mutex *m)
+@@ -225,6 +230,7 @@
+ 	int err = pthread_cond_wait(&c->pthread_cond, &m->pthread_mutex);
+ 
+ 	wimlib_assert(err == 0);
++	(void)err;
+ }
+ 
+ void condvar_signal(struct condvar *c)
+@@ -232,6 +238,7 @@
+ 	int err = pthread_cond_signal(&c->pthread_cond);
+ 
+ 	wimlib_assert(err == 0);
++	(void)err;
+ }
+ 
+ void condvar_broadcast(struct condvar *c)
+@@ -239,6 +246,7 @@
+ 	int err = pthread_cond_broadcast(&c->pthread_cond);
+ 
+ 	wimlib_assert(err == 0);
++	(void)err;
+ }
+ 
+ #endif /* !_WIN32 */
+--- a/unix_apply.c
++++ b/unix_apply.c
+@@ -58,6 +58,7 @@
+ unix_get_supported_features(const char *target,
+ 			    struct wim_features *supported_features)
+ {
++	(void)target;
+ 	supported_features->sparse_files = 1;
+ 	supported_features->hard_links = 1;
+ 	supported_features->symlink_reparse_points = 1;
+@@ -755,6 +756,7 @@
+ unix_extract_chunk(const struct blob_descriptor *blob, u64 offset,
+ 		   const void *chunk, size_t size, void *_ctx)
+ {
++	(void)blob;
+ 	struct unix_apply_ctx *ctx = _ctx;
+ 	const void * const end = chunk + size;
+ 	const void *p;
+--- a/unix_capture.c
++++ b/unix_capture.c
+@@ -124,7 +124,7 @@
+ 		void *value;
+ 		ssize_t value_len;
+ 
+-		if (name_len == 0 || name_len >= names_end - name) {
++		if (name_len == 0 || name_len >= (size_t)(names_end - name)) {
+ 			ERROR("\"%s\": malformed extended attribute names list",
+ 			      path);
+ 			errno = EINVAL;
+@@ -141,7 +141,7 @@
+ 		 * Take care to always call lgetxattr() with a nonzero size,
+ 		 * since zero size means to return the value length only.
+ 		 */
+-		if (entries_end - (void *)entry <=
++		if ((size_t)(entries_end - (void *)entry) <=
+ 		    sizeof(*entry) + name_len + 1) {
+ 			errno = ERANGE;
+ 			return -1;
+@@ -477,7 +477,7 @@
+ 				 params->cur_path);
+ 		return WIMLIB_ERR_READLINK;
+ 	}
+-	if (unlikely(ret >= sizeof(orig_target))) {
++	if (unlikely((size_t)ret >= sizeof(orig_target))) {
+ 		ERROR("\"%s\": target of symbolic link is too long",
+ 		      params->cur_path);
+ 		return WIMLIB_ERR_READLINK;
+--- a/update_image.c
++++ b/update_image.c
+@@ -252,6 +252,7 @@
+ 
+ 		existing = dentry_add_child(parent, subject);
+ 		wimlib_assert(!existing);
++		(void)existing;
+ 	} else {
+ 		/* Set @subject as root of the image  */
+ 		*root_p = subject;
+@@ -932,6 +933,7 @@
+ static int
+ free_dentry_full_path(struct wim_dentry *dentry, void *_ignore)
+ {
++	(void)_ignore;
+ 	FREE(dentry->d_full_path);
+ 	dentry->d_full_path = NULL;
+ 	return 0;
+--- a/util.c
++++ b/util.c
+@@ -214,7 +214,7 @@
+ 		wimlib_assert(0);
+ 	}
+ 	do {
+-		int res = read(fd, p, min(n, INT_MAX));
++		int res = read(fd, p, min(n, (size_t)INT_MAX));
+ 		if (unlikely(res < 0)) {
+ 			if (errno == EINTR)
+ 				continue;
+--- a/verify.c
++++ b/verify.c
+@@ -50,6 +50,7 @@
+ verify_continue_blob(const struct blob_descriptor *blob, u64 offset,
+ 		     const void *chunk, size_t size, void *_ctx)
+ {
++	(void)chunk;
+ 	struct verify_blob_list_ctx *ctx = _ctx;
+ 	union wimlib_progress_info *progress = ctx->progress;
+ 
+@@ -118,7 +119,7 @@
+ 		progress.verify_image.wimfile = wim->filename;
+ 		progress.verify_image.total_images = wim->hdr.image_count;
+ 
+-		for (int i = 1; i <= wim->hdr.image_count; i++) {
++		for (u32 i = 1; i <= wim->hdr.image_count; i++) {
+ 
+ 			progress.verify_image.current_image = i;
+ 
+--- a/wim.c
++++ b/wim.c
+@@ -128,6 +128,7 @@
+ static int
+ is_blob_in_solid_resource(struct blob_descriptor *blob, void *_ignore)
+ {
++	(void)_ignore;
+ 	return blob->blob_location == BLOB_IN_WIM &&
+ 		(blob->rdesc->flags & WIM_RESHDR_FLAG_SOLID);
+ }
+@@ -331,7 +332,7 @@
+ 	if (image == wim->current_image)
+ 		return 0;
+ 
+-	if (image < 1 || image > wim->hdr.image_count)
++	if (image < 1 || (u32)image > wim->hdr.image_count)
+ 		return WIMLIB_ERR_INVALID_IMAGE;
+ 
+ 	if (!wim_has_metadata(wim))
+@@ -389,7 +390,7 @@
+ 	if (image == WIMLIB_ALL_IMAGES) {
+ 		start = 1;
+ 		end = wim->hdr.image_count;
+-	} else if (image >= 1 && image <= wim->hdr.image_count) {
++	} else if (image >= 1 && (u32)image <= wim->hdr.image_count) {
+ 		start = image;
+ 		end = image;
+ 	} else {
+@@ -426,7 +427,7 @@
+ 			return WIMLIB_NO_IMAGE;
+ 		return image;
+ 	} else {
+-		for (i = 1; i <= wim->hdr.image_count; i++) {
++		for (i = 1; (u32)i <= wim->hdr.image_count; i++) {
+ 			if (!tstrcmp(image_name_or_num,
+ 				     wimlib_get_image_name(wim, i)))
+ 				return i;
+@@ -447,7 +448,7 @@
+ 		n = tprintf(T("Available Images:\n"));
+ 		first = 1;
+ 		last = wim->hdr.image_count;
+-	} else if (image >= 1 && image <= wim->hdr.image_count) {
++	} else if (image >= 1 && (u32)image <= wim->hdr.image_count) {
+ 		n = tprintf(T("Information for Image %d\n"), image);
+ 		first = image;
+ 		last = image;
+@@ -771,7 +772,7 @@
+ 		if (ret)
+ 			return ret;
+ 
+-		if (xml_get_image_count(wim->xml_info) != wim->hdr.image_count) {
++		if ((u32)xml_get_image_count(wim->xml_info) != wim->hdr.image_count) {
+ 			ERROR("The WIM's header is inconsistent with its XML data.\n"
+ 			      "        Please submit a bug report if you believe this "
+ 			      "WIM file should be considered valid.");
+@@ -850,7 +851,7 @@
+ 
+ 	if (!wim_has_metadata(wim))
+ 		return 0;
+-	for (int i = 0; i < wim->hdr.image_count; i++) {
++	for (u32 i = 0; i < wim->hdr.image_count; i++) {
+ 		struct blob_descriptor *blob, *tmp;
+ 		struct wim_image_metadata *imd = wim->image_metadata[i];
+ 		image_for_each_unhashed_blob_safe(blob, tmp, imd) {
+@@ -932,7 +933,7 @@
+ 	wim->blob_table = NULL;
+ 	if (wim->image_metadata != NULL) {
+ 		deselect_current_wim_image(wim);
+-		for (int i = 0; i < wim->hdr.image_count; i++)
++		for (u32 i = 0; i < wim->hdr.image_count; i++)
+ 			put_image_metadata(wim->image_metadata[i]);
+ 		FREE(wim->image_metadata);
+ 		wim->image_metadata = NULL;
+--- a/wimlib/compiler.h
++++ b/wimlib/compiler.h
+@@ -33,10 +33,13 @@
+ /* Is the compiler GCC of the specified version or later?  This always returns
+  * false for clang, since clang is "frozen" at GNUC 4.2.  The __has_*
+  * feature-test macros should be used to detect clang functionality instead.  */
+-#define GCC_PREREQ(major, minor)					\
+-	(!defined(__clang__) && !defined(__INTEL_COMPILER) &&		\
+-	 (__GNUC__ > major ||						\
+-	  (__GNUC__ == major && __GNUC_MINOR__ >= minor)))
++#if defined(__clang__) || defined(__INTEL_COMPILER)
++#  define GCC_PREREQ(major, minor) 0
++#else
++#  define GCC_PREREQ(major, minor) \
++	(__GNUC__ > major || \
++	 (__GNUC__ == major && __GNUC_MINOR__ >= minor))
++#endif
+ 
+ /* Feature-test macros defined by recent versions of clang.  */
+ #ifndef __has_attribute
+--- a/wimlib/decompress_common.h
++++ b/wimlib/decompress_common.h
+@@ -188,7 +188,7 @@
+ static forceinline int
+ bitstream_read_bytes(struct input_bitstream *is, void *dst_buffer, size_t count)
+ {
+-	if (unlikely(is->end - is->next < count))
++	if (unlikely((size_t)(is->end - is->next) < count))
+ 		return -1;
+ 	memcpy(dst_buffer, is->next, count);
+ 	is->next += count;
+@@ -477,7 +477,7 @@
+ 	 */
+ 	src = out_next - offset;
+ 	if (UNALIGNED_ACCESS_IS_FAST && length <= 3 * WORDBYTES &&
+-	    offset >= WORDBYTES && out_end - out_next >= 3 * WORDBYTES)
++	    offset >= WORDBYTES && (size_t)(out_end - out_next) >= 3 * WORDBYTES)
+ 	{
+ 		copy_word_unaligned(src + WORDBYTES*0, out_next + WORDBYTES*0);
+ 		copy_word_unaligned(src + WORDBYTES*1, out_next + WORDBYTES*1);
+@@ -504,7 +504,7 @@
+ 	 * beyond the end of the output buffer, hence the check for (out_end -
+ 	 * end >= WORDBYTES - 1).
+ 	 */
+-	if (UNALIGNED_ACCESS_IS_FAST && likely(out_end - end >= WORDBYTES - 1))
++	if (UNALIGNED_ACCESS_IS_FAST && likely((size_t)(out_end - end) >= WORDBYTES - 1))
+ 	{
+ 		if (offset >= WORDBYTES) {
+ 			/* The source and destination words don't overlap. */
+--- a/wimlib/progress.h
++++ b/wimlib/progress.h
+@@ -60,6 +60,7 @@
+ static inline tchar *
+ progress_get_streamless_path(const tchar *path)
+ {
++	(void)path;
+ 	tchar *cookie = NULL;
+ #ifdef _WIN32
+ 	cookie = (wchar_t *)path_stream_name(path);
+@@ -74,6 +75,7 @@
+ static inline tchar *
+ progress_get_win32_path(const tchar *path)
+ {
++	(void)path;
+ #ifdef _WIN32
+ 	if (!wcsncmp(path, L"\\??\\", 4)) {
+ 		((wchar_t *)path)[1] = L'\\';
+@@ -87,6 +89,7 @@
+ static inline void
+ progress_put_win32_path(tchar *cookie)
+ {
++	(void)cookie;
+ #ifdef _WIN32
+ 	if (cookie)
+ 		*cookie = L'?';
+@@ -97,6 +100,7 @@
+ static inline void
+ progress_put_streamless_path(tchar *cookie)
+ {
++	(void)cookie;
+ #ifdef _WIN32
+ 	if (cookie)
+ 		*cookie = L':';
+--- a/wimlib/xattr.h
++++ b/wimlib/xattr.h
+@@ -66,8 +66,10 @@
+ 	if (avail < sizeof(*entry))
+ 		return false;
+ 
+-	return entry->name_len > 0 && entry->name_len <= WIM_XATTR_NAME_MAX &&
+-		le16_to_cpu(entry->value_len) <= WIM_XATTR_SIZE_MAX &&
++	/* The on-disk field widths already enforce these upper bounds. */
++	STATIC_ASSERT(WIM_XATTR_NAME_MAX == UINT8_MAX);
++	STATIC_ASSERT(WIM_XATTR_SIZE_MAX == UINT16_MAX);
++	return entry->name_len > 0 &&
+ 		avail >= xattr_entry_size(entry) &&
+ 		memchr(entry->name, '\0', entry->name_len) == NULL &&
+ 		entry->name[entry->name_len] == '\0';
+--- a/wimlib.h
++++ b/wimlib.h
+@@ -1691,7 +1691,9 @@
+ 	 * additional entries that specify the named data streams, if any, each
+ 	 * of which will have <c>stream_name != NULL</c>.
+ 	 */
++#ifndef __cplusplus
+ 	struct wimlib_stream_entry streams[];
++#endif
+ };
+ 
+ /**
+--- a/write.c
++++ b/write.c
+@@ -770,7 +770,7 @@
+ 	ret = extract_blob_to_fd(blob, out_fd, false);
+ 	if (ret) {
+ 		/* Error reading the uncompressed data.  */
+-		if (out_fd->offset == begin_offset &&
++		if ((u64)out_fd->offset == begin_offset &&
+ 		    filedes_seek(out_fd, end_offset) != -1)
+ 		{
+ 			/* Nothing was actually written yet, and we successfully
+@@ -1002,6 +1002,7 @@
+ 							       &csize,
+ 							       &usize);
+ 		wimlib_assert(bret);
++		(void)bret;
+ 
+ 		ret = write_chunk(ctx, cchunk, csize, usize);
+ 		if (ret)
+@@ -1052,7 +1053,7 @@
+ 							(blob->size - offset));
+ 		}
+ 
+-		bytes_consumed = min(chunkend - chunkptr,
++		bytes_consumed = min((size_t)(chunkend - chunkptr),
+ 				     needed_chunk_size - ctx->cur_chunk_buf_filled);
+ 
+ 		memcpy(&ctx->cur_chunk_buf[ctx->cur_chunk_buf_filled],
+@@ -1226,7 +1227,7 @@
+ 	wimlib_assert(cur_read_offset != end_read_offset);
+ 
+ 	if (likely(!in_rdesc->wim->being_compacted) ||
+-	    in_rdesc->offset_in_wim > out_fd->offset) {
++	    in_rdesc->offset_in_wim > (u64)out_fd->offset) {
+ 		do {
+ 			bytes_to_read = min(sizeof(buf),
+ 					    end_read_offset - cur_read_offset);
+@@ -1551,7 +1552,7 @@
+ 	 * specified number of threads, unless the upper bound on the number
+ 	 * bytes needing to be compressed is less than a heuristic value.  */
+ 	if (num_nonraw_bytes != 0 && out_ctype != WIMLIB_COMPRESSION_TYPE_NONE) {
+-		if (num_nonraw_bytes > max(2000000, out_chunk_size)) {
++		if (num_nonraw_bytes > max((size_t)2000000, out_chunk_size)) {
+ 			ret = new_parallel_chunk_compressor(out_ctype,
+ 							    out_chunk_size,
+ 							    num_threads, 0,
+@@ -1852,6 +1853,7 @@
+ static int
+ do_blob_set_not_in_output_wim(struct blob_descriptor *blob, void *_ignore)
+ {
++	(void)_ignore;
+ 	blob->will_be_in_output_wim = 0;
+ 	return 0;
+ }
+@@ -2644,7 +2646,7 @@
+ {
+ 	if (!wim_has_metadata(wim))
+ 		return 0;
+-	for (int i = 0; i < wim->hdr.image_count; i++) {
++	for (u32 i = 0; i < wim->hdr.image_count; i++) {
+ 		struct wim_image_metadata *imd = wim->image_metadata[i];
+ 		if (imd->stats_outdated) {
+ 			int ret = xml_update_image_info(wim, i + 1);
+@@ -2679,7 +2681,7 @@
+ 
+ 	/* A valid image (or all images) must be specified.  */
+ 	if (image != WIMLIB_ALL_IMAGES &&
+-	     (image < 1 || image > wim->hdr.image_count))
++	     (image < 1 || (u32)image > wim->hdr.image_count))
+ 		return WIMLIB_ERR_INVALID_IMAGE;
+ 
+ 	/* If we need to write metadata resources, make sure the ::WIMStruct has
+@@ -2799,7 +2801,7 @@
+ 	if (total_parts == 1) {
+ 		if (image == WIMLIB_ALL_IMAGES)
+ 			wim->out_hdr.boot_idx = wim->hdr.boot_idx;
+-		else if (image == wim->hdr.boot_idx)
++		else if ((u32)image == wim->hdr.boot_idx)
+ 			wim->out_hdr.boot_idx = 1;
+ 	}
+ 
+@@ -2918,7 +2920,7 @@
+ {
+ 	if (wim->image_deletion_occurred)
+ 		return true;
+-	for (int i = 0; i < wim->hdr.image_count; i++)
++	for (u32 i = 0; i < wim->hdr.image_count; i++)
+ 		if (!is_image_unchanged_from_wim(wim->image_metadata[i], wim))
+ 			return true;
+ 	return false;
+@@ -2932,7 +2934,7 @@
+ 
+ 	if (blob->blob_location == BLOB_IN_WIM &&
+ 	    blob->rdesc->wim == wim &&
+-	    blob->rdesc->offset_in_wim + blob->rdesc->size_in_wim > end_offset)
++	    blob->rdesc->offset_in_wim + blob->rdesc->size_in_wim > (u64)end_offset)
+ 		return WIMLIB_ERR_RESOURCE_ORDER;
+ 	return 0;
+ }
+@@ -3097,7 +3099,7 @@
+ 		if (wim_has_metadata(wim)) {
+ 			/* Add existing metadata resources to be compacted along
+ 			 * with the file resources.  */
+-			for (int i = 0; i < wim->hdr.image_count; i++) {
++			for (u32 i = 0; i < wim->hdr.image_count; i++) {
+ 				struct wim_image_metadata *imd = wim->image_metadata[i];
+ 				if (is_image_unchanged_from_wim(imd, wim)) {
+ 					fully_reference_blob_for_write(imd->metadata_blob,
+--- a/xml.c
++++ b/xml.c
+@@ -831,7 +831,7 @@
+ 
+ 	if (!attrib)
+ 		return 0;
+-	return min(INT_MAX, parse_number(attrib->value, 10));
++	return min((u64)INT_MAX, parse_number(attrib->value, 10));
+ }
+ 
+ /* Prepare the 'images' array from the XML document tree.  */
+--- a/xml_windows.c
++++ b/xml_windows.c
+@@ -273,7 +273,7 @@
+ 
+ /* All the language names; generated by tools/generate_language_id_map.c.
+  * For compactness, this is a 'char' string rather than a 'tchar' string.  */
+-static const char language_names[3170] =
++static const char language_names[] =
+ 	"en-US\0ar-SA\0bg-BG\0ca-ES\0zh-CN\0cs-CZ\0da-DK\0de-DE\0el-GR\0en-US\0"
+ 	"es-ES\0fi-FI\0fr-FR\0he-IL\0hu-HU\0is-IS\0it-IT\0ja-JP\0ko-KR\0nl-NL\0"
+ 	"nb-NO\0pl-PL\0pt-BR\0rm-CH\0ro-RO\0ru-RU\0hr-HR\0sk-SK\0sq-AL\0sv-SE\0"
+--- a/xmlproc.c
++++ b/xmlproc.c
+@@ -666,7 +666,7 @@
+ {
+ 	if (buf->count + len + 1 > buf->capacity) {
+ 		size_t new_capacity = max3(buf->count + len + 1,
+-					   buf->capacity * 2, 4096);
++					   buf->capacity * 2, (size_t)4096);
+ 		tchar *new_buf = REALLOC(buf->buf,
+ 					 new_capacity * sizeof(str[0]));
+ 		if (!new_buf) {
+--- a/xpress_compress.c
++++ b/xpress_compress.c
+@@ -345,7 +345,7 @@
+ 	/* If length >= 18, output one extra length byte.
+ 	 * If length >= 273, output three (total) extra length bytes.  */
+ 	if (adjusted_len >= 0xF) {
+-		u8 byte1 = min(adjusted_len - 0xF, 0xFF);
++		u8 byte1 = min(adjusted_len - 0xFu, 0xFFu);
+ 		xpress_write_byte(os, byte1);
+ 		if (byte1 == 0xFF)
+ 			xpress_write_u16(os, adjusted_len);
+@@ -414,7 +414,7 @@
+ 
+ 			adjusted_len = length - XPRESS_MIN_MATCH_LEN;
+ 			log2_offset = bsr32(offset);
+-			len_hdr = min(0xF, adjusted_len);
++			len_hdr = min(0xFu, adjusted_len);
+ 			sym = XPRESS_NUM_CHARS + ((log2_offset << 4) | len_hdr);
+ 
+ 			xpress_write_bits(os, codewords[sym], lens[sym]);
+@@ -500,7 +500,7 @@
+ xpress_record_match(struct xpress_compressor *c, unsigned length, unsigned offset)
+ {
+ 	unsigned adjusted_len = length - XPRESS_MIN_MATCH_LEN;
+-	unsigned len_hdr = min(adjusted_len, 0xF);
++	unsigned len_hdr = min(adjusted_len, 0xFu);
+ 	unsigned log2_offset = bsr32(offset);
+ 	unsigned sym = XPRESS_NUM_CHARS + ((log2_offset << 4) | len_hdr);
+ 
+@@ -756,7 +756,7 @@
+ 
+ 			adjusted_len = length - XPRESS_MIN_MATCH_LEN;
+ 			log2_offset = bsr32(offset);
+-			len_hdr = min(0xF, adjusted_len);
++			len_hdr = min(0xFu, adjusted_len);
+ 			sym = XPRESS_NUM_CHARS + ((log2_offset << 4) | len_hdr);
+ 
+ 			c->freqs[sym]++;
+@@ -869,7 +869,7 @@
+ 					u32 cost_to_end;
+ 
+ 					adjusted_len = len - XPRESS_MIN_MATCH_LEN;
+-					len_hdr = min(adjusted_len, 0xF);
++					len_hdr = min(adjusted_len, 0xFu);
+ 					sym = XPRESS_NUM_CHARS +
+ 					      ((log2_offset << 4) | len_hdr);
+ 					cost_to_end =
+@@ -1043,6 +1043,7 @@
+ xpress_get_needed_memory(size_t max_bufsize, unsigned compression_level,
+ 			 bool destructive)
+ {
++	(void)destructive;
+ 	u64 size = 0;
+ 
+ 	if (max_bufsize > XPRESS_MAX_BUFSIZE)
+@@ -1072,6 +1073,7 @@
+ xpress_create_compressor(size_t max_bufsize, unsigned compression_level,
+ 			 bool destructive, void **c_ret)
+ {
++	(void)destructive;
+ 	struct xpress_compressor *c;
+ 
+ 	if (max_bufsize > XPRESS_MAX_BUFSIZE)

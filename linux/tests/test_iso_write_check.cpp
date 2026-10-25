@@ -1001,7 +1001,7 @@ private slots:
         const QByteArray target = QFile::encodeName(destination.path());
         const QByteArray image = QFile::encodeName(request_.imagePath);
         const QByteArray label = request_.label.toUtf8();
-        const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, label.constData(), image.constData(), false};
+        const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, label.constData(), image.constData(), false, 0, nullptr, false, false, false, nullptr, nullptr};
         ISO_EXTRACT_RESULT extracted = {};
         QCOMPARE(ExtractIsoTree(image.constData(), target.constData(), &options, &extracted), 0);
         const int root = ::open(target.constData(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
@@ -2099,7 +2099,7 @@ private slots:
         QTemporaryDir target;
         QVERIFY(target.isValid());
         const QByteArray image = sourcePath.toUtf8();
-        const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, "NEW LABEL", image.constData(), false};
+        const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, "NEW LABEL", image.constData(), false, 0, nullptr, false, false, false, nullptr, nullptr};
         ISO_EXTRACT_RESULT copied = {};
         QCOMPARE(ExtractIsoTree(sourcePath.toUtf8().constData(), target.path().toUtf8().constData(),
             &options, &copied), 0);
@@ -2972,7 +2972,7 @@ private slots:
         const QByteArray target = QFile::encodeName(output.path());
         const QByteArray source = QFile::encodeName(request_.imagePath);
         const QByteArray label = request_.label.toUtf8();
-        const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, label.constData(), source.constData(), false};
+        const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, label.constData(), source.constData(), false, 0, nullptr, false, false, false, nullptr, nullptr};
         ISO_EXTRACT_RESULT extracted = {};
         QCOMPARE(ExtractIsoTree(source.constData(), target.constData(), &options, &extracted), 0);
         QCOMPARE(extracted.bytes_written, result.tree.bytes_written);

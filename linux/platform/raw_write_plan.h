@@ -46,7 +46,7 @@ public:
     const PrepareImageRequest& imageMetadata() const { return compressed_; }
 
 private:
-    IMAGE_FILE_SOURCE source_ = {-1, {}, false, false};
+    IMAGE_FILE_SOURCE source_ = {-1, {}, false, false, nullptr, 0};
     QString path_;
     Device target_;
     bool allowFixedUsb_ = false;

@@ -35,6 +35,10 @@ bundled third-party notices.
 
 ## Build on Arch
 
+The development recipe requires Qt 6.4 or newer and enables the native
+warnings-as-errors build policy. Published release recipes retain the source
+and dependency requirements recorded for their own immutable tag.
+
 Review the generated `PKGBUILD`, then use an ordinary user with `base-devel`:
 
 ```sh

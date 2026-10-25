@@ -33,6 +33,10 @@
 *.p7x
 *.patch
 !linux/wimlib/native-ntfs.patch
+!linux/wimlib/compiler-warnings.patch
+!linux/syslinux/*compiler-warnings*.patch
+!linux/cdio/native-warnings.patch
+!linux/bled/native-warnings.patch
 !linux/tests/qualification/ffu-oracle/img2ffu-net10.patch
 *.pc
 *.pdb

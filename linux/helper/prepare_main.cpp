@@ -251,7 +251,6 @@ protected:
                 if (outcome.error == 0) outcome.error = archive.check();
                 if (outcome.error != 0) emit logMessage(QStringLiteral("Supplementary ZIP validation failed: %1").arg(planned.path));
             }
-            const bool grub4dosImage = request_.grub4dos && !request_.imagePath.isEmpty();
             if (outcome.error == 0 && !request_.imagePath.isEmpty() && !request_.windowsToGo)
             {
                 // Reject unsupported sources before target access or unmounts.
@@ -752,7 +751,7 @@ private:
         const QByteArray label = request_.label.toUtf8();
         const QByteArray imagePath = QFile::encodeName(request_.imagePath);
         ISO_EXTRACT_OPTIONS extraction = {{request_.rockRidge, request_.joliet, {0, 0}},
-            label.constData(), imagePath.constData(), false, request_.persistenceSize, nullptr, request_.preserveTimestamps, request_.fileSystem == FS_NTFS && request_.ntfsCompression && request_.clusterSize <= rufus::NtfsCompressionClusterBytes};
+            label.constData(), imagePath.constData(), false, request_.persistenceSize, nullptr, request_.preserveTimestamps, request_.fileSystem == FS_NTFS && request_.ntfsCompression && request_.clusterSize <= rufus::NtfsCompressionClusterBytes, false, nullptr, nullptr};
         rufus::IsoWriteCheck checked;
         IsoView view;
         if (request_.syslinux) {
@@ -1007,7 +1006,7 @@ private:
         const QByteArray label = request_.label.toUtf8();
         const QByteArray imagePath = QFile::encodeName(request_.imagePath);
         ISO_EXTRACT_OPTIONS options = {{request_.rockRidge, request_.joliet, {0, 0}},
-            label.constData(), imagePath.constData(), false, request_.persistenceSize, nullptr, request_.preserveTimestamps, request_.fileSystem == FS_NTFS && request_.ntfsCompression && request_.clusterSize <= rufus::NtfsCompressionClusterBytes};
+            label.constData(), imagePath.constData(), false, request_.persistenceSize, nullptr, request_.preserveTimestamps, request_.fileSystem == FS_NTFS && request_.ntfsCompression && request_.clusterSize <= rufus::NtfsCompressionClusterBytes, false, nullptr, nullptr};
         rufus::IsoWriteCheck checked;
         IsoView view;
         // Check all operations before partition writes, using the adapters' rules.

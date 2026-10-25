@@ -1,6 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 find_program(RUFUS_MKISOFS NAMES genisoimage mkisofs REQUIRED)
+add_executable(test_wim_dir_entry_layout wimlib/test_dir_entry_layout.c wimlib/test_dir_entry_layout.cpp)
+target_compile_features(test_wim_dir_entry_layout PRIVATE c_std_11 cxx_std_17)
+target_compile_options(test_wim_dir_entry_layout PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(test_wim_dir_entry_layout PRIVATE rufus_wimlib)
+add_test(NAME rufus_wim_dir_entry_layout COMMAND test_wim_dir_entry_layout)
+set_tests_properties(rufus_wim_dir_entry_layout PROPERTIES LABELS "component;image;no-hardware" TIMEOUT 10)
 add_executable(test_windows_apply tests/test_windows_apply.cpp)
 set_target_properties(test_windows_apply PROPERTIES AUTOMOC ON)
 target_compile_features(test_windows_apply PRIVATE cxx_std_17)

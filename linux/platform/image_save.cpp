@@ -267,18 +267,18 @@ int ffuManifest(int source, quint64 size, unsigned sector, QByteArray& manifest)
     QByteArray header(sector, '\0');
     int error = positioned(source, header.data(), sector, sector, false);
     if (error != 0) return error;
-    if (memcmp(header.constData(), "EFI PART", 8) != 0) return ENOTSUP;
-    const quint32 headerBytes = get32(header.constData() + 12), expectedCrc = get32(header.constData() + 16);
-    if (headerBytes < 92 || headerBytes > sector || get64(header.constData() + 24) != 1
-        || get64(header.constData() + 32) != size / sector - 1) return ENOTSUP;
+    if (memcmp(header.constBegin(), "EFI PART", 8) != 0) return ENOTSUP;
+    const quint32 headerBytes = get32(header.constBegin() + 12), expectedCrc = get32(header.constBegin() + 16);
+    if (headerBytes < 92 || headerBytes > sector || get64(header.constBegin() + 24) != 1
+        || get64(header.constBegin() + 32) != size / sector - 1) return ENOTSUP;
     put32(header.data() + 16, 0);
-    if (quint32(crc32(0, reinterpret_cast<const Bytef*>(header.constData()), headerBytes)) != expectedCrc) return EBADMSG;
-    const quint64 tableSector = get64(header.constData() + 72);
-    const quint32 count = get32(header.constData() + 80), entryBytes = get32(header.constData() + 84);
+    if (quint32(crc32(0, reinterpret_cast<const Bytef*>(header.constBegin()), headerBytes)) != expectedCrc) return EBADMSG;
+    const quint64 tableSector = get64(header.constBegin() + 72);
+    const quint32 count = get32(header.constBegin() + 80), entryBytes = get32(header.constBegin() + 84);
     const quint64 tableBytes = quint64(count) * entryBytes;
     if (count == 0 || entryBytes < 128 || entryBytes % 128 != 0 || tableBytes > FFU_GPT_TABLE_BUDGET) return ENOTSUP;
     if (tableSector > size / sector || tableBytes > size - tableSector * sector) return EBADMSG;
-    const quint64 firstUsable = get64(header.constData() + 40), lastUsable = get64(header.constData() + 48);
+    const quint64 firstUsable = get64(header.constBegin() + 40), lastUsable = get64(header.constBegin() + 48);
     const quint64 tableSectors = (tableBytes + sector - 1) / sector;
     const bool usableRange = firstUsable > 1 && firstUsable <= lastUsable && lastUsable < size / sector - 1;
     const bool tableFits = tableSector >= 2 && tableSector < firstUsable && tableSectors <= firstUsable - tableSector;
@@ -286,14 +286,14 @@ int ffuManifest(int source, quint64 size, unsigned sector, QByteArray& manifest)
     QByteArray table(qsizetype(tableBytes), '\0');
     error = positioned(source, table.data(), size_t(tableBytes), tableSector * sector, false);
     if (error != 0) return error;
-    if (quint32(crc32(0, reinterpret_cast<const Bytef*>(table.constData()), uInt(tableBytes))) != get32(header.constData() + 88)) return EBADMSG;
+    if (quint32(crc32(0, reinterpret_cast<const Bytef*>(table.constBegin()), uInt(tableBytes))) != get32(header.constBegin() + 88)) return EBADMSG;
     manifest = "[FullFlash]\r\nOSVersion=10.0.0.0\r\nDescription=Created by Rufus Linux\r\n\r\n"
         "[StoragePool]\r\nName=OSPool\r\n\r\n[Store]\r\nOnlyAllocateDefinedGptEntries=False\r\n"
         "StoreId={5A585BAE-900B-41B5-B736-A4CECFFC34B4}\r\nIsMainOSStore=False\r\nStoreType=Default\r\n"
         "MinSectorCount=" + QByteArray::number(size / sector) + "\r\nSectorSize=" + QByteArray::number(sector) + "\r\n\r\n";
     QList<QPair<quint64, quint64>> extents;
     for (quint32 i = 0; i < count; i++) {
-        const char* entry = table.constData() + quint64(i) * entryBytes;
+        const char* entry = table.constBegin() + quint64(i) * entryBytes;
         if (std::all_of(entry, entry + 16, IsZeroByte)) continue;
         const quint64 first = get64(entry + 32), last = get64(entry + 40);
         if (first < firstUsable || last > lastUsable || first > last) return EBADMSG;
@@ -499,7 +499,7 @@ int SaveDeviceImage(int source, quint64 size, unsigned sector, int output,
     if (error == 0 && fsync(output) != 0) error = errno;
     hash_final[HASH_SHA256](&state.hash);
     const QByteArray expected(reinterpret_cast<const char*>(state.hash.buf), 32);
-    IMAGE_FILE_SOURCE saved = {-1, {}, false, false};
+    IMAGE_FILE_SOURCE saved = {-1, {}, false, false, nullptr, 0};
     const QByteArray path = QFile::encodeName(outputPath);
     if (error == 0) error = OpenImageFileSource(path.constData(), &saved);
     if (error == 0 && (saved.info.st_dev != outputInfo.st_dev || saved.info.st_ino != outputInfo.st_ino)) error = ESTALE;

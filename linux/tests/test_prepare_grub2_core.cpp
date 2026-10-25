@@ -317,7 +317,7 @@ private slots:
 
     void borrowedReader()
     {
-        IMAGE_FILE_SOURCE source = {-1, {}, false, false};
+        IMAGE_FILE_SOURCE source = {-1, {}, false, false, nullptr, 0};
         source.fd = ::open(sourcePath.constData(), O_RDONLY | O_CLOEXEC);
         QVERIFY(source.fd >= 0);
         QCOMPARE(fstat(source.fd, &source.info), 0);

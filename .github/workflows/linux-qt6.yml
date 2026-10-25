@@ -50,12 +50,8 @@ permissions:
 
 jobs:
   build-and-test:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -71,7 +67,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/wimlib-source"
           tar -xf "$RUNNER_TEMP/wimlib.tar.gz" --strip-components=1 -C "$RUNNER_TEMP/wimlib-source"
       - name: Configure
-        run: cmake -S linux -B build/linux -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=/usr -DRUFUS_WIMLIB_UPSTREAM="$RUNNER_TEMP/wimlib-source" -DRUFUS_COMPARE_SYSTEM_WIMLIB=ON
+        run: cmake -S linux -B build/linux -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=/usr -DRUFUS_WIMLIB_UPSTREAM="$RUNNER_TEMP/wimlib-source" -DRUFUS_COMPARE_SYSTEM_WIMLIB=ON -DRUFUS_WARNINGS_AS_ERRORS=ON
       - name: Build
         run: cmake --build build/linux -- -k 0
       - name: Validate staged desktop integration
@@ -84,7 +80,7 @@ jobs:
         run: ctest --test-dir build/linux --parallel "$(nproc)" --output-on-failure --no-tests=error -L no-hardware -E '^(rufus_grub2_widgets|rufus_compressed_write_widgets)$'
       - name: Build generated-image fixture probe
         run: |
-          cmake -S linux/probes/libcdio -B build/image-fixture -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          cmake -S linux/probes/libcdio -B build/image-fixture -G Ninja -DCMAKE_BUILD_TYPE=Debug -DRUFUS_WARNINGS_AS_ERRORS=ON
           cmake --build build/image-fixture
       - name: Test classification through the bundled ISO reader
         run: ctest --test-dir build/image-fixture --output-on-failure --no-tests=error

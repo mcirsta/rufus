@@ -41,6 +41,11 @@ uint64_t WimReaderSize(const ISO_FILE_READER* reader)
 	return reader->size;
 }
 
+const struct wimlib_stream_entry* WimDirEntryStreams(const struct wimlib_dir_entry* entry)
+{
+	return entry->streams;
+}
+
 int WimReaderRead(struct filedes* fd, void* buffer, size_t count, off_t offset)
 {
 	int result;

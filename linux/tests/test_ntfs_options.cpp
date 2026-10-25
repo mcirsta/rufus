@@ -79,7 +79,7 @@ private slots:
         auto request = target(); request.fileSystem = FS_UDF; request.clusterSize = 256;
         const auto defaultPacket = rufus::EncodePrepareRequest(request);
         rufus::PrepareImageRequest decoded;
-        for (const QJsonValue value : {QJsonValue(false), QJsonValue(1), QJsonValue("true"), QJsonValue(QJsonObject())}) {
+        for (const QJsonValue& value : {QJsonValue(false), QJsonValue(1), QJsonValue("true"), QJsonValue(QJsonObject())}) {
             auto invalid = defaultPacket; invalid.insert("udfIndexing", value);
             QVERIFY(!rufus::DecodePrepareRequest(invalid, decoded));
         }

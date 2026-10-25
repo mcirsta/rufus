@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 cmake_minimum_required(VERSION 3.21)
 project(RufusLinux LANGUAGES C CXX)
+include("${CMAKE_CURRENT_SOURCE_DIR}/CompilerWarnings.cmake")
 
 # Keep the preview's upstream version tied to the original Windows resource.
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../src/rufus.rc")
@@ -15,7 +16,7 @@ set(RUFUS_PREVIEW_REVISION 48)
 set(RUFUS_LINUX_VERSION "${RUFUS_UPSTREAM_VERSION}-linux-preview.${RUFUS_PREVIEW_REVISION}")
 configure_file(qt/build_info.h.in generated/rufus_build_info.h @ONLY)
 
-find_package(Qt6 6.2 REQUIRED COMPONENTS Core)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core)
 message(STATUS "Building with Qt ${Qt6Core_VERSION}")
 option(RUFUS_BUILD_GUI "Build the Qt Widgets application" ON)
 option(RUFUS_BUILD_VM_TEST "Build the guarded, guest-only native USB test" OFF)
@@ -52,7 +53,7 @@ if(RUFUS_BUILD_GUI OR BUILD_TESTING)
         PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
     target_compile_options(rufus_download_signature PRIVATE -Wall -Wextra -Wpedantic)
     target_link_libraries(rufus_download_signature PUBLIC OpenSSL::Crypto)
-    find_package(Qt6 6.2 REQUIRED COMPONENTS Network)
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Network)
     add_library(rufus_http_download STATIC qt/http_download.cpp qt/http_download.h)
     set_target_properties(rufus_http_download PROPERTIES AUTOMOC ON)
     target_compile_features(rufus_http_download PUBLIC cxx_std_17)
@@ -166,11 +167,13 @@ if(RUFUS_BUILD_GUI OR BUILD_TESTING)
         -include "${CMAKE_CURRENT_SOURCE_DIR}/platform/crt_strings.h")
     target_link_libraries(rufus_winpe_prepare PUBLIC rufus_config_patch)
     add_subdirectory(cdio)
+    include(syslinux/StageBundled.cmake)
+    get_filename_component(RUFUS_BUNDLED_SYSLINUX_PARENT "${RUFUS_BUNDLED_SYSLINUX}" DIRECTORY)
     add_library(bundled_fat STATIC
-        ../src/syslinux/libfat/open.c
-        ../src/syslinux/libfat/cache.c
-        ../src/syslinux/libfat/searchdir.c
-        ../src/syslinux/libfat/fatchain.c
+        ${RUFUS_BUNDLED_SYSLINUX}/libfat/open.c
+        ${RUFUS_BUNDLED_SYSLINUX}/libfat/cache.c
+        ${RUFUS_BUNDLED_SYSLINUX}/libfat/searchdir.c
+        ${RUFUS_BUNDLED_SYSLINUX}/libfat/fatchain.c
     )
     target_compile_features(bundled_fat PRIVATE c_std_11)
     target_compile_definitions(bundled_fat PRIVATE _GNU_SOURCE)
@@ -223,20 +226,21 @@ if(RUFUS_BUILD_GUI OR BUILD_TESTING)
     target_include_directories(rufus_image_source PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
     target_link_libraries(rufus_image_source PUBLIC rufus_iso_scan)
     find_package(ZLIB REQUIRED)
+    add_subdirectory(bled)
     add_library(rufus_bled_zstd STATIC
-        ../src/bled/fse_decompress.c ../src/bled/huf_decompress.c ../src/bled/xxhash.c
-        ../src/bled/zstd_common.c ../src/bled/zstd_decompress.c
-        ../src/bled/zstd_decompress_block.c ../src/bled/zstd_ddict.c
-        ../src/bled/zstd_entropy_common.c ../src/bled/zstd_error_private.c)
+        ${RUFUS_BLED_SOURCE}/fse_decompress.c ${RUFUS_BLED_SOURCE}/huf_decompress.c ${RUFUS_BLED_SOURCE}/xxhash.c
+        ${RUFUS_BLED_SOURCE}/zstd_common.c ${RUFUS_BLED_SOURCE}/zstd_decompress.c
+        ${RUFUS_BLED_SOURCE}/zstd_decompress_block.c ${RUFUS_BLED_SOURCE}/zstd_ddict.c
+        ${RUFUS_BLED_SOURCE}/zstd_entropy_common.c ${RUFUS_BLED_SOURCE}/zstd_error_private.c)
     target_compile_features(rufus_bled_zstd PRIVATE c_std_11)
     target_compile_definitions(rufus_bled_zstd PRIVATE RUFUS_NATIVE_ZSTD)
     target_include_directories(rufus_bled_zstd PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../src")
     target_compile_options(rufus_bled_zstd PRIVATE -Wall -Wextra)
     add_library(rufus_compressed_source STATIC platform/compressed_source.c platform/compressed_source.h
-        platform/compressed_bzip2.c platform/compressed_bzip2.h ../src/bled/bunzip_core.inc
-        platform/compressed_lzma.c platform/compressed_lzma.h ../src/bled/unlzma_core.inc
-        platform/compressed_lzw.c platform/compressed_lzw.h ../src/bled/uncompress_core.inc
-        platform/compressed_zip.c platform/compressed_zip.h ../src/bled/unzip_format.inc
+        platform/compressed_bzip2.c platform/compressed_bzip2.h ${RUFUS_BLED_SOURCE}/bunzip_core.inc
+        platform/compressed_lzma.c platform/compressed_lzma.h ${RUFUS_BLED_SOURCE}/unlzma_core.inc
+        platform/compressed_lzw.c platform/compressed_lzw.h ${RUFUS_BLED_SOURCE}/uncompress_core.inc
+        platform/compressed_zip.c platform/compressed_zip.h ${RUFUS_BLED_SOURCE}/unzip_format.inc
         platform/compressed_xz.c platform/compressed_xz.h
         platform/compressed_zstd.c platform/compressed_zstd.h
         platform/compressed_vtsi.c platform/compressed_vtsi.h
@@ -246,7 +250,7 @@ if(RUFUS_BUILD_GUI OR BUILD_TESTING)
         platform/compressed_ffu.c platform/compressed_ffu.h platform/ffu_codec.c platform/ffu_codec.h
         platform/ffu_catalog.c platform/ffu_catalog.h platform/ffu_production_root.inc
         platform/ffu_manifest.c platform/ffu_manifest.h
-        ../src/image_compression.h ../src/bled/compression.h)
+        ../src/image_compression.h ${RUFUS_BLED_SOURCE}/compression.h)
     target_compile_features(rufus_compressed_source PRIVATE c_std_11)
     target_compile_definitions(rufus_compressed_source PRIVATE _GNU_SOURCE _FILE_OFFSET_BITS=64)
     target_compile_options(rufus_compressed_source PRIVATE -Wall -Wextra -Wpedantic)
@@ -392,8 +396,8 @@ if(RUFUS_BUILD_GUI OR BUILD_TESTING)
             endif()
         endforeach()
     endforeach()
-    add_library(rufus_syslinux_patch STATIC ../src/syslinux/libinstaller/syslxmod.c
-        ../src/syslinux/libinstaller/fs.c ../src/syslinux/libinstaller/setadv.c)
+    add_library(rufus_syslinux_patch STATIC ${RUFUS_BUNDLED_SYSLINUX}/libinstaller/syslxmod.c
+        ${RUFUS_BUNDLED_SYSLINUX}/libinstaller/fs.c ${RUFUS_BUNDLED_SYSLINUX}/libinstaller/setadv.c)
     target_compile_features(rufus_syslinux_patch PRIVATE c_std_11)
     add_library(rufus_syslinux_install STATIC platform/syslinux_install.cpp platform/syslinux_install.h
         platform/syslinux_payload.cpp platform/syslinux_payload.h
@@ -563,7 +567,7 @@ if(RUFUS_BUILD_GUI OR BUILD_TESTING)
     set_target_properties(rufus_qt_analysis PROPERTIES AUTOMOC ON AUTORCC ON)
     target_link_libraries(rufus_qt_analysis PUBLIC rufus_windows_image rufus_qt_reporting rufus_image_source rufus_secure_boot)
     target_compile_options(rufus_qt_analysis PRIVATE -Wall -Wextra -Wpedantic)
-    find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets DBus Concurrent)
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets DBus Concurrent)
     add_library(rufus_udisks STATIC
         platform/device.h
         platform/udisks_client.cpp
@@ -1257,7 +1261,7 @@ if(BUILD_TESTING)
     set_target_properties(test_format_options PROPERTIES AUTOMOC ON)
     target_link_libraries(test_format_options PRIVATE rufus_format_options
         rufus_partition_image rufus_fat_format rufus_qt_reporting Qt6::Test)
-    target_include_directories(test_format_options PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src/syslinux/libfat")
+    target_include_directories(test_format_options PRIVATE "${RUFUS_BUNDLED_SYSLINUX}/libfat")
     target_compile_options(test_format_options PRIVATE -Wall -Wextra -Wpedantic)
     add_test(NAME rufus_format_options COMMAND test_format_options)
     set_tests_properties(rufus_format_options PROPERTIES LABELS "component;image;no-hardware" TIMEOUT 10)
@@ -1919,7 +1923,7 @@ if(BUILD_TESTING)
         LABELS "component;image;no-hardware"
         TIMEOUT 10
     )
-    find_package(Qt6 6.2 REQUIRED COMPONENTS Test)
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
     add_executable(test_freedos_locale_dialog tests/test_freedos_locale_dialog.cpp)
     set_target_properties(test_freedos_locale_dialog PROPERTIES AUTOMOC ON)
     target_compile_options(test_freedos_locale_dialog PRIVATE -Wall -Wextra -Wpedantic)
@@ -2676,3 +2680,17 @@ if(BUILD_TESTING)
         TIMEOUT 60
     )
 endif()
+
+# Keep every native consumer on the same patched private provider headers.
+foreach(target IN ITEMS bundled_fat rufus_syslinux_patch rufus_embedded_efi_files
+        rufus_fat_format rufus_syslinux_install rufus_ntfs_format embedded_efi_probe)
+    if(TARGET ${target})
+        target_include_directories(${target} BEFORE PUBLIC "${RUFUS_BUNDLED_SYSLINUX_PARENT}")
+    endif()
+endforeach()
+foreach(target IN ITEMS rufus_bled_zstd rufus_compressed_source compressed_xz_legacy_probe
+        compressed_bzip2_legacy_probe compressed_lzma_legacy_probe compressed_lzw_legacy_probe)
+    if(TARGET ${target})
+        target_include_directories(${target} BEFORE PRIVATE "${RUFUS_BLED_PARENT}")
+    endif()
+endforeach()

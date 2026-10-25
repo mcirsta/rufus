@@ -43,11 +43,11 @@ void readToGoBcd(const QString& path, const rufus::PrepareImageRequest& request)
     require(disk >= 0, "BCD identity disk");
     if (request.mbr) {
         const quint64 start = readFile(QStringLiteral("/sys/class/block/sda1/start")).trimmed().toULongLong() * 512;
-        require(qFromLittleEndian<quint32>(bytes.constData() + 52) == 1
-            && qFromLittleEndian<quint64>(bytes.constData() + 32) == start
+        require(qFromLittleEndian<quint32>(bytes.constBegin() + 52) == 1
+            && qFromLittleEndian<quint64>(bytes.constBegin() + 32) == start
             && bytes.mid(56, 4) == readBytes(disk, 440, 4), "MBR BCD actual identity");
     } else {
-        require(qFromLittleEndian<quint32>(bytes.constData() + 52) == 0
+        require(qFromLittleEndian<quint32>(bytes.constBegin() + 52) == 0
             && bytes.mid(56, 16) == readBytes(disk, 512 + 56, 16)
             && bytes.mid(32, 16) == readBytes(disk, 1024 + 2 * 128 + 16, 16), "GPT BCD actual Windows partition");
     }

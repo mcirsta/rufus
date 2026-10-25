@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Shared native build for the application and standalone qualification.
 find_package(Perl REQUIRED)
+find_program(RUFUS_SYSLINUX_PATCH_PROGRAM patch REQUIRED)
 get_filename_component(RUFUS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 
 function(add_native_syslinux target upstream major)
@@ -133,6 +134,14 @@ function(add_native_syslinux target upstream major)
     file(READ "${portable}/mtools/syslinux.c" native_main)
     string(REPLACE "    close(dev_fd);\n    sync();" "    free(sectors);\n    free(mtools_conf);\n    close(dev_fd);\n    sync();" native_main "${native_main}")
     file(WRITE "${portable}/mtools/syslinux.c" "${native_main}")
+    set(warning_patch "${CMAKE_CURRENT_SOURCE_DIR}/compiler-warnings-v${major}.patch")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${warning_patch}")
+    execute_process(COMMAND "${RUFUS_SYSLINUX_PATCH_PROGRAM}" --batch --fuzz=0 -p1
+        -i "${warning_patch}" WORKING_DIRECTORY "${portable}"
+        RESULT_VARIABLE patch_result OUTPUT_VARIABLE patch_output ERROR_VARIABLE patch_error)
+    if(NOT patch_result EQUAL 0)
+        message(FATAL_ERROR "Syslinux ${version} warning patch failed: ${patch_output}${patch_error}")
+    endif()
     add_executable(${target} ${installer_sources} ${generated_sources})
     set_target_properties(${target} PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES)
     target_compile_definitions(${target} PRIVATE _FILE_OFFSET_BITS=64)

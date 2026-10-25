@@ -4,10 +4,12 @@ This is Linux preview @RUFUS_PREVIEW_REVISION@, based on Rufus @RUFUS_UPSTREAM_V
 development port with a working Qt6 desktop interface and native Linux media
 operations. Complete Windows Rufus feature parity remains in development.
 
-CP79 / Preview48 ships the qualified native Linux fixes: standalone GRUB4DOS
-creation preserves the selected bootloader, and source builds support older Qt
-and Linux headers. Platform filesystem definitions take precedence over guarded
-fallbacks. Ubuntu 22.04 and 24.04 CI pass; MinGW CI is disabled.
+Native Linux builds require Qt 6.4 or newer and use nondeprecated Qt APIs.
+CI targets Ubuntu 24.04 and treats compiler warnings as errors. Third-party
+warning fixes are applied as tracked patches to private build copies, preserving
+the original sources and boot payloads. MinGW CI is disabled. Standalone
+GRUB4DOS creation preserves the selected bootloader, and platform filesystem
+definitions take precedence over guarded fallbacks.
 
 The release reuses the existing media, desktop and regression evidence, with
 focused checks for the fixes and rebuilt packages. Original Rufus translations

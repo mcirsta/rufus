@@ -681,7 +681,7 @@ private slots:
         input_ = nullptr;
         CloseIsoFileReader(&reader_);
         CloseIsoAnalysisSource(&view_);
-        const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, nullptr, nullptr, splitInput};
+        const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, nullptr, nullptr, splitInput, 0, nullptr, false, false, false, nullptr, nullptr};
         ISO_EXTRACT_RESULT result = {};
         const QByteArray path = image_.toUtf8();
         const QByteArray before = imageHash();
@@ -717,7 +717,7 @@ private slots:
     void extractionFailureProgress()
     {
         makeInput(true, WIMLIB_COMPRESSION_TYPE_LZX, 0);
-        const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, nullptr, nullptr, true};
+        const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, nullptr, nullptr, true, 0, nullptr, false, false, false, nullptr, nullptr};
         ISO_EXTRACT_RESULT result = {};
         fault = CancelFirstPart;
         active = nativeMode = true;
@@ -744,7 +744,7 @@ private slots:
         QFETCH(int, failure);
         QFETCH(int, expected);
         makeInput(true, WIMLIB_COMPRESSION_TYPE_LZX, 0);
-        const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, nullptr, nullptr, true};
+        const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, nullptr, nullptr, true, 0, nullptr, false, false, false, nullptr, nullptr};
         ISO_EXTRACT_RESULT result = {};
         fault = Fault(failure);
         active = nativeMode = true;

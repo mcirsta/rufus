@@ -160,7 +160,7 @@ int main(int argc, char** argv)
 		atoi(argv[4]) == 16 ? FS_FAT16 : FS_FAT32;
 	MBR_IMAGE_OPTIONS options = { strtoull(argv[3], NULL, 10), SECTOR_BYTES, 63,
 		(uint32_t)strtoul(argv[5], NULL, 10), 0x78563412, 0,
-		file_system, boot_code, 0 };
+		file_system, boot_code, 0 , 0, false, false, false, 0};
 	if (strcmp(fault, "wrong-id") == 0)
 		options.disk_signature++;
 	if (strcmp(fault, "sector") == 0)

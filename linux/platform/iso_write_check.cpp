@@ -911,7 +911,7 @@ static int checkIsoWriteImage(const PrepareImageRequest& request, uid_t caller, 
     const QByteArray path = QFile::encodeName(request.imagePath);
     const ISO_BOOT_RESOURCES bootResources = {{reinterpret_cast<const uint8_t*>(result.syslinuxResources.oldModules[0].constData()),reinterpret_cast<const uint8_t*>(result.syslinuxResources.oldModules[1].constData())},
         {size_t(result.syslinuxResources.oldModules[0].size()),size_t(result.syslinuxResources.oldModules[1].size())}};
-    const ISO_EXTRACT_OPTIONS options = {analysis, label.constData(), path.constData(), result.splitInstallWim, request.persistenceSize, nullptr, request.preserveTimestamps, request.fileSystem == FS_NTFS && request.ntfsCompression && request.clusterSize <= NtfsCompressionClusterBytes, request.fileSystem == FS_NTFS, &bootResources};
+    const ISO_EXTRACT_OPTIONS options = {analysis, label.constData(), path.constData(), result.splitInstallWim, request.persistenceSize, nullptr, request.preserveTimestamps, request.fileSystem == FS_NTFS && request.ntfsCompression && request.clusterSize <= NtfsCompressionClusterBytes, request.fileSystem == FS_NTFS, &bootResources, nullptr};
     const uint64_t fileLimit = request.fileSystem == FS_NTFS ? 0 : UINT32_MAX;
     error = CheckIsoTree(retained.retainedPath(), &options, fileLimit, &result.tree);
     if (error == 0 && request.runtimeValidation) {

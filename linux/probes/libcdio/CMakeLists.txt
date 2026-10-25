@@ -2,6 +2,7 @@
 # Standalone CP3 architecture experiment, not part of the application build.
 cmake_minimum_required(VERSION 3.21)
 project(RufusCdioProbe LANGUAGES C)
+include("${CMAKE_CURRENT_LIST_DIR}/../../CompilerWarnings.cmake")
 include(CTest)
 
 get_filename_component(RUFUS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)

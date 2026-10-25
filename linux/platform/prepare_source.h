@@ -31,7 +31,7 @@ public:
 
 private:
     const PrepareImageRequest& request_;
-    IMAGE_FILE_SOURCE source_ = {-1, {}, false, false, nullptr};
+    IMAGE_FILE_SOURCE source_ = {-1, {}, false, false, nullptr, 0};
     QByteArray retainedPath_;
 };
 

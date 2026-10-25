@@ -63,6 +63,7 @@
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <memory>
+#include <type_traits>
 #include <sys/ioctl.h>
 #include <sys/sysmacros.h>
 #include <unistd.h>
@@ -958,7 +959,9 @@ private slots:
         QVERIFY(restored.ignoreBootMarker());
         QMimeData mime;
         mime.setUrls({QUrl::fromLocalFile(path), QUrl::fromLocalFile(sourcePath_)});
-        QDragEnterEvent enter(QPoint(10, 10), Qt::CopyAction | Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
+        using DragPosition = std::conditional_t<std::is_constructible_v<QDragEnterEvent,
+            QPointF, Qt::DropActions, const QMimeData*, Qt::MouseButtons, Qt::KeyboardModifiers>, QPointF, QPoint>;
+        QDragEnterEvent enter(DragPosition(10, 10), Qt::CopyAction | Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
         QApplication::sendEvent(window_.get(), &enter);
         QVERIFY(enter.isAccepted());
         QDropEvent drop(QPointF(10, 10), Qt::CopyAction | Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);

@@ -191,7 +191,7 @@ static int WriteImage(const IMAGE_FILE_SOURCE* source, const char* source_path,
 	int target_fd, uint64_t device, uint64_t capacity, uint64_t offset, uint64_t extent_size,
 	RAW_WRITE_RESULT* result)
 {
-	struct stat initial_target, current_target;
+	struct stat initial_target = { 0 }, current_target;
 	uint8_t* buffer;
 	int error;
 

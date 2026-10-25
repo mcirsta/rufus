@@ -292,11 +292,11 @@ void runFfuGeometryQtCases(rufus::PrepareImageRequest base, const QString& rawPa
     const qint64 storedBytes = output.size();
     require(output.seek(24), "FFU capture security geometry");
     const QByteArray sizes = output.read(8); require(sizes.size() == 8, "FFU security lengths");
-    const quint64 imageOffset = (32 + quint64(qFromLittleEndian<quint32>(sizes.constData()))
-        + qFromLittleEndian<quint32>(sizes.constData() + 4) + 131071) / 131072 * 131072;
+    const quint64 imageOffset = (32 + quint64(qFromLittleEndian<quint32>(sizes.constBegin()))
+        + qFromLittleEndian<quint32>(sizes.constBegin() + 4) + 131071) / 131072 * 131072;
     require(output.seek(qint64(imageOffset + 16)), "FFU capture manifest geometry");
     const QByteArray length = output.read(4); require(length.size() == 4, "FFU manifest length");
-    const quint32 manifestBytes = qFromLittleEndian<quint32>(length.constData());
+    const quint32 manifestBytes = qFromLittleEndian<quint32>(length.constBegin());
     const quint64 storeOffset = (imageOffset + 24 + manifestBytes + 131071) / 131072 * 131072;
     require(storedBytes > 0 && quint64(storedBytes) < sourceBytes / 8
         && output.seek(qint64(storeOffset + 8)) && output.read(2) == QByteArray::fromHex("0300"),

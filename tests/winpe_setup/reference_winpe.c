@@ -23,7 +23,7 @@ void ReferencePatchWinPe(char* buffer, uint32_t size, unsigned int index, int us
 	DWORD i, j;
 	// Remove CRC check for 32 bit part of setupldr.bin from Win2k3
 	if ((size > 0x2061) && (buffer[0x2060] == 0x74) && (buffer[0x2061] == 0x03)) {
-		buffer[0x2060] = 0xeb;
+		buffer[0x2060] = (char)0xeb;
 		buffer[0x2061] = 0x1a;
 		uprintf("  0x00002060: 0x74 0x03 -> 0xEB 0x1A (disable Win2k3 CRC check)\n");
 	}

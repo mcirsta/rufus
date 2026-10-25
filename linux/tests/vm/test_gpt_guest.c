@@ -225,7 +225,7 @@ int main(void)
 	Require(fstat(fd, &info) == 0 && S_ISBLK(info.st_mode), "block descriptor");
 	Require(ioctl(fd, BLKGETSIZE64, &capacity) == 0 && capacity == DISK_BYTES, "fixture capacity");
 	Require(ioctl(fd, BLKSSZGET, &sector) == 0, "native sector size");
-	GPT_IMAGE_OPTIONS options = { DISK_BYTES, SECTOR_BYTES, 63, SECTOR_BYTES, (uint64_t)info.st_rdev, 0 };
+	GPT_IMAGE_OPTIONS options = { DISK_BYTES, SECTOR_BYTES, 63, SECTOR_BYTES, (uint64_t)info.st_rdev, 0 , 0, false, false, 0};
 	printf("RUFUS_GPT_DEVICE SECTOR=%d CAPACITY=%" PRIu64 "\n", sector, capacity);
 	if (sector == 4096) {
 		CheckRequest("native-4k", fd, options, ENOTSUP, false);

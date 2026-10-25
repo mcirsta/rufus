@@ -166,7 +166,7 @@ int CheckFormatSettings(const PrepareImageRequest& request, const GPT_IMAGE_RESU
         return EINVAL;
     const quint32 cluster = FormatFatClusterSize(request, partition);
     if (request.msDos && request.sizeChecks && cluster >= 65536) return EINVAL;
-    FAT_FORMAT_OPTIONS format = {partition.offset, partition.size, cluster, request.volumeId, {0}};
+    FAT_FORMAT_OPTIONS format = {partition.offset, partition.size, cluster, request.volumeId, {0}, false, 0, 0};
     format.sector_size = request.logicalSectorSize;
     format.physical_sector_size = request.physicalSectorSize;
     memcpy(format.label, label.constData(), size_t(label.size()));

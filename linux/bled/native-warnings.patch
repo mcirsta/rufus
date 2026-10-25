@@ -1,0 +1,71 @@
+--- a/bunzip_core.inc
++++ b/bunzip_core.inc
+@@ -546,7 +546,7 @@
+ 	   it doesn't qualify as a run (hence writeRunCountdown=5). */
+ 	if (dbufCount) {
+ 		uint32_t tmp;
+-		if ((int)origPtr >= dbufCount) return RETVAL_DATA_ERROR;
++		if (origPtr >= dbufCount) return RETVAL_DATA_ERROR;
+ 		tmp = dbuf[origPtr];
+ 		bd->writeCurrent = (uint8_t)tmp;
+ 		bd->writePos = (tmp >> 8);
+--- a/decompress_bunzip2.c
++++ b/decompress_bunzip2.c
+@@ -123,7 +123,7 @@
+ IF_DESKTOP(long long) int FAST_FUNC
+ unpack_bz2_stream(transformer_state_t *xstate)
+ {
+-	IF_DESKTOP(long long total_written = 0;)
++	IF_DESKTOP(volatile long long total_written = 0;)
+ 	bunzip_data *bd;
+ 	char *outbuf;
+ 	int i, nwrote;
+@@ -186,7 +186,7 @@
+ 		len = bd->inbufCount - bd->inbufPos;
+ 		memcpy(outbuf, &bd->inbuf[bd->inbufPos], len);
+ 		if (len < 2) {
+-			if (safe_read(xstate->src_fd, outbuf + len, 2 - len) != 2 - len)
++			if (safe_read(xstate->src_fd, outbuf + len, 2 - len) != (int)(2 - len))
+ 				break;
+ 			len = 2;
+ 		}
+@@ -206,7 +206,7 @@
+ char* FAST_FUNC
+ unpack_bz2_data(const char *packed, int packed_len, int unpacked_len)
+ {
+-	char *outbuf = NULL;
++	char *volatile outbuf = NULL;
+ 	bunzip_data *bd = NULL;
+ 	int i;
+ 	jmp_buf jmpbuf;
+--- a/uncompress_core.inc
++++ b/uncompress_core.inc
+@@ -288,7 +288,7 @@
+ 						if (outpos >= OBUFSIZ) {
+ 							retval = transformer_write(xstate, outbuf, outpos);
+ 							if (retval != (ssize_t)outpos) {
+-								retval = (retval == -ENOSPC)?xstate->mem_output_size_max:-1;
++								retval = (retval == -ENOSPC)?(IF_DESKTOP(long long) int)xstate->mem_output_size_max:-1;
+ 								goto err;
+ 							}
+ 							IF_DESKTOP(total_written += outpos;)
+@@ -318,7 +318,7 @@
+ 	if (outpos > 0) {
+ 		retval = transformer_write(xstate, outbuf, outpos);
+ 		if (retval != (ssize_t)outpos)
+-			retval = (retval == -ENOSPC)?xstate->mem_output_size_max:-1;
++			retval = (retval == -ENOSPC)?(IF_DESKTOP(long long) int)xstate->mem_output_size_max:-1;
+ 		IF_DESKTOP(total_written += outpos;)
+ 	}
+ 
+--- a/unlzma_core.inc
++++ b/unlzma_core.inc
+@@ -540,7 +540,7 @@
+ 		nwrote = transformer_write(xstate, buffer, buffer_pos);
+ 		if (nwrote != (ssize_t)buffer_pos) {
+  bad:
+-			total_written = (nwrote == -ENOSPC)?xstate->mem_output_size_max:-1;
++			total_written = (nwrote == -ENOSPC)?(IF_DESKTOP(long long) int)xstate->mem_output_size_max:-1;
+ 		}
+ 		rc_free(rc);
+ 		free(p);

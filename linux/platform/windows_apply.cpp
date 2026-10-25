@@ -5,6 +5,7 @@
 #include "progress_policy.h"
 extern "C" {
 #include "native_ntfs_efs.h"
+#include "native_input.h"
 }
 
 #include <QSet>
@@ -51,9 +52,10 @@ int countEntry(const wimlib_dir_entry* entry, void* opaque)
         }
         context.inodes.insert(entry->hard_link_group_id);
     }
+    const wimlib_stream_entry* streams = WimDirEntryStreams(entry);
     for (quint64 stream = 0; stream <= entry->num_named_streams; ++stream)
     {
-        const quint64 bytes = entry->streams[stream].resource.uncompressed_size;
+        const quint64 bytes = streams[stream].resource.uncompressed_size;
         if (bytes > quint64(INT64_MAX) - context.plan.bytes)
             return context.error = EFBIG;
         context.plan.bytes += bytes;

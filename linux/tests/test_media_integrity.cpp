@@ -231,9 +231,9 @@ private slots:
             QVERIFY(process.waitForFinished(10000)); QCOMPARE(process.exitCode(), 0);
             ExtractionIntegrity collector;
             const ISO_EXTRACT_EVENTS events = {&collector, true, ExtractionIntegrity::begin,
-                ExtractionIntegrity::copied, ExtractionIntegrity::modified, nullptr};
+                ExtractionIntegrity::copied, ExtractionIntegrity::modified, nullptr, nullptr, nullptr};
             const QByteArray encoded = QFile::encodeName(image), output = QFile::encodeName(target.temporary.path());
-            const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, "DEST", encoded.constData(), false, 0, &events};
+            const ISO_EXTRACT_OPTIONS options = {{true, true, {0, 0}}, "DEST", encoded.constData(), false, 0, &events, false, false, false, nullptr, nullptr};
             ISO_EXTRACT_RESULT planned = {}, extracted = {};
             QCOMPARE(CheckIsoTree(encoded.constData(), &options, 0, &planned), 0);
             ISO_ANALYSIS analysis = {}; ISO_ANALYSIS_SOURCE view = {};

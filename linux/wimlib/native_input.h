@@ -20,6 +20,8 @@ struct filedes;
  * Solid archives cannot be split directly. Exports can retain references longer
  * and remain unqualified. */
 int OpenWimFromIsoReader(struct iso_file_reader* reader, int flags, WIMStruct** wim);
+/* C owns the flexible stream array; C++ callers retain the fixed prefix ABI. */
+const struct wimlib_stream_entry* WimDirEntryStreams(const struct wimlib_dir_entry* entry);
 uint64_t WimReaderSize(const struct iso_file_reader* reader);
 int WimReaderRead(struct filedes* fd, void* buffer, size_t count, off_t offset);
 off_t WimReaderSeek(struct filedes* fd, off_t offset);

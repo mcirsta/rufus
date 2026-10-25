@@ -77,7 +77,7 @@ QMap<QString, QByteArray> exportFiles(const QString& root)
 void mountExportSource(const rufus::PrepareImageRequest& base, bool readOnly, const QString& type = QStringLiteral("vfat"))
 {
     require(QDir().mkpath(QStringLiteral("/mnt/target")), "desktop source mountpoint");
-    if (type == QLatin1String("vfat")) require(mount("/dev/sda1", "/mnt/target", "vfat", readOnly ? MS_RDONLY : 0, "uid=1000,gid=1000,utf8=1") == 0,
+    if (type == QLatin1String("vfat")) require(mount("/dev/sda1", "/mnt/target", "vfat", readOnly ? static_cast<unsigned long>(MS_RDONLY) : 0UL, "uid=1000,gid=1000,utf8=1") == 0,
         "desktop source filesystem mounted");
     auto objects = rawObjects;
     const QDBusObjectPath member(base.objectPath + QStringLiteral("1"));

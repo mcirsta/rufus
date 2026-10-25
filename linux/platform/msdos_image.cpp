@@ -84,7 +84,8 @@ int ReadMsDosImage(const QString& path, uid_t owner, QByteArray& bytes)
     if (error == 0 && changed) error = ESTALE;
     if (close(fd) != 0 && error == 0) error = errno;
     if (error == 0) error = validate(bytes);
-    if (error != 0) bytes.clear(); return error;
+    if (error != 0) bytes.clear();
+    return error;
 }
 int StoreMsDosImage(const QString& directory, const QByteArray& bytes)
 {

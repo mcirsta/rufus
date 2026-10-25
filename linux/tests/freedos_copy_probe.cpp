@@ -288,7 +288,7 @@ int main(int argc, char** argv)
     }
     const off_t position = lseek(root, 0, SEEK_CUR);
     const int before = descriptorCount();
-    rufus::FreeDosCopyResult result;
+    static rufus::FreeDosCopyResult result;
     active = &result;
     int error = 0;
     unsigned payloadFiles = 0;

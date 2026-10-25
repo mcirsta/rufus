@@ -8,7 +8,7 @@ pkgdesc='Create bootable USB drives from disk and ISO images (Linux preview)'
 arch=('x86_64')
 url='https://github.com/mcirsta/rufus'
 license=('GPL-3.0-or-later')
-depends=('qt6-base>=6.2' 'udisks2' 'polkit' 'util-linux-libs' 'e2fsprogs'
+depends=('qt6-base>=6.4' 'udisks2' 'polkit' 'util-linux-libs' 'e2fsprogs'
          'libntfs-3g' 'hivex' 'openssl' 'zlib' 'libgcc' 'libstdc++' 'glibc'
          'hicolor-icon-theme')
 makedepends=('cmake>=3.21' 'ninja' 'perl')

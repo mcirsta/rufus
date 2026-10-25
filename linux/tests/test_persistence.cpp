@@ -48,9 +48,9 @@ class TestPersistence : public QObject
 private slots:
     void invalidGeometry()
     {
-        GPT_IMAGE_OPTIONS gpt = {diskBytes, 512, 63, 4096, 0, 0, persistenceBytes};
+        GPT_IMAGE_OPTIONS gpt = {diskBytes, 512, 63, 4096, 0, 0, persistenceBytes, false, false, 0};
         MBR_IMAGE_OPTIONS mbr = {diskBytes, 512, 63, 4096, 0, 0,
-            FS_FAT32, MBR_BOOT_SYSLINUX, 0, persistenceBytes};
+            FS_FAT32, MBR_BOOT_SYSLINUX, 0, persistenceBytes, false, false, false, 0};
         for (quint64 size : {persistenceBytes - 1, diskBytes, quint64(UINT64_MAX)})
         {
             gpt.persistence_size = mbr.persistence_size = size;
@@ -83,9 +83,9 @@ private slots:
         QVERIFY(disk.resize(diskBytes));
         QCOMPARE(lseek(disk.handle(), 17, SEEK_SET), off_t(17));
         const GPT_IMAGE_OPTIONS gptOptions = {diskBytes, 512, 63, 4096, 0,
-            payload ? payloadBytes : 0, persistenceBytes};
+            payload ? payloadBytes : 0, persistenceBytes, false, false, 0};
         const MBR_IMAGE_OPTIONS mbrOptions = {diskBytes, 512, 63, 4096, 0x12345678, 0,
-            FS_NTFS, MBR_BOOT_SYSLINUX, payload ? payloadBytes : 0, persistenceBytes};
+            FS_NTFS, MBR_BOOT_SYSLINUX, payload ? payloadBytes : 0, persistenceBytes, false, false, false, 0};
         GPT_IMAGE_RESULT layout = {};
         MBR_IMAGE_RESULT mbr = {};
         if (gpt)

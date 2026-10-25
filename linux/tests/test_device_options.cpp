@@ -35,7 +35,7 @@ private slots:
             QCOMPARE(decoded.deviceClass, request.deviceClass); QCOMPARE(packet.contains("deviceClass"), kind != 1);
         }
         auto packet = rufus::EncodePrepareRequest(request);
-        for (const QJsonValue value : {QJsonValue(0), QJsonValue(1), QJsonValue(3), QJsonValue(32),
+        for (const QJsonValue& value : {QJsonValue(0), QJsonValue(1), QJsonValue(3), QJsonValue(32),
             QJsonValue(-1), QJsonValue(2.5), QJsonValue(true), QJsonValue("2"), QJsonValue(QJsonObject())}) {
             packet.insert("deviceClass", value); rufus::PrepareImageRequest decoded;
             QVERIFY(!rufus::DecodePrepareRequest(packet, decoded));
@@ -48,7 +48,7 @@ private slots:
     {
         rufus::SelectionController controller; rufus::MainWindow window(controller);
         QCOMPARE(controller.deviceClasses(), quint32(19));
-        struct Shortcut { int key; quint32 expected; };
+        struct Shortcut { QKeyCombination key; quint32 expected; };
         const Shortcut cases[] = {{Qt::ALT | Qt::Key_W, 23}, {Qt::ALT | Qt::Key_G, 17},
             {Qt::ALT | Qt::Key_G, 23}, {Qt::CTRL | Qt::ALT | Qt::Key_F, 31},
             {Qt::CTRL | Qt::ALT | Qt::Key_F, 23}};

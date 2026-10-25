@@ -114,7 +114,7 @@ static int DescriptorCount(void)
 
 int main(int argc, char** argv)
 {
-	GPT_IMAGE_OPTIONS options = { 0, SECTOR_BYTES, 63, SECTOR_BYTES, 0, 0 };
+	GPT_IMAGE_OPTIONS options = { 0, SECTOR_BYTES, 63, SECTOR_BYTES, 0, 0 , 0, false, false, 0};
 	GPT_IMAGE_RESULT result;
 	int fd, error, before, original_flags, flags;
 

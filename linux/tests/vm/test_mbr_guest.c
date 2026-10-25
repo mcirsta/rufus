@@ -107,7 +107,7 @@ int main(void)
 	Require(ioctl(fd, BLKSSZGET, &sector) == 0, "native sector size");
 	printf("RUFUS_MBR_DEVICE SECTOR=%d CAPACITY=%" PRIu64 "\n", sector, capacity);
 	MBR_IMAGE_OPTIONS options = {DISK_BYTES, SECTOR_BYTES, 63, SECTOR_BYTES,
-		0x78563412, (uint64_t)info.st_rdev, FS_FAT32, MBR_BOOT_SYSLINUX, 0};
+		0x78563412, (uint64_t)info.st_rdev, FS_FAT32, MBR_BOOT_SYSLINUX, 0, 0, false, false, false, 0};
 	if (sector == 4096) {
 		CheckRequest("native-4k", fd, options, ENOTSUP, false);
 		Require(close(fd) == 0, "4K descriptor close");

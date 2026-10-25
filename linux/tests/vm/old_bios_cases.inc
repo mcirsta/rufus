@@ -38,7 +38,7 @@ void runOldBiosExtCases()
         require(disk >= 0 && fstat(disk, &whole) == 0 && ioctl(disk, BLKGETSIZE64, &size) == 0 && size == bytes,
             "old-BIOS ext scratch device claim");
         const MBR_IMAGE_OPTIONS options = {bytes, 512, 63, 256, 0x78563412, quint64(whole.st_rdev),
-            filesystem, MBR_BOOT_GRUB2, 0, 0, true};
+            filesystem, MBR_BOOT_GRUB2, 0, 0, true, false, false, 0};
         MBR_IMAGE_RESULT planned = {};
         require(PrepareMbrTarget(disk, &options, &planned) == 0 && planned.offset == 64512,
             "old-BIOS ext native table and default sentinel alignment");
@@ -98,7 +98,7 @@ void runOldBiosCases(const rufus::PrepareImageRequest& base, const QString& rawP
         require(held && process.state() == rufus::PrepareImageProcess::State::Complete
             && readFile(QStringLiteral("/run/format-launches")) == "launch\n", "old-BIOS one authorization and joined result");
         const MBR_IMAGE_OPTIONS options{base.size, 512, 63, request.clusterSize, 0, 0, filesystem,
-            rufus::FormatMbrBootCode(request), 0, 0, true};
+            rufus::FormatMbrBootCode(request), 0, 0, true, false, false, 0};
         MBR_IMAGE_RESULT planned = {}; require(PlanMbrImageLayout(&options, &planned) == 0, "old-BIOS expected geometry");
         checkOldBiosTable(QStringLiteral("/dev/sda"), planned, filesystem);
         printf("RUFUS_OLD_BIOS_CASE FS=%d OFFSET=%llu READBACK=1 HELPER=1 AUTH=1 JOINED=1\n", filesystem,

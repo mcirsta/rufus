@@ -237,7 +237,7 @@ FAT32_FORMAT_OPTIONS prepareDisk(rufus::PrepareDeviceTarget& target, const rufus
     quint64 offset, size;
     if (table == Table::Mbr)
     {
-        const MBR_IMAGE_OPTIONS options = {diskBytes, sectorBytes, 63, request.clusterSize, 0x78563412, request.device, request.fileSystem, MBR_BOOT_SYSLINUX, bootBytes};
+        const MBR_IMAGE_OPTIONS options = {diskBytes, sectorBytes, 63, request.clusterSize, 0x78563412, request.device, request.fileSystem, MBR_BOOT_SYSLINUX, bootBytes, 0, false, false, false, 0};
         MBR_IMAGE_RESULT result;
         require(PrepareMbrTarget(target.descriptor(), &options, &result) == 0, "prepare MBR");
         offset = result.offset;
@@ -245,7 +245,7 @@ FAT32_FORMAT_OPTIONS prepareDisk(rufus::PrepareDeviceTarget& target, const rufus
     }
     else
     {
-        const GPT_IMAGE_OPTIONS options = {diskBytes, sectorBytes, 63, sectorBytes, request.device, 0};
+        const GPT_IMAGE_OPTIONS options = {diskBytes, sectorBytes, 63, sectorBytes, request.device, 0, 0, false, false, 0};
         GPT_IMAGE_RESULT result;
         require(CreateGptImagePartition(target.descriptor(), &options, &result) == 0, "prepare GPT");
         offset = result.offset;
@@ -267,7 +267,7 @@ FAT32_FORMAT_OPTIONS prepareDisk(rufus::PrepareDeviceTarget& target, const rufus
         if (symlink(relative.constData(), link.constData()) != 0)
             require(errno == EEXIST, "partition link");
     }
-    FAT32_FORMAT_OPTIONS format = {offset, size, request.clusterSize, request.volumeId, "RUFUS TEST"};
+    FAT32_FORMAT_OPTIONS format = {offset, size, request.clusterSize, request.volumeId, "RUFUS TEST", false, 0, 0};
     return format;
 }
 
@@ -531,12 +531,12 @@ void runSfdCase(const SfdCase& test, const rufus::PrepareImageRequest& request)
     // refreshes it, even though on-media metadata is now cleared for SFD.
     if (strcmp(test.name, "table-still-present") != 0)
     {
-        const SFD_IMAGE_OPTIONS layout = {request.size, sectorBytes, request.device};
+        const SFD_IMAGE_OPTIONS layout = {request.size, sectorBytes, request.device, 0};
         SFD_IMAGE_RESULT cleared;
         require(PrepareSfdTarget(target.descriptor(), &layout, &cleared) == 0, "SFD metadata preparation");
     }
     require(QFile::exists(QStringLiteral("/sys/class/block/sda1/partition")), "stale kernel partition present");
-    FAT32_FORMAT_OPTIONS options = {0, request.size, request.clusterSize, request.volumeId, "RUFUS SFD"};
+    FAT32_FORMAT_OPTIONS options = {0, request.size, request.clusterSize, request.volumeId, "RUFUS SFD", false, 0, 0};
     const QByteArray before = readBytes(target.descriptor(), 0, 64 * 1024);
     if (strcmp(test.name, "wrong-offset") == 0)
         options.offset = sectorBytes;
@@ -668,7 +668,7 @@ FAT32_FORMAT_OPTIONS prepareInstallerTarget(rufus::PrepareDeviceTarget& target, 
     require(target.format(format, "/usr/bin/mkfs.fat", formatted) == 0, "installer FAT format");
     require(target.mount(format.offset, format.size) == 0, "installer extraction mount");
     const ISO_ANALYSIS_OPTIONS scanOptions = {true, false, {0x0407, 0x0604}};
-    const ISO_EXTRACT_OPTIONS extractOptions = {scanOptions, "RUFUS TEST", "/source.iso", false};
+    const ISO_EXTRACT_OPTIONS extractOptions = {scanOptions, "RUFUS TEST", "/source.iso", false, 0, nullptr, false, false, false, nullptr, nullptr};
     ISO_EXTRACT_RESULT extracted;
     require(ExtractIsoTree("/source.iso", target.mountPath(), &extractOptions, &extracted) == 0, "shared ISO extraction");
     int syncError = 0;
@@ -692,7 +692,7 @@ void runInstallCase(const InstallCase& test, const rufus::PrepareImageRequest& r
     const int scanned = AnalyzeIsoImageWithSource(sourcePath.constData(), uint64_t(retained.info.st_size),
         &scanOptions, &analysis, &source);
     require(scanned == ISO_SCAN_OK || scanned == ISO_SCAN_PARTIAL, "installer source scan");
-    MBR_IMAGE_OPTIONS layout = {diskBytes, sectorBytes, 63, request.clusterSize, 0x78563412, request.device, request.fileSystem, MBR_BOOT_SYSLINUX, 0};
+    MBR_IMAGE_OPTIONS layout = {diskBytes, sectorBytes, 63, request.clusterSize, 0x78563412, request.device, request.fileSystem, MBR_BOOT_SYSLINUX, 0, 0, false, false, false, 0};
     rufus::NativeSyslinuxRequest install;
     install.target = target.descriptor();
     install.format = format;
@@ -2454,7 +2454,7 @@ void checkUefiNtfsPreparation(rufus::PrepareImageRequest request)
     const QByteArray payload = readFile(payloadPath);
     require(!payload.isEmpty(), "bundled boot payload fixture");
     const GPT_IMAGE_OPTIONS options = {request.size, sectorBytes, 63,
-        request.clusterSize, request.device, quint64(payload.size())};
+        request.clusterSize, request.device, quint64(payload.size()), 0, false, false, 0};
     GPT_IMAGE_RESULT layout = {};
     rufus::PrepareImageRequest bootRequest = request;
     bootRequest.nonBootable = false;
@@ -2499,7 +2499,7 @@ void checkUefiNtfsPreparation(rufus::PrepareImageRequest request)
         if (request.mbr)
         {
             const MBR_IMAGE_OPTIONS mbrOptions = {request.size, sectorBytes, 63, request.clusterSize,
-                0, request.device, request.fileSystem, MBR_BOOT_ZERO, quint64(payload.size())};
+                0, request.device, request.fileSystem, MBR_BOOT_ZERO, quint64(payload.size()), 0, false, false, false, 0};
             MBR_IMAGE_RESULT prepared;
             require(PrepareMbrTarget(target.descriptor(), &mbrOptions, &prepared) == 0, "seed MBR boot partition");
         }

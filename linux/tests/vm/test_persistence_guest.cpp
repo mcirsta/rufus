@@ -117,7 +117,7 @@ void threePartitionBackend(const QDBusConnection& bus)
     request.persistenceSize = persistenceBytes;
     request.persistenceExtVersion = 4;
     const GPT_IMAGE_OPTIONS options = {diskBytes, 512, 63, 4096, device.number,
-        1024 * 1024, persistenceBytes};
+        1024 * 1024, persistenceBytes, false, false, 0};
     GPT_IMAGE_RESULT layout = {};
     sourceCaller = false;
     {

@@ -73,7 +73,7 @@ int PrepareIsoSource::close()
     const int parentsClosed = CloseVirtualDiskSource(source_.virtual_disk);
     source_.virtual_disk = nullptr;
     const int descriptor = source_.fd;
-    source_ = {-1, {}, false, false, nullptr};
+    source_ = {-1, {}, false, false, nullptr, 0};
     retainedPath_.clear();
     if (descriptor >= 0 && ::close(descriptor) != 0)
         return errno;
@@ -183,7 +183,7 @@ int loadPrepareBootFile(const PrepareImageRequest& request, uid_t caller,
     if (IsIsoScanCancelled())
         return ECANCELED;
     const QByteArray path = QFile::encodeName(request.grub2CorePath);
-    IMAGE_FILE_SOURCE source = {-1, {}, false, false, nullptr};
+    IMAGE_FILE_SOURCE source = {-1, {}, false, false, nullptr, 0};
     source.fd = ::open(path.constData(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
     if (source.fd < 0)
         return errno;

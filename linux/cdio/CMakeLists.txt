@@ -7,7 +7,23 @@ include(CheckTypeSize)
 include(CheckCSourceCompiles)
 find_package(Iconv REQUIRED)
 get_filename_component(RUFUS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
-set(CDIO_SOURCE "${RUFUS_ROOT}/src/libcdio")
+# Keep bundled upstream sources unchanged and patch only native build copies.
+find_program(RUFUS_CDIO_PATCH patch REQUIRED)
+set(CDIO_UPSTREAM "${RUFUS_ROOT}/src/libcdio")
+set(CDIO_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/source")
+file(GLOB_RECURSE cdio_inputs CONFIGURE_DEPENDS LIST_DIRECTORIES false "${CDIO_UPSTREAM}/*")
+foreach(input IN LISTS cdio_inputs)
+    file(RELATIVE_PATH name "${CDIO_UPSTREAM}" "${input}")
+    configure_file("${input}" "${CDIO_SOURCE}/${name}" COPYONLY)
+endforeach()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS native-warnings.patch)
+execute_process(COMMAND "${RUFUS_CDIO_PATCH}" --batch --fuzz=0 -p1
+    -i "${CMAKE_CURRENT_SOURCE_DIR}/native-warnings.patch"
+    WORKING_DIRECTORY "${CDIO_SOURCE}" RESULT_VARIABLE patch_result
+    OUTPUT_VARIABLE patch_output ERROR_VARIABLE patch_error)
+if(NOT patch_result EQUAL 0)
+    message(FATAL_ERROR "Native libcdio warning patch failed: ${patch_output}${patch_error}")
+endif()
 set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64)
 
 foreach(header errno.h fcntl.h inttypes.h limits.h memory.h stdarg.h stdbool.h
@@ -91,7 +107,7 @@ add_library(bundled_cdio STATIC
     ${CDIO_SOURCE}/udf/filemode.c
 )
 target_compile_features(bundled_cdio PRIVATE c_std_11)
-target_compile_definitions(bundled_cdio PRIVATE HAVE_CONFIG_H=1 _GNU_SOURCE)
+target_compile_definitions(bundled_cdio PRIVATE HAVE_CONFIG_H=1 _GNU_SOURCE CDIO_NATIVE_READER=1)
 target_compile_definitions(bundled_cdio PUBLIC DO_NOT_WANT_COMPATIBILITY _FILE_OFFSET_BITS=64)
 if(WORDS_BIGENDIAN)
     target_compile_definitions(bundled_cdio PUBLIC WORDS_BIGENDIAN=1)
@@ -102,3 +118,17 @@ target_include_directories(bundled_cdio PUBLIC "${CDIO_SOURCE}")
 target_compile_options(bundled_cdio PRIVATE -Wall -Wextra)
 
 target_link_libraries(bundled_cdio PRIVATE Iconv::Iconv)
+
+# Verify that standard public C/C++ views retain the private reader's record ABI.
+# The standalone C-only experiment does not enable a C++ compiler.
+if(BUILD_TESTING AND CMAKE_CXX_COMPILER_LOADED)
+    add_executable(test_cdio_header_layout header_layout.cpp header_layout_private.c header_layout_public.c)
+    target_compile_features(test_cdio_header_layout PRIVATE c_std_11 cxx_std_17)
+    target_compile_definitions(test_cdio_header_layout PRIVATE _GNU_SOURCE)
+    target_compile_options(test_cdio_header_layout PRIVATE -Wall -Wextra
+        "$<$<COMPILE_LANGUAGE:CXX>:-Wpedantic>")
+    set_source_files_properties(header_layout_public.c PROPERTIES COMPILE_OPTIONS -Wpedantic)
+    target_link_libraries(test_cdio_header_layout PRIVATE bundled_cdio)
+    add_test(NAME rufus_cdio_header_layout COMMAND test_cdio_header_layout)
+    set_tests_properties(rufus_cdio_header_layout PROPERTIES LABELS "component;image;no-hardware" TIMEOUT 10)
+endif()

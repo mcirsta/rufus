@@ -182,7 +182,7 @@ int main(int argc, char** argv)
 		return 64;
 	fault = argv[7];
 	MBR_IMAGE_OPTIONS options = { strtoull(argv[2], NULL, 10), SECTOR_BYTES,
-		(uint32_t)strtoul(argv[4], NULL, 10), (uint32_t)strtoul(argv[3], NULL, 10), 0x78563412, 0, FS_FAT32, MBR_BOOT_SYSLINUX, 0};
+		(uint32_t)strtoul(argv[4], NULL, 10), (uint32_t)strtoul(argv[3], NULL, 10), 0x78563412, 0, FS_FAT32, MBR_BOOT_SYSLINUX, 0, 0, false, false, false, 0};
 	if (argc >= 9) {
 		const unsigned bits = (unsigned)strtoul(argv[8], NULL, 10);
 		options.file_system = bits == 16 ? FS_FAT16 : (bits == 32 ? FS_FAT32 : FS_UNKNOWN);
@@ -229,7 +229,7 @@ int main(int argc, char** argv)
 		options.device = 1;
 	options.sector_size = (uint32_t)strtoul(argv[5], NULL, 10);
 	MBR_IMAGE_RESULT result = { 0 };
-	const SFD_IMAGE_OPTIONS sfd_options = { options.disk_size, options.sector_size, options.device };
+	const SFD_IMAGE_OPTIONS sfd_options = { options.disk_size, options.sector_size, options.device , 0};
 	SFD_IMAGE_RESULT sfd_result = { 0 };
 	int error, fd = -1, flags = 0, position = INITIAL_POSITION;
 	const int before = DescriptorCount();

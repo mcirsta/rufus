@@ -40,8 +40,8 @@ struct PeImage
     {
         return offset <= quint64(bytes.size()) && size <= quint64(bytes.size()) - offset;
     }
-    quint16 word(quint32 offset) const { return qFromLittleEndian<quint16>(bytes.constData() + offset); }
-    quint32 dword(quint32 offset) const { return qFromLittleEndian<quint32>(bytes.constData() + offset); }
+    quint16 word(quint32 offset) const { return qFromLittleEndian<quint16>(bytes.constBegin() + offset); }
+    quint32 dword(quint32 offset) const { return qFromLittleEndian<quint32>(bytes.constBegin() + offset); }
     bool parse()
     {
         if (bytes.size() < 64 || bytes.size() > MaximumBootloaderBytes || bytes.left(2) != "MZ") return false;

@@ -109,7 +109,7 @@ int ReadEmbeddedGrub4dosSbr(quint64 partitionOffset, QByteArray& resource)
 static int readCachedBootFile(quint64 maximumBytes, Grub2CachedCore& core)
 {
     const QByteArray path = QFile::encodeName(core.path);
-    IMAGE_FILE_SOURCE source = {-1, {}, false, false};
+    IMAGE_FILE_SOURCE source = {-1, {}, false, false, nullptr, 0};
     source.fd = ::open(path.constData(), O_RDONLY | O_CLOEXEC | O_NONBLOCK);
     if (source.fd < 0)
     {

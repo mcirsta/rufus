@@ -254,8 +254,8 @@ static int WaitForFormatter(pid_t child, int output, bool group, bool full_forma
 static int RunCommand(int fd, char* const* arguments, char* const* environment,
 	const char* directory, bool full_format, FORMAT_RESULT* result)
 {
-	pid_t child;
-	int output, error;
+	pid_t child = -1;
+	int output = -1, error;
 	if (result == NULL)
 		return EINVAL;
 	memset(result, 0, sizeof(*result));

@@ -472,7 +472,7 @@ int __wrap_AnalyzeIsoImageWithSource(const char* image, uint64_t size,
 
 int main(int argc, char** argv)
 {
-	ISO_EXTRACT_OPTIONS options = { { true, true, { 0, 0 } }, NULL, NULL, false };
+	ISO_EXTRACT_OPTIONS options = { { true, true, { 0, 0 } }, NULL, NULL, false , 0, NULL, false, false, false, NULL, NULL};
 	ISO_EXTRACT_RESULT result;
 	int before, after, error, retry = -1;
 
