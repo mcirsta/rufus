@@ -25,6 +25,7 @@
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
 #include <QDBusMetaType>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QRandomGenerator>
 #include <QComboBox>
@@ -70,6 +71,7 @@
 #include <zlib.h>
 
 static constexpr int fixtureTimeoutMs = 2000;
+static constexpr int fixtureStartupTimeoutMs = 10000;
 static constexpr int uiTimeoutMs = 1000;
 static constexpr int writeTimeoutMs = 4000;
 static constexpr int cancelTimeoutMs = 3000;
@@ -370,6 +372,25 @@ void stopProcess(QProcess& process)
         process.kill();
         process.waitForFinished(fixtureTimeoutMs);
     }
+}
+
+bool waitForFixtureLine(QProcess& process)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (!process.canReadLine())
+    {
+        const qint64 remaining = fixtureStartupTimeoutMs - timer.elapsed();
+        if (remaining <= 0 || !process.waitForReadyRead(int(remaining)))
+            return process.canReadLine();
+    }
+    return true;
+}
+
+QString fixtureStartProblem(QProcess& process)
+{
+    return QStringLiteral("%1: %2; state %3; stderr: %4").arg(process.program(), process.errorString())
+        .arg(int(process.state())).arg(QString::fromLocal8Bit(process.readAllStandardError()));
 }
 
 }
@@ -778,16 +799,15 @@ private slots:
         daemon_.start(QStringLiteral(RUFUS_DBUS_DAEMON), {QStringLiteral("--session"),
             QStringLiteral("--nofork"), QStringLiteral("--print-address=1"),
             QStringLiteral("--address=unix:tmpdir=%1").arg(directory_.path())});
-        QVERIFY(daemon_.waitForStarted(fixtureTimeoutMs));
-        QVERIFY2(daemon_.canReadLine() || daemon_.waitForReadyRead(fixtureTimeoutMs),
-            daemon_.readAllStandardError().constData());
+        QVERIFY2(daemon_.waitForStarted(fixtureStartupTimeoutMs), qPrintable(fixtureStartProblem(daemon_)));
+        QVERIFY2(waitForFixtureLine(daemon_), qPrintable(fixtureStartProblem(daemon_)));
         const QString address = QString::fromUtf8(daemon_.readLine()).trimmed();
         QVERIFY(address.startsWith(QStringLiteral("unix:")));
         connection_ = std::make_unique<QDBusConnection>(QDBusConnection::connectToBus(address, QStringLiteral("raw-widgets-test")));
         QVERIFY(connection_->isConnected());
         fixture_.start(QCoreApplication::applicationDirPath() + QStringLiteral("/udisks_fixture"), {address});
-        QVERIFY(fixture_.waitForStarted(fixtureTimeoutMs));
-        QVERIFY2(fixture_.waitForReadyRead(fixtureTimeoutMs), fixture_.readAllStandardError().constData());
+        QVERIFY2(fixture_.waitForStarted(fixtureStartupTimeoutMs), qPrintable(fixtureStartProblem(fixture_)));
+        QVERIFY2(waitForFixtureLine(fixture_), qPrintable(fixtureStartProblem(fixture_)));
         QCOMPARE(fixture_.readLine(), QByteArray("ready\n"));
         objects_.clear();
         objects_[disk][blockInterface] = {
