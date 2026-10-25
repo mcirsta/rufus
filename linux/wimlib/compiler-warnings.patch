@@ -8,6 +8,15 @@
  	free_blob_descriptor(blob);
  	return 0;
  }
+@@ -1209,7 +1210,7 @@
+ 		}
+ 
+ 	}
+-	wimlib_assert((u8*)table_buf_ptr - (u8*)table_buf == table_size);
++	wimlib_assert((size_t)((u8*)table_buf_ptr - (u8*)table_buf) == table_size);
+ 
+ 	/* Write the blob table uncompressed.  Although wimlib can handle a
+ 	 * compressed blob table, MS software cannot.  */
 @@ -1393,7 +1394,7 @@
  	};
  	if (wim_has_metadata(wim)) {
@@ -424,6 +433,17 @@
  
  	case LZX_BLOCKTYPE_VERBATIM:
  
+--- a/metadata_resource.c
++++ b/metadata_resource.c
+@@ -220,7 +220,7 @@
+ 
+ 	/* We MUST have exactly filled the buffer; otherwise we calculated its
+ 	 * size incorrectly or wrote the data incorrectly.  */
+-	wimlib_assert(p - buf == len);
++	wimlib_assert((size_t)(p - buf) == len);
+ 
+ 	*buf_ret = buf;
+ 	*len_ret = len;
 --- a/mount_image.c
 +++ b/mount_image.c
 @@ -2568,6 +2568,10 @@
@@ -468,6 +488,15 @@
  		const void *desc;
  		size_t desc_size;
  
+@@ -878,7 +879,7 @@
+ 		s64 res = ntfs_attr_pwrite(na, offset, size, data);
+ 		if (unlikely(res <= 0))
+ 			return false;
+-		wimlib_assert(res <= size);
++		wimlib_assert((u64)res <= size);
+ 		offset += res;
+ 		size -= res;
+ 		data += res;
 @@ -890,6 +891,7 @@
  ntfs_3g_extract_chunk(const struct blob_descriptor *blob, u64 offset,
  		      const void *chunk, size_t size, void *_ctx)
@@ -1002,6 +1031,15 @@
  		do {
  			bytes_to_read = min(sizeof(buf),
  					    end_read_offset - cur_read_offset);
+@@ -1256,7 +1257,7 @@
+ 
+ 		/* Due the earlier check for overlapping resources, it should
+ 		 * never be the case that we already overwrote the resource.  */
+-		wimlib_assert(!(in_rdesc->offset_in_wim < out_fd->offset));
++		wimlib_assert(!(in_rdesc->offset_in_wim < (u64)out_fd->offset));
+ 
+ 		if (-1 == filedes_seek(out_fd, out_fd->offset + in_rdesc->size_in_wim))
+ 			return WIMLIB_ERR_WRITE;
 @@ -1551,7 +1552,7 @@
  	 * specified number of threads, unless the upper bound on the number
  	 * bytes needing to be compressed is less than a heuristic value.  */

@@ -9,7 +9,9 @@
 #include <QTest>
 #include <cerrno>
 #include <fcntl.h>
+#include <linux/magic.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
 #include <sys/sysmacros.h>
 #include <unistd.h>
 
@@ -140,10 +142,14 @@ private slots:
         QTemporaryDir sys; QVERIFY(sys.isValid()); const QString root=sys.path();
         const QString backing=root+"/image with spaces "; QVERIFY(writeFile(backing,"inert data"));
         struct stat facts={}; QCOMPARE(::stat(QFile::encodeName(backing).constData(),&facts),0);
+        struct statfs filesystemFacts={}; QCOMPARE(::statfs(QFile::encodeName(backing).constData(),&filesystemFacts),0);
         QVERIFY(writeFile(root+"/devices/loop0/loop/backing_file",QFile::encodeName(backing)+'\n'));
         QVERIFY(QDir().mkpath(root+"/dev/block")); QVERIFY(QFile::link(root+"/devices/loop0",root+"/dev/block/7:0"));
         QSet<quint64> devices; const int error=rufus::NativeBlockBackings(quint64(makedev(7,0)),devices,root);
-        QVERIFY(error==ENOENT || error==ENOTSUP); QVERIFY(devices.contains(quint64(makedev(7,0))));
+        // Memory filesystems have no physical block parent to resolve in the mock sysfs tree.
+        if (filesystemFacts.f_type==TMPFS_MAGIC || filesystemFacts.f_type==RAMFS_MAGIC) QCOMPARE(error,0);
+        else QVERIFY(error==ENOENT || error==ENOTSUP);
+        QVERIFY(devices.contains(quint64(makedev(7,0))));
         if (major(facts.st_dev)!=0) QVERIFY(devices.contains(quint64(facts.st_dev)));
     }
     void mountedVolumeSelection()
