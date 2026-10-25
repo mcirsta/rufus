@@ -30,6 +30,25 @@ translation policy, deferrals and unavailable hardware/architecture qualificatio
 remain unchanged. No new full regression, VM, physical-media or Windows matrix
 is required for this release.
 
+## Workspace evidence after cleanup
+
+After Preview48 publication, the user requested removal of rebuildable artifacts,
+historical product-source snapshots and all iMac recovery files. Those inputs
+were deleted. Older test/release logs, JSON receipts, notes and screenshots are
+retained privately in `.rufus-test-artifacts/historical-test-evidence.tar.zst`;
+all 19,338 member checksums were verified before removing their loose copies.
+The archive contains no retained raw product-source snapshots or recovery files.
+Current CP79 receipts remain directly available under `cp79/`.
+
+The local evidence README and `cleanup-2026-10-26/evidence-manifest.json` record
+locations, checksums and restoration instructions. Restore evidence from the
+workspace with `tar --zstd -xf .rufus-test-artifacts/historical-test-evidence.tar.zst
+-C .rufus-test-artifacts`. Build caches and dependency checkouts must be recreated.
+Recovered qualification tools are tracked under
+[`linux/tests/qualification/`](../linux/tests/qualification/), including the FFU
+reader oracle, its upstream build patch and the Preview48 release harness.
+This cleanup introduced no product changes or new test qualification.
+
 ## Retained CP78 qualification record
 
 This is the Q01 coverage index for preparing a useful release. It reuses the
