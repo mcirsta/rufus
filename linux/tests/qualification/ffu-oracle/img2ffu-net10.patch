@@ -1,0 +1,42 @@
+diff --git a/Img2Ffu.Library.Compression.Windows/Img2Ffu.Library.Compression.Windows.csproj b/Img2Ffu.Library.Compression.Windows/Img2Ffu.Library.Compression.Windows.csproj
+index 7dbc6c9..f3acade 100644
+--- a/Img2Ffu.Library.Compression.Windows/Img2Ffu.Library.Compression.Windows.csproj
++++ b/Img2Ffu.Library.Compression.Windows/Img2Ffu.Library.Compression.Windows.csproj
+@@ -1,7 +1,7 @@
+-﻿<Project Sdk="Microsoft.NET.Sdk">
++<Project Sdk="Microsoft.NET.Sdk">
+ 
+   <PropertyGroup>
+-	<TargetFramework>net8.0</TargetFramework>
++	<TargetFramework>net10.0</TargetFramework>
+ 	<ImplicitUsings>enable</ImplicitUsings>
+ 	<Nullable>enable</Nullable>
+ 	<Platforms>ARM32;ARM64;x86;x64</Platforms>
+diff --git a/Img2Ffu.Library/Img2Ffu.Library.csproj b/Img2Ffu.Library/Img2Ffu.Library.csproj
+index 6ac4029..2c90f18 100644
+--- a/Img2Ffu.Library/Img2Ffu.Library.csproj
++++ b/Img2Ffu.Library/Img2Ffu.Library.csproj
+@@ -1,7 +1,7 @@
+-﻿<Project Sdk="Microsoft.NET.Sdk">
++<Project Sdk="Microsoft.NET.Sdk">
+ 
+   <PropertyGroup>
+-	<TargetFramework>net8.0</TargetFramework>
++	<TargetFramework>net10.0</TargetFramework>
+ 	<ImplicitUsings>enable</ImplicitUsings>
+ 	<Nullable>enable</Nullable>
+ 	<Platforms>ARM32;ARM64;x86;x64</Platforms>
+diff --git a/Img2Ffu/Img2Ffu.csproj b/Img2Ffu/Img2Ffu.csproj
+index 8b0f747..73a4168 100644
+--- a/Img2Ffu/Img2Ffu.csproj
++++ b/Img2Ffu/Img2Ffu.csproj
+@@ -1,7 +1,7 @@
+-﻿<Project Sdk="Microsoft.NET.Sdk">
++<Project Sdk="Microsoft.NET.Sdk">
+ 	<PropertyGroup>
+ 		<OutputType>Exe</OutputType>
+-		<TargetFramework>net8.0</TargetFramework>
++		<TargetFramework>net10.0</TargetFramework>
+ 		<Platforms>ARM32;ARM64;x86;x64</Platforms>
+ 		<Nullable>enable</Nullable>
+ 	</PropertyGroup>

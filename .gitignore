@@ -33,6 +33,7 @@
 *.p7x
 *.patch
 !linux/wimlib/native-ntfs.patch
+!linux/tests/qualification/ffu-oracle/img2ffu-net10.patch
 *.pc
 *.pdb
 *.pdf
