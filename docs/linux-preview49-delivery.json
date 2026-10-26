@@ -1,0 +1,66 @@
+{
+  "release": "Preview49",
+  "tag": "linux-preview.49",
+  "commit": "6d9b8409617ae72b78c95dbd13610d61798f7aa0",
+  "url": "https://github.com/mcirsta/rufus/releases/tag/linux-preview.49",
+  "published_at": "2026-10-26T00:16:33Z",
+  "prerelease": true,
+  "ci": {
+    "url": "https://github.com/mcirsta/rufus/actions/runs/40246344865",
+    "source_commit": "dec391ec0118a004d7d2e823494bcfe6cc55862d",
+    "conclusion": "success",
+    "passed_suites": 254,
+    "optional_exfat_skips": 1,
+    "failed_suites": 0,
+    "standalone_iso_fixture": "passed",
+    "compiler_warnings": 0
+  },
+  "qualification_reused": {
+    "local_suites": 266,
+    "sanitizer_suites": 34,
+    "media_desktop_and_previous_package_transactions": "Retained with original scope; no new OS installation or physical-media matrix."
+  },
+  "release_source_delta": "Version and documentation only after qualified code.",
+  "new_packages": [
+    "Arch/CachyOS",
+    "generic install tree",
+    "Debian13",
+    "Fedora44"
+  ],
+  "public_archive": {
+    "tag": "linux-preview.49",
+    "commit": "6d9b8409617ae72b78c95dbd13610d61798f7aa0",
+    "url": "https://github.com/mcirsta/rufus/archive/refs/tags/linux-preview.49.tar.gz",
+    "sha256": "c23ed4866af75bec3cf4682b9e8922b56ba8333b7a6d26a4b260a063c29f8ffc",
+    "regular_members": 1779,
+    "members_match_frozen_git_archive": true,
+    "warnings_build_inputs_present": true
+  },
+  "assets_verified": 9,
+  "manual_aur": {
+    "directory": "build/releases/aur/rufus-linux-preview49",
+    "files": [
+      "PKGBUILD",
+      ".SRCINFO",
+      "LICENSE"
+    ],
+    "version": "4.15.2404.preview49",
+    "all_four_source_hashes_verified": true,
+    "published_bundle_download_matches": true,
+    "submission": "Manual by owner; set Maintainer identity before submitting.",
+    "previous_preview48_user_build_preserved": true
+  },
+  "publisher_handoff": {
+    "public_beta_listing_contains49": true,
+    "release_page_url_checked": true,
+    "parser_files_unchanged": [
+      "linux/qt/application_updates.cpp",
+      "linux/qt/application_updates.h"
+    ],
+    "previous_gui_handoff_evidence_reused": true
+  },
+  "preview48_unchanged": true,
+  "asset_checksums": "https://github.com/mcirsta/rufus/releases/download/linux-preview.49/SHA256SUMS",
+  "qualification": "https://github.com/mcirsta/rufus/releases/download/linux-preview.49/rufus-linux-preview.49-qualification.json",
+  "limits": "Preview scope remains; complete Windows parity and physical-media qualification are not claimed."
+}
